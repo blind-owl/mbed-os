@@ -775,7 +775,7 @@ TESTS = [
         "id": "UT_1", "description": "Basic",
         "source_dir": join(TEST_DIR, "utest", "basic"),
         "dependencies": [MBED_LIBRARIES, TEST_MBED_LIB, CPPUTEST_LIBRARY],
-        "automated": False,
+        "automated": True,
     },
     {
         "id": "UT_2", "description": "Semihost file system",
@@ -820,6 +820,13 @@ TESTS = [
         "dependencies": [MBED_LIBRARIES, TEST_MBED_LIB, CPPUTEST_LIBRARY],
         "automated": False,
     },
+    {
+        "id": "UT_3GPP_MULTIPLEXER", "description": "3GPP Multiplexer",
+        "source_dir": join(TEST_DIR, "utest", "3gpp_multiplexer"),
+        "dependencies": [MBED_LIBRARIES, TEST_MBED_LIB, CPPUTEST_LIBRARY],
+        "automated": True,
+    },
+
 
     # Tests used for target information purposes
     {

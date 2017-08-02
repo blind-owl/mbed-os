@@ -73,8 +73,11 @@ EXPORT_TMP = join(EXPORT_DIR, ".temp")
 # CppUtest library
 CPPUTEST_DIR = join(ROOT, "..")
 CPPUTEST_SRC = join(CPPUTEST_DIR, "cpputest", "src", "CppUTest")
+#CPPUTEST_SRC = join(CPPUTEST_DIR, "cpputest", "src", "CppUTestExt")
 CPPUTEST_INC = join(CPPUTEST_DIR, "cpputest", "include")
 CPPUTEST_INC_EXT = join(CPPUTEST_DIR, "cpputest", "include", "CppUTest")
+#CPPUTEST_INC_EXT = join(CPPUTEST_DIR, "cpputest", "include", "CppUTestExt")
+#CPPUTEST_INC_EXT = join(CPPUTEST_DIR, "cpputest", "include")
 # Platform dependant code is here (for armcc compiler)
 CPPUTEST_PLATFORM_SRC = join(CPPUTEST_DIR, "cpputest", "src", "Platforms",
                              "armcc")
