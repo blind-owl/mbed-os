@@ -5,12 +5,36 @@
 #include "EventQueueMock.h"
 
 namespace mbed {
-    
+
 void trace(char *string, int data)
 {
     UT_PRINT_LOCATION(string, "TRACE: ", data);
 }
 
+
+class MuxClient : public mbed::MuxCallback {
+public:
+    
+    virtual void on_mux_start();       
+    virtual void on_dlci_establish(FileHandle *obj, uint8_t dlci_id) {};
+    virtual void event_receive() {};    
+    
+    inline void reset() {_is_mux_start_triggered = false;}
+    inline bool is_mux_start_triggered() const {return _is_mux_start_triggered;}
+    
+    MuxClient() : _is_mux_start_triggered(false) {};
+private:
+    
+    bool _is_mux_start_triggered;
+};
+
+
+void MuxClient::on_mux_start()
+{
+    _is_mux_start_triggered = true;
+}
+
+static MuxClient mux_client;
 
 
 TEST_GROUP(MultiplexerOpenTestGroup)
@@ -19,6 +43,8 @@ TEST_GROUP(MultiplexerOpenTestGroup)
     {
         mock_init();
         Mux::module_init();
+        mux_client.reset();
+        mbed::Mux::callback_attach(&mux_client);
     }
 
     void teardown()
@@ -63,7 +89,7 @@ TEST(MultiplexerOpenTestGroup, FirstTest)
 #define RETRANSMIT_COUNT                    3u                          /* Retransmission count for the tx frames 
                                                                            requiring a response. */
 
-const uint8_t crctable[CRC_TABLE_LEN] = {
+static const uint8_t crctable[CRC_TABLE_LEN] = {
     0x00, 0x91, 0xE3, 0x72, 0x07, 0x96, 0xE4, 0x75,  0x0E, 0x9F, 0xED, 0x7C, 0x09, 0x98, 0xEA, 0x7B,
     0x1C, 0x8D, 0xFF, 0x6E, 0x1B, 0x8A, 0xF8, 0x69,  0x12, 0x83, 0xF1, 0x60, 0x15, 0x84, 0xF6, 0x67,
     0x38, 0xA9, 0xDB, 0x4A, 0x3F, 0xAE, 0xDC, 0x4D,  0x36, 0xA7, 0xD5, 0x44, 0x31, 0xA0, 0xD2, 0x43,
@@ -290,6 +316,7 @@ void mux_self_iniated_open()
 TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_succes)
 {    
     mux_self_iniated_open();
+    CHECK(!mux_client.is_mux_start_triggered());                    
 }
 
 
@@ -307,6 +334,8 @@ TEST(MultiplexerOpenTestGroup, mux_open_allready_open)
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
     const int ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(ret, 0);    
+    
+    CHECK(!mux_client.is_mux_start_triggered());                    
 }
 
 
@@ -356,6 +385,8 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_rejected_by_peer)
     const int ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(ret, 1);
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_REJECT);    
+    
+    CHECK(!mux_client.is_mux_start_triggered());                    
 }
 
 
@@ -390,6 +421,8 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_write_failure)
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
     const int ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(ret, -1);
+    
+    CHECK(!mux_client.is_mux_start_triggered());                    
 }
 
 
@@ -428,6 +461,12 @@ void mux_start_self_initated_sem_wait_timeout(void *)
 }
 
 
+/*
+ * TC - mux start-up sequence, request timeout failure:
+ * - send START request
+ * - request timeout timer expires 
+ * - generate timeout event to the user
+ */
 TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_timeout)
 {
     mbed::FileHandleMock fh_mock;   
@@ -462,28 +501,10 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_timeout)
     const int ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(ret, 1);
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_TIMEOUT);
+    
+    CHECK(!mux_client.is_mux_start_triggered());                
 }
 
-class MuxClient : public mbed::MuxCallback {
-public:
-    
-    virtual void on_mux_start();       
-    virtual void on_dlci_establish(FileHandle *obj, uint8_t dlci_id) {};
-    virtual void event_receive() {};    
-    
-    inline void reset() {_is_mux_start_triggered = false;}
-    inline bool is_mux_start_triggered() const {return _is_mux_start_triggered;}
-    
-    MuxClient() : _is_mux_start_triggered(false) {};
-private:
-    
-    bool _is_mux_start_triggered;
-};
-
-void MuxClient::on_mux_start()
-{
-    _is_mux_start_triggered = true;
-}
 
 /*
  * TC - mux start-up sequence, peer initiated:
@@ -492,15 +513,11 @@ void MuxClient::on_mux_start()
  * - generate completion event to the user/client
  */
 TEST(MultiplexerOpenTestGroup, mux_open_peer_initiated)
-{  
-#if 0    
+{ 
     mbed::FileHandleMock fh_mock;   
     mbed::EventQueueMock eq_mock;
     
     mbed::Mux::eventqueue_attach(&eq_mock);
-
-    MuxClient mux_client;
-    mbed::Mux::callback_attach(&mux_client);
 
     /* Set and test mock. */
     mock_t * mock_sigio = mock_free_get("sigio");    
@@ -609,13 +626,9 @@ TEST(MultiplexerOpenTestGroup, mux_open_peer_initiated)
         
         ++tx_count;        
     } while (tx_count != sizeof(write_byte));
-#endif // 0    
 }
 
-
-// @todo: peer initiated
 // @todo: peer initiated: allready open
-
 // @todo: simultaneous open
 
 

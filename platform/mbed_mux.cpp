@@ -340,12 +340,19 @@ void Mux::on_deferred_call()
         if (write_ret >= 0) {
             if (tx_context.bytes_remaining == 0) { 
                 
-                // @todo: DEFECT WE MIGH DO EXTRA TIMER SCHEDULING SHOULD USE DEDICATED FLAG FOR THIS         
+                // @todo: DEFECT WE MIGTH DO EXTRA TIMER SCHEDULING SHOULD USE DEDICATED FLAG FOR THIS         
 #if 1
 //trace("on_deferred_call:tx_context.tx_state", tx_context.tx_state);
                 switch (tx_context.tx_state) {
                     case TX_RETRANSMIT_ENQUEUE:
                         tx_state_change(TX_RETRANSMIT_DONE, tx_retransmit_done_entry_run);
+                        break;
+                    case TX_INTERNAL_RESP:
+                        _mux_obj_cb->on_mux_start();
+#if 0
+                        // TC required prior enabling
+                        tx_state_change(TX_IDLE, NULL);
+#endif //                         
                         break;
                     default:
                         /* No implementtaion required. */
