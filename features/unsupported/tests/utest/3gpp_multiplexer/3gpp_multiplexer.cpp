@@ -760,7 +760,7 @@ void mux_open_simultaneous_self_iniated_sem_wait(void *context)
 /*
  * TC - mux start-up sequence, self initiated: peer issues mux start-up request while self iniated is in progress
  * - send 1st byte of START request
- * - START request received completely -> ignored by the implementation
+ * - START request received completely from the peer -> ignored by the implementation
  * - send remainder of the START request
  * - START response received by the implementation
  */
@@ -798,6 +798,80 @@ TEST(MultiplexerOpenTestGroup, mux_open_simultaneous_self_iniated)
     const int ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(ret, 2);
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_SUCCESS);
+}
+
+
+/* Multiplexer semaphore wait call from mux_open_simultaneous_self_iniated_full_frame TC. */
+void mux_open_simultaneous_self_iniated_full_frame_sem_wait(void *context)
+{    
+    /* Generate the remaining part of the mux START request. */
+    mux_start_self_iniated_tx();
+    
+    /* Generate peer mux START request, which is ignored by the implementation. */
+    const uint8_t read_byte[5] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET, 
+        CONTROL_MUX_START_REQ_OCTET, 
+        fcs_calculate(&read_byte[1], 2),
+        FLAG_SEQUENCE_OCTET
+    };
+    
+    mux_start_peer_iniated_rx(&(read_byte[0]), sizeof(read_byte), NULL);    
+   
+    /* Generate peer mux START response, which is accepted by the implementation. */
+    const uint8_t read_byte_2[4] = 
+    {
+        ADDRESS_MUX_START_RESP_OCTET, 
+        CONTROL_MUX_START_ACCEPT_RESP_OCTET, 
+        fcs_calculate(&read_byte[0], 2),
+        FLAG_SEQUENCE_OCTET
+    };
+    
+    mux_start_self_iniated_rx(&(read_byte_2[0]), sizeof(read_byte_2));
+}
+
+
+/*
+ * TC - mux start-up sequence, self initiated: peer issues mux start-up request while self iniated is in progress
+ * - send complete START request
+ * - START request received completely from the peer -> ignored by the implementation
+ * - START response received by the implementation
+ */
+TEST(MultiplexerOpenTestGroup, mux_open_simultaneous_self_iniated_full_frame)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+    
+    /* --- begin verify TX sequence --- */
+    
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+      
+    /* Set mock. */
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = FLAG_SEQUENCE_OCTET;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 1;    
+
+    /* Set mock. */    
+    mock_t * mock_wait = mock_free_get("wait");
+    CHECK(mock_wait != NULL);
+    mock_wait->return_value = 1;
+    mock_wait->func = mux_open_simultaneous_self_iniated_full_frame_sem_wait;
+
+    /* Start test sequence. Test set mocks. */
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
+    const int ret = mbed::Mux::mux_start(status);
+    CHECK_EQUAL(ret, 2);
+    CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_SUCCESS);        
 }
 
 // @todo: mux open: simultaneous open

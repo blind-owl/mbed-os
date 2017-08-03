@@ -191,6 +191,7 @@ void Mux::dlci_0_establish_req_do()
             }
             break;
         case TX_RETRANSMIT_ENQUEUE:
+        case TX_RETRANSMIT_DONE:            
             // @todo: assume mux START request internal state inprogress/pending only for now!
             break;
         default:
