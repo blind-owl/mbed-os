@@ -139,7 +139,7 @@ void Mux::decoder_state_sync_run()
 
 bool Mux::is_rx_frame_valid()
 {
-    //trace("is_rx_frame_valid::rx_context.offset: ", rx_context.offset);    
+//    trace("is_rx_frame_valid::rx_context.offset: ", rx_context.offset);    
     
     return (rx_context.offset >= 4) ? true : false;
 }
@@ -175,7 +175,7 @@ void Mux::dlci_0_establish_req_do()
 {
 //trace("dlci_0_establish_req_do ", 0);    
 
-    // @todo: assume TX free (TX_IDLE) for now, fix later
+    // @todo: assume mux START request internal state inprogress/pending only for now!
     
     switch (tx_context.tx_state) {
         ssize_t return_code;
@@ -190,7 +190,11 @@ void Mux::dlci_0_establish_req_do()
                 // @todo: propagate write error to user.
             }
             break;
+        case TX_RETRANSMIT_ENQUEUE:
+            // @todo: assume mux START request internal state inprogress/pending only for now!
+            break;
         default:
+            trace("dlci_0_establish_req_do: ", tx_context.tx_state);    
             MBED_ASSERT(false);
             break;        
     }
@@ -217,6 +221,7 @@ void Mux::dlci_0_establish_resp_do()
             state.is_multiplexer_open = 1; 
             break;
         default:
+            trace("dlci_0_establish_resp_do: ", tx_context.tx_state);                
             MBED_ASSERT(false);
             break;
     }
@@ -509,7 +514,7 @@ ssize_t Mux::mux_start(Mux::MuxEstablishStatus &status)
         return 0;
     }
     
-    ssize_t return_code = 1;
+    ssize_t return_code;
     switch (tx_context.tx_state) {
         case TX_IDLE:
             /* Construct the frame, start the tx sequence 1-byte at time, reset relevant state contexts and suspend 
@@ -518,6 +523,7 @@ ssize_t Mux::mux_start(Mux::MuxEstablishStatus &status)
             return_code = write_do();    
             MBED_ASSERT(return_code != 0);
             if (return_code > 0) {
+                return_code = 2;
                 tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
                 state.is_request_timeout      = 0;    
                 tx_context.retransmit_counter = RETRANSMIT_COUNT;                

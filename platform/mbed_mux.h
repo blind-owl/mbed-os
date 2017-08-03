@@ -163,7 +163,8 @@ typedef enum
      *
      *  @param status   Operation completion code.
      *
-     *  @return 1   Operation completed successfully, check @ref status for completion code.
+     *  @return 2   Operation completed successfully, check @ref status for completion code.
+     *  @return 1   Operation not started, peer initiated control channel open in progress.     
      *  @return 0   Operation not started, multiplexer control channel allready open.     
      *  @return <0  Unspecified failure.
      */
