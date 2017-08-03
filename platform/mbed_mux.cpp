@@ -139,8 +139,9 @@ void Mux::decoder_state_sync_run()
 
 bool Mux::is_rx_frame_valid()
 {
-    // @todo: implement me!
-    return true;
+    //trace("is_rx_frame_valid::rx_context.offset: ", rx_context.offset);    
+    
+    return (rx_context.offset >= 4) ? true : false;
 }
 
 
@@ -172,7 +173,7 @@ void Mux::start_response_construct()
 
 void Mux::dlci_0_establish_req_do()
 {
-trace("dlci_0_establish_req_do ", 0);    
+//trace("dlci_0_establish_req_do ", 0);    
 
     // @todo: assume TX free (TX_IDLE) for now, fix later
     
@@ -248,7 +249,7 @@ Mux::RxFrameType Mux::valid_rx_frame_decode_do()
 
 
 void Mux::valid_rx_frame_decode()
-{
+{       
     typedef void (*rx_frame_decoder_func_t)();    
     static const rx_frame_decoder_func_t decoder_func[RX_FRAME_TYPE_MAX] = {
         dlci_0_establish_req_do,
@@ -259,6 +260,8 @@ void Mux::valid_rx_frame_decode()
     const Mux::RxFrameType frame_type = valid_rx_frame_decode_do();
     rx_frame_decoder_func_t func      = decoder_func[frame_type];
     func();      
+    
+    rx_context.offset = 1;    
 }
 
 
@@ -276,8 +279,8 @@ void Mux::decoder_state_decode_run()
                 } else {
                     valid_rx_frame_decode();
                 }                
-            } else {               
-                MBED_ASSERT(false); // // @todo invalid frame: ASSERT for now                
+            } else {
+                MBED_ASSERT(false); // // @todo invalid frame: ASSERT for now               
             }            
         } else {
             ++rx_context.offset;
@@ -306,6 +309,8 @@ void Mux::decode_do()
 
 void Mux::read_do()
 {
+//trace("read_do::rx_context.offset: ", rx_context.offset);    
+    
     const ssize_t ret = _serial->read(&(rx_context.buffer[rx_context.offset]), READ_LEN);       
     MBED_ASSERT((ret == 1) || (ret < 0));
     decode_do();
@@ -348,11 +353,12 @@ void Mux::on_deferred_call()
                         tx_state_change(TX_RETRANSMIT_DONE, tx_retransmit_done_entry_run);
                         break;
                     case TX_INTERNAL_RESP:
-                        _mux_obj_cb->on_mux_start();
-#if 0
-                        // TC required prior enabling
+                        if (!state.is_multiplexer_open) {
+                            state.is_multiplexer_open = 1;
+                            _mux_obj_cb->on_mux_start();
+                        }
+                        
                         tx_state_change(TX_IDLE, NULL);
-#endif //                         
                         break;
                     default:
                         /* No implementtaion required. */
@@ -499,7 +505,7 @@ Mux::MuxEstablishStatus Mux::start_response_decode()
 
 ssize_t Mux::mux_start(Mux::MuxEstablishStatus &status)
 {
-    if (state.is_multiplexer_open == 1) {
+    if (state.is_multiplexer_open) {
         return 0;
     }
     

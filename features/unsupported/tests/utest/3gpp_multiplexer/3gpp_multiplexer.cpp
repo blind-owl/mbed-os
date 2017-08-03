@@ -20,13 +20,22 @@ public:
     virtual void event_receive() {};    
     
     inline void reset() {_is_mux_start_triggered = false;}
-    inline bool is_mux_start_triggered() const {return _is_mux_start_triggered;}
+    bool is_mux_start_triggered();
     
     MuxClient() : _is_mux_start_triggered(false) {};
 private:
     
     bool _is_mux_start_triggered;
 };
+
+
+bool MuxClient::is_mux_start_triggered()
+{
+    const bool ret          = _is_mux_start_triggered;
+    _is_mux_start_triggered = false;
+    
+    return ret;
+}
 
 
 void MuxClient::on_mux_start()
@@ -506,45 +515,10 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_timeout)
 }
 
 
-/*
- * TC - mux start-up sequence, peer initiated:
- * - receive START request
- * - send START response
- * - generate completion event to the user/client
- */
-TEST(MultiplexerOpenTestGroup, mux_open_peer_initiated)
-{ 
-    mbed::FileHandleMock fh_mock;   
-    mbed::EventQueueMock eq_mock;
-    
-    mbed::Mux::eventqueue_attach(&eq_mock);
-
-    /* Set and test mock. */
-    mock_t * mock_sigio = mock_free_get("sigio");    
-    CHECK(mock_sigio != NULL);      
-    mbed::Mux::serial_attach(&fh_mock);    
-    
-    const uint8_t read_byte[] = 
-    {
-        FLAG_SEQUENCE_OCTET,
-        ADDRESS_MUX_START_REQ_OCTET, 
-        CONTROL_MUX_START_REQ_OCTET, 
-        fcs_calculate(&read_byte[1], 2),
-        FLAG_SEQUENCE_OCTET
-    };    
-      
-    const uint8_t write_byte[5] = 
-    {
-        FLAG_SEQUENCE_OCTET,        
-        ADDRESS_MUX_START_RESP_OCTET, 
-        CONTROL_MUX_START_ACCEPT_RESP_OCTET, 
-        fcs_calculate(&write_byte[1], 2),
-        FLAG_SEQUENCE_OCTET
-    };
-    
+static void mux_start_peer_iniated_rx(const uint8_t *rx_buf, uint8_t rx_buf_len, uint8_t write_byte)
+{    
     /* read the complete start request frame. */
-    uint8_t                                  rx_count      = 0;       
-    uint8_t                                  tx_count      = 0;          
+    uint8_t                                  rx_count      = 0;      
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
     const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};    
     do {
@@ -563,13 +537,13 @@ TEST(MultiplexerOpenTestGroup, mux_open_peer_initiated)
         mock_poll->return_value = POLLIN;
         mock_t * mock_read      = mock_free_get("read");
         CHECK(mock_read != NULL); 
-        mock_read->output_param[0].param       = &(read_byte[rx_count]);
-        mock_read->output_param[0].len         = sizeof(read_byte[0]);
+        mock_read->output_param[0].param       = &(rx_buf[rx_count]);
+        mock_read->output_param[0].len         = sizeof(rx_buf[0]);
         mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_read->input_param[0].param        = READ_LEN;
         mock_read->return_value                = 1;  
        
-        if (rx_count == (sizeof(read_byte) - 1)) {
+        if (rx_count == (rx_buf_len - 1)) {
             
             /* Start request frame read sequence gets completed, now begin the start response frame sequence. */   
             
@@ -577,7 +551,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_peer_initiated)
             CHECK(mock_write != NULL); 
             
             mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-            mock_write->input_param[0].param        = write_byte[tx_count++];       
+            mock_write->input_param[0].param        = write_byte;       
             
             mock_write->input_param[1].param        = WRITE_LEN;
             mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
@@ -587,8 +561,16 @@ TEST(MultiplexerOpenTestGroup, mux_open_peer_initiated)
         mbed::EventQueueMock::io_control(eq_io_control);   
 
         ++rx_count;        
-    } while (rx_count != sizeof(read_byte));           
-   
+    } while (rx_count != rx_buf_len);
+}
+
+
+void mux_start_peer_iniated_tx(const uint8_t *buf, uint8_t buf_len, bool check_mux_start_event)
+{    
+    const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
+    const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};    
+    uint8_t                                  tx_count      = 0;          
+    
     /* write the remainder of the start response frame. */
     do {    
         /* Enqueue deferred call to EventQueue. 
@@ -608,28 +590,131 @@ TEST(MultiplexerOpenTestGroup, mux_open_peer_initiated)
         CHECK(mock_write != NULL); 
         
         mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->input_param[0].param        = write_byte[tx_count];        
+        mock_write->input_param[0].param        = buf[tx_count];        
         
         mock_write->input_param[1].param        = WRITE_LEN;
         mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_write->return_value                = 1;        
 
         mbed::EventQueueMock::io_control(eq_io_control);  
-        
-        if (tx_count == (sizeof(write_byte) - 1)) {        
-            
-            /* Last byte of the start response frame written, verify completion callback. */            
-            CHECK(mux_client.is_mux_start_triggered());
-        } else {
-            CHECK(!mux_client.is_mux_start_triggered());            
+
+        if (check_mux_start_event) {
+            if (tx_count == (buf_len - 1)) {        
+                
+                /* Last byte of the start response frame written, verify completion callback. */            
+                CHECK(mux_client.is_mux_start_triggered());
+            } else {
+                CHECK(!mux_client.is_mux_start_triggered());            
+            }        
         }
         
         ++tx_count;        
-    } while (tx_count != sizeof(write_byte));
+    } while (tx_count != buf_len);    
 }
 
-// @todo: peer initiated: allready open
-// @todo: simultaneous open
+
+/*
+ * TC - mux start-up sequence, peer initiated:
+ * - receive START request
+ * - send START response
+ * - generate completion event to the user/client
+ */
+TEST(MultiplexerOpenTestGroup, mux_open_peer_initiated)
+{ 
+    const uint8_t read_byte[5] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET, 
+        CONTROL_MUX_START_REQ_OCTET, 
+        fcs_calculate(&read_byte[1], 2),
+        FLAG_SEQUENCE_OCTET
+    };
+    
+    const uint8_t write_byte[5] = 
+    {
+        FLAG_SEQUENCE_OCTET,        
+        ADDRESS_MUX_START_RESP_OCTET, 
+        CONTROL_MUX_START_ACCEPT_RESP_OCTET, 
+        fcs_calculate(&write_byte[1], 2),
+        FLAG_SEQUENCE_OCTET
+    };
+    
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);    
+    
+    mux_start_peer_iniated_rx(&(read_byte[0]), sizeof(read_byte), write_byte[0]);
+    mux_start_peer_iniated_tx(&(write_byte[1]), (sizeof(write_byte) - sizeof(write_byte[0])), true);
+}
+
+
+/*
+ * TC - mux start-up sequence, peer initiated: multiplexer allready open
+ * - 1st establishment
+ * -- receive START request
+ * -- send START response
+ * -- generate completion event to the user/client
+ * - 2nd establishment
+ * -- receive START request
+ * -- send START response
+ * -- DO NOT generate completion event to the user/client
+ */
+TEST(MultiplexerOpenTestGroup, mux_open_peer_initiated_allready_open)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);    
+
+    const uint8_t read_byte_1[5] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET, 
+        CONTROL_MUX_START_REQ_OCTET, 
+        fcs_calculate(&read_byte_1[1], 2),
+        FLAG_SEQUENCE_OCTET
+    };    
+
+    const uint8_t write_byte[5] = 
+    {
+        FLAG_SEQUENCE_OCTET,        
+        ADDRESS_MUX_START_RESP_OCTET, 
+        CONTROL_MUX_START_ACCEPT_RESP_OCTET, 
+        fcs_calculate(&write_byte[1], 2),
+        FLAG_SEQUENCE_OCTET
+    };
+    
+    /* 1st cycle. */
+    mux_start_peer_iniated_rx(&(read_byte_1[0]), sizeof(read_byte_1), write_byte[0]);
+    mux_start_peer_iniated_tx(&(write_byte[1]), (sizeof(write_byte) - sizeof(write_byte[0])), true);
+    
+    /* 2nd cycle. */
+    const uint8_t read_byte_2[4] = 
+    {
+        ADDRESS_MUX_START_REQ_OCTET, 
+        CONTROL_MUX_START_REQ_OCTET, 
+        fcs_calculate(&read_byte_2[0], 2),
+        FLAG_SEQUENCE_OCTET
+    };        
+    
+    mux_start_peer_iniated_rx(&(read_byte_2[0]), sizeof(read_byte_2), write_byte[0]);    
+    mux_start_peer_iniated_tx(&(write_byte[1]), (sizeof(write_byte) - sizeof(write_byte[0])), false); 
+    CHECK(!mux_client.is_mux_start_triggered());
+}
+
+
+// @todo: mux open: simultaneous open
 
 
 } // namespace mbed
