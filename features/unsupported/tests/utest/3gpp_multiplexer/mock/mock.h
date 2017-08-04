@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <stdbool.h>
     
-typedef void (*callback_handler)(void * context);
+typedef void (*callback_handler)(const void * context);
 
 #define NAME_LEN           31u
 #define INPUT_PARAM_COUNT  4u
@@ -36,7 +36,7 @@ typedef struct
     uint32_t         return_value;
     callback_handler func;                              /* Default out-of-the-box value is NULL, set by the mock 
                                                            implementation. */  
-    void *           func_context;
+    const void *     func_context;
     input_param_t    input_param[INPUT_PARAM_COUNT];
     output_param_t   output_param[OUTPUT_PARAM_COUNT];    
     uint8_t          is_valid : 1;    

@@ -5,24 +5,29 @@
 
 namespace mbed {
 
-#define FLAG_SEQUENCE_OCTET          0x7Eu         /* Flag field used in the advanced option mode. */
-#define ADDRESS_MUX_START_REQ_OCTET  0x03u         /* Address field of the start multiplexer request frame. */
-#define ADDRESS_MUX_START_RESP_OCTET ADDRESS_MUX_START_REQ_OCTET /* Address field value of the start multiplexer 
-                                                                           response frame. */
-
-    
-#define CONTROL_MUX_START_REQ_OCTET 0x3Fu         /* Control field of the start multiplexer request frame. */
-#define CONTROL_MUX_START_ACCEPT_RESP_OCTET 0x13u /* Control field of the start multiplexer response frame, peer 
-                                                     accept. */
-#define CONTROL_MUX_START_REJECT_RESP_OCTET 0x1Fu /* Control field of the start multiplexer response frame, peer 
-                                                     reject. */
-#define FCS_INPUT_LEN               2u            /* Length of the input for FCS calculation in number of bytes. */
-#define CONTROL_ESCAPE_OCTET        0x7Du         /* Control escape octet used as the transparency identifier. */
-#define WRITE_LEN                   1u            /* Length of write in number of bytes. */    
-#define READ_LEN                    1u            /* Length of read in number of bytes. */    
-#define START_REQ_FRAME_LEN         5u            /* Length of ther start request frame in number of bytes. */
-#define T1_TIMER_VALUE              300u          /* T1 timer value. */
-#define RETRANSMIT_COUNT            3u            /* Retransmission count for the tx frames requiring a response. */
+#define FLAG_SEQUENCE_OCTET                 0x7Eu         /* Flag field used in the advanced option mode. */
+#define ADDRESS_MUX_START_REQ_OCTET         0x03u         /* Address field of the start multiplexer request frame. */  
+/* Address field value of the start multiplexer response frame. */        
+#define ADDRESS_MUX_START_RESP_OCTET        ADDRESS_MUX_START_REQ_OCTET                                                 
+#define CONTROL_MUX_START_REQ_OCTET         0x3Fu         /* Control field of the start multiplexer request frame. */
+/* Control field of the DLCI establishment request frame. */
+#define CONTROL_DLCI_START_REQ_OCTET        CONTROL_MUX_START_REQ_OCTET
+#define CONTROL_MUX_START_ACCEPT_RESP_OCTET 0x13u         /* Control field of the start multiplexer response frame, 
+                                                             peer accept. */
+#define CONTROL_MUX_START_REJECT_RESP_OCTET 0x1Fu         /* Control field of the start multiplexer response frame, 
+                                                             peer reject. */
+#define FCS_INPUT_LEN                       2u            /* Length of the input for FCS calculation in number of 
+                                                             bytes. */
+#define CONTROL_ESCAPE_OCTET                0x7Du         /* Control escape octet used as the transparency 
+                                                             identifier. */
+#define WRITE_LEN                           1u            /* Length of write in number of bytes. */    
+#define READ_LEN                            1u            /* Length of read in number of bytes. */    
+#define START_REQ_FRAME_LEN                 5u            /* Length of ther start request frame in number of bytes. */
+#define DLCI_ESTABLISH_REQ_FRAME_LEN        5u            /* Length of ther DLCI establishment request frame in number 
+                                                             of bytes. */
+#define T1_TIMER_VALUE                      300u          /* T1 timer value. */
+#define RETRANSMIT_COUNT                    3u            /* Retransmission count for the tx frames requiring a
+                                                             response. */
     
 /* Definition for frame header type. */
 typedef struct
@@ -71,6 +76,7 @@ void Mux::module_init()
 {
     state.is_multiplexer_open = 0;
     state.is_request_timeout  = 0;
+    state.is_initiator        = 0;
    
     rx_context.offset        = 0;
     rx_context.decoder_state = DECODER_STATE_SYNC;    
@@ -104,7 +110,7 @@ void Mux::on_timeout()
                 frame_retransmit_begin();
                 tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
             } else {
-                /* Retransmission limit recahed, change state and release the suspended call thread with appropriate 
+                /* Retransmission limit reachd, change state and release the suspended call thread with appropriate 
                    status code. */
                 state.is_request_timeout = 1;
                 const osStatus os_status = _semaphore.release();
@@ -212,6 +218,9 @@ void Mux::dlci_0_establish_resp_do()
         osStatus os_status;
         case TX_RETRANSMIT_DONE:
             _event_q->cancel(tx_context.timer_id);
+            
+            // @todo: need to verify correct call order for sm change and Semaphore release.
+            tx_state_change(TX_IDLE, NULL);
             os_status = _semaphore.release();
             MBED_ASSERT(os_status == osOK); 
                             
@@ -327,6 +336,8 @@ void Mux::tx_state_change(TxState new_state, tx_state_entry_func_t entry_func)
 {
     tx_context.tx_state = new_state;
     
+//    trace("tx_state_change: ", tx_context.tx_state);
+    
     if (entry_func != NULL) {
         entry_func();
     }
@@ -348,6 +359,8 @@ void Mux::on_deferred_call()
     if (events & POLLOUT) {
         /* Continue the write sequence if feasible. */
         const ssize_t write_ret = write_do();
+//trace("write_ret", write_ret);
+//trace("bytes_remaining", tx_context.bytes_remaining);        
         if (write_ret >= 0) {
             if (tx_context.bytes_remaining == 0) { 
                 
@@ -368,6 +381,7 @@ void Mux::on_deferred_call()
                         break;
                     default:
                         /* No implementtaion required. */
+                        MBED_ASSERT(false);
                         break;
                 }
 #endif //                 
@@ -447,6 +461,26 @@ void Mux::start_request_construct()
 }
 
 
+void Mux::dlci_establish_request_construct(uint8_t dlci_id)
+{
+    // @todo: combine with start request
+    
+    frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::tx_context.buffer[0]));
+    
+    frame_hdr->flag_seq       = FLAG_SEQUENCE_OCTET;
+    
+    const uint8_t address = 3 | (dlci_id >> 2); // @todo: hard code as initiator for now
+    
+    frame_hdr->address        = address;
+    frame_hdr->control        = CONTROL_DLCI_START_REQ_OCTET;    
+    frame_hdr->information[0] = fcs_calculate(&(Mux::tx_context.buffer[1]), FCS_INPUT_LEN);    
+    (++frame_hdr)->flag_seq   = FLAG_SEQUENCE_OCTET;
+    
+    tx_context.bytes_remaining = DLCI_ESTABLISH_REQ_FRAME_LEN;
+    tx_context.offset          = 0;            
+}
+
+
 uint8_t Mux::encode_do()
 {
     uint8_t       encoded_byte;
@@ -511,11 +545,12 @@ Mux::MuxEstablishStatus Mux::start_response_decode()
 
 ssize_t Mux::mux_start(Mux::MuxEstablishStatus &status)
 {
+    ssize_t return_code;
+    
     if (state.is_multiplexer_open) {
         return 0;
     }
-    
-    ssize_t return_code;
+   
     switch (tx_context.tx_state) {
         case TX_IDLE:
             /* Construct the frame, start the tx sequence 1-byte at time, reset relevant state contexts and suspend 
@@ -544,30 +579,37 @@ ssize_t Mux::mux_start(Mux::MuxEstablishStatus &status)
             break;
     };
     
-    return return_code;    
-#if 0    
-    /* Construct the frame, reset relevant state contexts, start the tx sequence 1-byte at time and suspend the call 
-       thread. */
-    start_request_construct();
-    tx_context.retransmit_counter = RETRANSMIT_COUNT;
-    state.is_request_timeout = 0;
-    const ssize_t ret_write = write_do();    
-    if (ret_write < 0) {
-        return ret_write;
-    }    
-    const int ret_wait = _semaphore.wait();
-    MBED_ASSERT(ret_wait == 1);
+    return return_code;   
+}
+
+
+ssize_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status)
+{
+    ssize_t return_code;
     
-    /* Decode response frame from the rx buffer in order to set the correct status code if no request timeout 
-     * occurred. */ 
-    if (!state.is_request_timeout) {
-        status = start_response_decode();
-    } else {
-        status = MUX_ESTABLISH_TIMEOUT;
+    if (!state.is_multiplexer_open) {
+        return 1;
     }
-       
-    return 1;
-#endif // 0    
+    
+    switch (tx_context.tx_state) {
+        case TX_IDLE:                
+            status = MUX_ESTABLISH_SUCCESS;
+            
+            dlci_establish_request_construct(dlci_id);  
+//trace("dlci_establish ", 0);                    
+            return_code = write_do();    
+            MBED_ASSERT(return_code != 0);    
+            return_code = 2;
+            tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
+            const int ret_wait = _semaphore.wait();
+            MBED_ASSERT(ret_wait == 1);
+            break;
+        default:
+            MBED_ASSERT(false);
+            break;
+    }
+
+    return return_code;   
 }
 
 } // namespace mbed

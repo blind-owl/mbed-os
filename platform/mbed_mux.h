@@ -178,11 +178,12 @@ typedef enum
      *  @param dlci_id  ID of the DLCI to establish. Valid range 1 - 63. 
      *  @param status   Operation completion code.     
      *
-     *  @return 1   Operation completed successfully, check @ref status for completion code.
+     *  @return 2   Operation completed successfully, check @ref status for completion code.
+     *  @return 1   Operation not started, no established multiplexer control channel exists.
      *  @return 0   Operation not started, all available DLCIs allready established.     
      *  @return <0  Unspecified failure.
      */        
-    static int dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status);
+    static ssize_t dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status);
         
     /** Attach serial interface to the object.
      *
@@ -231,7 +232,7 @@ private:
         TX_STATE_MAX
     } TxState;
     
-    /* Defintion for implementaion internal Rx frame type. */
+    /* Definition for implementation internal Rx frame type. */
     typedef enum 
     {
         RX_FRAME_DLCI_0_ESTABLISH_REQUEST = 0,
@@ -251,6 +252,12 @@ private:
     
     /** Construct start response message. */    
     static void start_response_construct();
+    
+    /** Construct dlci establish message.
+     * 
+     *  @param dlci_id  ID of the DLCI to establish. Valid range 1 - 63. 
+     */    
+    static void dlci_establish_request_construct(uint8_t dlci_id);
     
     /** Do write operation if pending data available.
      * @todo: document return code
@@ -350,6 +357,7 @@ private:
     {
         uint8_t is_multiplexer_open : 1;        
         uint8_t is_request_timeout : 1;
+        uint8_t is_initiator : 1;
     } state_t;
     
     static FileHandle      *_serial;                                /* Serial used. */        
