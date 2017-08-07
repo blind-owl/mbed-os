@@ -229,6 +229,7 @@ void Mux::dlci_0_establish_resp_do()
             // - peer reject mux open
             // - reissue mux start without init in between
             state.is_multiplexer_open = 1; 
+            state.is_initiator        = 1;
             break;
         default:
             trace("dlci_0_establish_resp_do: ", tx_context.tx_state);                
@@ -468,10 +469,7 @@ void Mux::dlci_establish_request_construct(uint8_t dlci_id)
     frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::tx_context.buffer[0]));
     
     frame_hdr->flag_seq       = FLAG_SEQUENCE_OCTET;
-    
-    const uint8_t address = 3 | (dlci_id >> 2); // @todo: hard code as initiator for now
-    
-    frame_hdr->address        = address;
+    frame_hdr->address        = (state.is_initiator ? 3 : 1) | (dlci_id >> 2);    
     frame_hdr->control        = CONTROL_DLCI_START_REQ_OCTET;    
     frame_hdr->information[0] = fcs_calculate(&(Mux::tx_context.buffer[1]), FCS_INPUT_LEN);    
     (++frame_hdr)->flag_seq   = FLAG_SEQUENCE_OCTET;
