@@ -6,16 +6,9 @@
 namespace mbed {
 
 #define FLAG_SEQUENCE_OCTET                 0x7Eu         /* Flag field used in the advanced option mode. */
-#define ADDRESS_MUX_START_REQ_OCTET         0x03u         /* Address field of the start multiplexer request frame. */  
+#define ADDRESS_MUX_START_REQ_OCTET         0x03u         /* Address field of the start multiplexer request frame. */   
 /* Address field value of the start multiplexer response frame. */        
-#define ADDRESS_MUX_START_RESP_OCTET        ADDRESS_MUX_START_REQ_OCTET                                                 
-#define CONTROL_MUX_START_REQ_OCTET         0x3Fu         /* Control field of the start multiplexer request frame. */
-/* Control field of the DLCI establishment request frame. */
-#define CONTROL_DLCI_START_REQ_OCTET        CONTROL_MUX_START_REQ_OCTET
-#define CONTROL_MUX_START_ACCEPT_RESP_OCTET 0x13u         /* Control field of the start multiplexer response frame, 
-                                                             peer accept. */
-#define CONTROL_MUX_START_REJECT_RESP_OCTET 0x1Fu         /* Control field of the start multiplexer response frame, 
-                                                             peer reject. */
+#define ADDRESS_MUX_START_RESP_OCTET        ADDRESS_MUX_START_REQ_OCTET
 #define FCS_INPUT_LEN                       2u            /* Length of the input for FCS calculation in number of 
                                                              bytes. */
 #define CONTROL_ESCAPE_OCTET                0x7Du         /* Control escape octet used as the transparency 
@@ -28,6 +21,12 @@ namespace mbed {
 #define T1_TIMER_VALUE                      300u          /* T1 timer value. */
 #define RETRANSMIT_COUNT                    3u            /* Retransmission count for the tx frames requiring a
                                                              response. */
+#define FRAME_TYPE_SABM                     0x2Fu         /* SABM frame type coding in the frame control field. */
+#define FRAME_TYPE_UA                       0x63u         /* UA frame type coding in the frame control field. */
+#define FRAME_TYPE_DM                       0x0Fu         /* DM frame type coding in the frame control field. */
+#define FRAME_TYPE_DISC                     0x43u         /* DISC frame type coding in the frame control field. */
+#define FRAME_TYPE_UIH                      0xEFu         /* UIH frame type coding in the frame control field. */
+#define PF_BIT                              (1u << 4)     /* P/F bit position in the frame control field. */
     
 /* Definition for frame header type. */
 typedef struct
@@ -166,7 +165,7 @@ void Mux::start_response_construct()
     
     frame_hdr->flag_seq       = FLAG_SEQUENCE_OCTET;
     frame_hdr->address        = ADDRESS_MUX_START_RESP_OCTET;
-    frame_hdr->control        = CONTROL_MUX_START_ACCEPT_RESP_OCTET;    
+    frame_hdr->control        = (FRAME_TYPE_UA | PF_BIT);    
     frame_hdr->information[0] = fcs_calculate(&(Mux::tx_context.buffer[1]), FCS_INPUT_LEN);    
     (++frame_hdr)->flag_seq   = FLAG_SEQUENCE_OCTET;
     
@@ -177,17 +176,43 @@ void Mux::start_response_construct()
 }
 
 
-void Mux::dlci_0_establish_req_do()
+void Mux::dlci_establish_response_construct(uint8_t dlci_id)
 {
-//trace("dlci_0_establish_req_do ", 0);    
-
+    // @todo: combine common functionality with request function.
+    
+    frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::tx_context.buffer[0]));
+    
+    frame_hdr->flag_seq       = FLAG_SEQUENCE_OCTET;
+    frame_hdr->address        = ((state.is_initiator ? 1 : 3) | (dlci_id >> 2));
+    frame_hdr->control        = (FRAME_TYPE_UA | PF_BIT);    
+    frame_hdr->information[0] = fcs_calculate(&(Mux::tx_context.buffer[1]), FCS_INPUT_LEN);    
+    (++frame_hdr)->flag_seq   = FLAG_SEQUENCE_OCTET;
+    
+    // @todo: make START_RESP_FRAME_LEN define
+    
+    tx_context.bytes_remaining = START_REQ_FRAME_LEN;
+    tx_context.offset          = 0;           
+}
+   
+   
+void Mux::on_rx_frame_sabm()
+{
     // @todo: assume mux START request internal state inprogress/pending only for now!
     
     switch (tx_context.tx_state) {
         ssize_t return_code;
+        uint8_t dlci_id;
         case TX_IDLE:
             /* Construct the frame, start the tx sequence 1-byte at time, reset relevant state contexts. */             
-            start_response_construct();  
+            
+            // @todo: make decoder func for dlci_id;
+            // @todo: verify dlci_id: not in use allready, use bitmap for it.
+            dlci_id = rx_context.buffer[1] << 2;
+            if (dlci_id == 0) {
+                start_response_construct(); 
+            } else {
+                dlci_establish_response_construct(dlci_id);
+            }
             return_code = write_do();    
             MBED_ASSERT(return_code != 0);
             if (return_code > 0) {
@@ -201,17 +226,15 @@ void Mux::dlci_0_establish_req_do()
             // @todo: assume mux START request internal state inprogress/pending only for now!
             break;
         default:
-            trace("dlci_0_establish_req_do: ", tx_context.tx_state);    
+            trace("rx_frame_sabm_do: ", tx_context.tx_state);    
             MBED_ASSERT(false);
             break;        
     }
 }
 
 
-void Mux::dlci_0_establish_resp_do()
+void Mux::on_rx_frame_ua()
 {
-//trace("dlci_0_establish_resp_do ", 0);    
-
     // @todo: verify that we have issued the start request
 
     switch (tx_context.tx_state) {
@@ -232,49 +255,98 @@ void Mux::dlci_0_establish_resp_do()
             state.is_initiator        = 1;
             break;
         default:
-            trace("dlci_0_establish_resp_do: ", tx_context.tx_state);                
+            trace("rx_frame_ua_do: ", tx_context.tx_state);                
             MBED_ASSERT(false);
             break;
     }
 }
 
 
-void Mux::rx_frame_not_supported_decode_do()
+void Mux::on_rx_frame_dm()
 {
-//    trace("rx_frame_not_supported_decode_do ", 0);    
+    // @todo: verify that we have issued the start request
+
+    switch (tx_context.tx_state) {
+        osStatus os_status;
+        case TX_RETRANSMIT_DONE:
+            _event_q->cancel(tx_context.timer_id);
+            
+            // @todo: need to verify correct call order for sm change and Semaphore release.
+            tx_state_change(TX_IDLE, NULL);
+            os_status = _semaphore.release();
+            MBED_ASSERT(os_status == osOK);                           
+            break;
+        default:
+            trace("rx_frame_ua_do: ", tx_context.tx_state);                
+            MBED_ASSERT(false);
+            break;
+    }
+}
+
+
+void Mux::on_rx_frame_disc()
+{
+    MBED_ASSERT(false);        
+}
+
+
+void Mux::on_rx_frame_uih()
+{
+    MBED_ASSERT(false);        
+}
+
+
+void Mux::on_rx_frame_not_supported()
+{
+    trace("rx_frame_not_supported_do: ", rx_context.buffer[2]);        
+    
     MBED_ASSERT(false);    
 }
-        
-        
-Mux::RxFrameType Mux::valid_rx_frame_decode_do()
-{
-//trace("valid_rx_frame_decode_do ", rx_context.buffer[2]);    
-
-    // @todo: address field decoding to be added for compare
     
-    if ((rx_context.buffer[2] == CONTROL_MUX_START_ACCEPT_RESP_OCTET) || 
-        (rx_context.buffer[2] == CONTROL_MUX_START_REJECT_RESP_OCTET)) {
-        return RX_FRAME_DLCI_0_ESTABLISH_RESPONSE;
-    } else if (rx_context.buffer[2] == CONTROL_MUX_START_REQ_OCTET) {
-        return RX_FRAME_DLCI_0_ESTABLISH_REQUEST;
-    } else {
-        return RX_FRAME_NOT_SUPPORTED;
-    }
 
+Mux::FrameDecodeType Mux::frame_type_resolve()
+{
+//trace("frame_type_resolve ", rx_context.buffer[2]);    
+
+    const uint8_t frame_type = (rx_context.buffer[2] & ~0x10);
+    
+    if (frame_type == FRAME_TYPE_SABM) {
+        return FRAME_DECODE_TYPE_SABM;
+    } else if (frame_type == FRAME_TYPE_UA) {
+        return FRAME_DECODE_TYPE_UA;
+    } else if (frame_type == FRAME_TYPE_DM) {
+        return FRAME_DECODE_TYPE_DM;
+    } else if (frame_type == FRAME_TYPE_DISC) {
+        return FRAME_DECODE_TYPE_DISC;
+    } else if (frame_type == FRAME_TYPE_UIH) {
+        return FRAME_DECODE_TYPE_UIH;
+    } else {
+        return FRAME_DECODE_TYPE_NOT_SUPPORTED;
+    }
 }
 
 
 void Mux::valid_rx_frame_decode()
-{       
+{ 
+#if 0    
+    trace("valid_rx_frame_decode: ", rx_context.offset);  
+    for (uint8_t i = 0; i != rx_context.offset; ++i) {
+        trace("DECODE BYTE:", rx_context.buffer[i]);
+    }
+#endif // 0    
+    
     typedef void (*rx_frame_decoder_func_t)();    
-    static const rx_frame_decoder_func_t decoder_func[RX_FRAME_TYPE_MAX] = {
-        dlci_0_establish_req_do,
-        dlci_0_establish_resp_do,
-        rx_frame_not_supported_decode_do
+    static const rx_frame_decoder_func_t decoder_func[FRAME_DECODE_TYPE_MAX] = {
+        on_rx_frame_sabm,
+        on_rx_frame_ua,
+        on_rx_frame_dm,
+        on_rx_frame_disc,
+        on_rx_frame_uih,
+        on_rx_frame_not_supported
     };
 
-    const Mux::RxFrameType frame_type = valid_rx_frame_decode_do();
-    rx_frame_decoder_func_t func      = decoder_func[frame_type];
+    const Mux::FrameDecodeType frame_type = frame_type_resolve();
+    rx_frame_decoder_func_t func    = decoder_func[frame_type];
     func();      
     
     rx_context.offset = 1;    
@@ -376,6 +448,8 @@ void Mux::on_deferred_call()
                         if (!state.is_multiplexer_open) {
                             state.is_multiplexer_open = 1;
                             _mux_obj_cb->on_mux_start();
+                        } else {
+                            _mux_obj_cb->on_dlci_establish(NULL, 0);
                         }
                         
                         tx_state_change(TX_IDLE, NULL);
@@ -385,11 +459,7 @@ void Mux::on_deferred_call()
                         MBED_ASSERT(false);
                         break;
                 }
-#endif //                 
-#if 0                
-                tx_context.timer_id = _event_q->call_in(T1_TIMER_VALUE, Mux::on_timeout);
-                MBED_ASSERT(tx_context.timer_id != 0);            
-#endif // 0 replaced by above switc...case                
+#endif //                
             }
         } else {
             MBED_ASSERT(false); // @todo write returned < 0 for failure propagate error to the user
@@ -453,7 +523,7 @@ void Mux::start_request_construct()
     
     frame_hdr->flag_seq       = FLAG_SEQUENCE_OCTET;
     frame_hdr->address        = ADDRESS_MUX_START_REQ_OCTET;
-    frame_hdr->control        = CONTROL_MUX_START_REQ_OCTET;    
+    frame_hdr->control        = (FRAME_TYPE_SABM | PF_BIT);       
     frame_hdr->information[0] = fcs_calculate(&(Mux::tx_context.buffer[1]), FCS_INPUT_LEN);    
     (++frame_hdr)->flag_seq   = FLAG_SEQUENCE_OCTET;
     
@@ -469,8 +539,8 @@ void Mux::dlci_establish_request_construct(uint8_t dlci_id)
     frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::tx_context.buffer[0]));
     
     frame_hdr->flag_seq       = FLAG_SEQUENCE_OCTET;
-    frame_hdr->address        = (state.is_initiator ? 3 : 1) | (dlci_id >> 2);    
-    frame_hdr->control        = CONTROL_DLCI_START_REQ_OCTET;    
+    frame_hdr->address        = (state.is_initiator ? 3 : 1) | (dlci_id >> 2);   
+    frame_hdr->control        = (FRAME_TYPE_SABM | PF_BIT);            
     frame_hdr->information[0] = fcs_calculate(&(Mux::tx_context.buffer[1]), FCS_INPUT_LEN);    
     (++frame_hdr)->flag_seq   = FLAG_SEQUENCE_OCTET;
     
@@ -526,10 +596,10 @@ Mux::MuxEstablishStatus Mux::start_response_decode()
     const frame_hdr_t      *frame = reinterpret_cast<const frame_hdr_t*>(&(rx_context.buffer[0]));
     
     switch (frame->control) {
-        case CONTROL_MUX_START_ACCEPT_RESP_OCTET:
+        case (FRAME_TYPE_UA | PF_BIT):
             status = MUX_ESTABLISH_SUCCESS;
             break;
-        case CONTROL_MUX_START_REJECT_RESP_OCTET:
+        case (FRAME_TYPE_DM | PF_BIT):
             status = MUX_ESTABLISH_REJECT;
             break;
         default:

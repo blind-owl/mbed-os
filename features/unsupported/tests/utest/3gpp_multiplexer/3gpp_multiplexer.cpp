@@ -19,24 +19,27 @@ public:
     virtual void on_dlci_establish(FileHandle *obj, uint8_t dlci_id);
     virtual void event_receive() {};    
     
-    void reset(); 
-    bool is_mux_start_triggered();
-    bool is_dlci_establish_triggered();
-    
-    MuxClient() : _is_mux_start_triggered(false), _is_dlci_establish_triggered(false) {};
+    static void reset(); 
+    static bool is_mux_start_triggered();
+    static bool is_dlci_establish_triggered();
+   
+    MuxClient() {};
 private:
     
-    bool _is_mux_start_triggered;
-    bool _is_dlci_establish_triggered;
+    static bool _is_mux_start_triggered;
+    static bool _is_dlci_establish_triggered;
 };
 
+bool MuxClient::_is_mux_start_triggered      = false;
+bool MuxClient::_is_dlci_establish_triggered = false;
 
 void MuxClient::reset()
 {
     _is_mux_start_triggered      = false;
     _is_dlci_establish_triggered = false;
 }
-    
+ 
+ 
 bool MuxClient::is_mux_start_triggered()
 {
     const bool ret          = _is_mux_start_triggered;
@@ -66,9 +69,7 @@ void MuxClient::on_dlci_establish(FileHandle *obj, uint8_t dlci_id)
     _is_dlci_establish_triggered = true;
 }
 
-
 static MuxClient mux_client;
-
 
 TEST_GROUP(MultiplexerOpenTestGroup)
 {
@@ -96,35 +97,29 @@ TEST(MultiplexerOpenTestGroup, FirstTest)
     STRCMP_EQUAL("mbed SDK!", "mbed SDK!");
 }
 
-#define MUX_START_FRAME_LEN                 5u                          /* Length of the multiplexer start frame in 
-                                                                           number of bytes. */
-#define WRITE_LEN                           1u                          /* Length of single write call in number of 
-                                                                           bytes. */  
-#define READ_LEN                            1u                          /* Length of single read call in number of 
-                                                                           bytes. */
-#define FLAG_SEQUENCE_OCTET                 0x7Eu                       /* Flag field used in the advanced option mode. 
-                                                                           */
-#define ADDRESS_MUX_START_REQ_OCTET         0x03u                       /* Address field value of the start multiplexer 
-                                                                           request frame. */
-#define ADDRESS_MUX_START_RESP_OCTET        ADDRESS_MUX_START_REQ_OCTET /* Address field value of the start multiplexer 
-                                                                           response frame. */
-#define CONTROL_MUX_START_REQ_OCTET         0x3Fu                       /* Control field value of the start multiplexer 
-                                                                           request frame. */
-#define CONTROL_DLCI_START_REQ_OCTET        CONTROL_MUX_START_REQ_OCTET
-#define CONTROL_MUX_START_ACCEPT_RESP_OCTET 0x13u                       /* Control field value of the start multiplexer 
-                                                                           response frame, peer accept. */
-/* Control field value of the DLCI establishment response frame, peer accept. */
-#define CONTROL_DLCI_ESTABLISH_ACCEPT_RESP_OCTET CONTROL_MUX_START_ACCEPT_RESP_OCTET
-#define CONTROL_MUX_START_REJECT_RESP_OCTET 0x1Fu                       /* Control field value of the start multiplexer 
-                                                                           response frame, peer reject. */
-#define MUX_START_FRAME_FCS                 0xFCu                       /* FCS field value of the start multiplexer 
-                                                                           request frame. */
-#define T1_TIMER_VALUE                      300u                        /* T1 timer value. */
-#define T1_TIMER_EVENT_ID                   1                           /* T1 timer event id. */
-#define CRC_TABLE_LEN                       256u                        /* CRC table length in number of bytes. */
-#define RETRANSMIT_COUNT                    3u                          /* Retransmission count for the tx frames 
-                                                                           requiring a response. */
-                                                                           
+#define MUX_START_FRAME_LEN          5u                          /* Length of the multiplexer start frame in number of 
+                                                                    bytes. */
+#define WRITE_LEN                    1u                          /* Length of single write call in number of bytes. */  
+#define READ_LEN                     1u                          /* Length of single read call in number of bytes. */
+#define FLAG_SEQUENCE_OCTET          0x7Eu                       /* Flag field used in the advanced option mode. */
+#define ADDRESS_MUX_START_REQ_OCTET  0x03u                       /* Address field value of the start multiplexer 
+                                                                    request frame. */
+#define ADDRESS_MUX_START_RESP_OCTET ADDRESS_MUX_START_REQ_OCTET /* Address field value of the start multiplexer 
+                                                                    response frame. */
+#define T1_TIMER_VALUE               300u                        /* T1 timer value. */
+#define T1_TIMER_EVENT_ID            1                           /* T1 timer event id. */
+#define CRC_TABLE_LEN                256u                        /* CRC table length in number of bytes. */
+#define RETRANSMIT_COUNT             3u                          /* Retransmission count for the tx frames requiring a 
+                                                                    response. */       
+#define FRAME_TYPE_SABM              0x2Fu                       /* SABM frame type coding in the frame control 
+                                                                    field. */
+#define FRAME_TYPE_UA                0x63u                       /* UA frame type coding in the frame control field. */
+#define FRAME_TYPE_DM                0x0Fu                       /* DM frame type coding in the frame control field. */
+#define FRAME_TYPE_DISC              0x43u                       /* DISC frame type coding in the frame control 
+                                                                    field. */
+#define FRAME_TYPE_UIH               0xEFu                       /* UIH frame type coding in the frame control field. */
+#define PF_BIT                       (1u << 4)                   /* P/F bit position in the frame control field. */     
+                      
 static const uint8_t crctable[CRC_TABLE_LEN] = {
     0x00, 0x91, 0xE3, 0x72, 0x07, 0x96, 0xE4, 0x75,  0x0E, 0x9F, 0xED, 0x7C, 0x09, 0x98, 0xEA, 0x7B,
     0x1C, 0x8D, 0xFF, 0x6E, 0x1B, 0x8A, 0xF8, 0x69,  0x12, 0x83, 0xF1, 0x60, 0x15, 0x84, 0xF6, 0x67,
@@ -177,8 +172,8 @@ void mux_start_self_iniated_tx()
     const uint8_t write_byte[4] = 
     {
         ADDRESS_MUX_START_REQ_OCTET, 
-        CONTROL_MUX_START_REQ_OCTET, 
-        MUX_START_FRAME_FCS,
+        (FRAME_TYPE_SABM | PF_BIT), 
+        fcs_calculate(&write_byte[0], 2),
         FLAG_SEQUENCE_OCTET
     };
 
@@ -296,7 +291,7 @@ void mux_start_self_initated_sem_wait(const void *context)
     {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_RESP_OCTET, 
-        CONTROL_MUX_START_ACCEPT_RESP_OCTET, 
+        (FRAME_TYPE_UA | PF_BIT), 
         fcs_calculate(&read_byte[1], 2),
         FLAG_SEQUENCE_OCTET
     };
@@ -350,7 +345,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_succes)
     mbed::Mux::serial_attach(&fh_mock);
     
     mux_self_iniated_open();
-    CHECK(!mux_client.is_mux_start_triggered());                    
+    CHECK(!MuxClient::is_mux_start_triggered());                    
 }
 
 
@@ -372,7 +367,7 @@ void dlci_establish_self_iniated_tx(uint8_t address)
     const uint8_t write_byte[4] = 
     {
         address, 
-        CONTROL_DLCI_START_REQ_OCTET, 
+        (FRAME_TYPE_SABM | PF_BIT), 
         fcs_calculate(&write_byte[0], 2),
         FLAG_SEQUENCE_OCTET
     };
@@ -506,28 +501,16 @@ typedef struct
  */
 void dlci_establish_self_initated_sem_wait(const void *context)
 {
-//    const uint8_t dlci_id = *(static_cast<const uint8_t *>(context));       
     const dlci_establish_context_t *cntx = static_cast<const dlci_establish_context_t *>(context);
     
     const uint8_t read_byte[4] = 
     {
         (((cntx->role == ROLE_INITIATOR) ? 1 : 3) | (cntx->dlci_id >> 2)),
-        CONTROL_DLCI_ESTABLISH_ACCEPT_RESP_OCTET, 
+        (FRAME_TYPE_UA | PF_BIT), 
         fcs_calculate(&read_byte[0], 2),
         FLAG_SEQUENCE_OCTET
     };    
     const uint8_t address = ((cntx->role == ROLE_INITIATOR) ? 3 : 1) | (cntx->dlci_id >> 2);        
-#if 0    
-    const uint8_t read_byte[4] = 
-    {
-        (3 | (dlci_id >> 2)),
-        CONTROL_DLCI_ESTABLISH_ACCEPT_RESP_OCTET, 
-        fcs_calculate(&read_byte[0], 2),
-        FLAG_SEQUENCE_OCTET
-    };
-
-    const uint8_t address = (3 | (dlci_id >> 2)); 
-#endif // 0
 
     dlci_establish_self_iniated_tx(address);
     dlci_establish_self_iniated_rx(&(read_byte[0]), sizeof(read_byte));
@@ -554,10 +537,7 @@ void dlci_self_iniated_establish(Role role)
     
     const dlci_establish_context_t context = {1, role};
     mock_wait->func_context                = &context;
-/*    
-    const uint8_t dlci_id   = 1;
-    mock_wait->func_context = &dlci_id;
-*/
+
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
     const int ret = mbed::Mux::dlci_establish(1, status);
@@ -615,7 +595,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_role_initiator_succ
 
 
 /*
- * LOOP UNTIL COMPLETE START REQUEST FRAME READ DONE
+ * LOOP UNTIL COMPLETE DLCI ESTABLISH REQUEST FRAME READ DONE
  * - trigger sigio callback from FileHandleMock
  * - enqueue deferred call to EventQueue
  * - CALL RETURN 
@@ -625,7 +605,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_role_initiator_succ
  * - begin start response frame sequence in the last iteration
  * - CALL RETURN 
  */
-static void mux_start_peer_iniated_rx(const uint8_t *rx_buf, uint8_t rx_buf_len, const uint8_t *write_byte)
+static void dlci_establish_peer_iniated_rx(const uint8_t *rx_buf, uint8_t rx_buf_len, const uint8_t *write_byte)
 {    
     /* read the complete start request frame. */
     uint8_t                                  rx_count      = 0;      
@@ -678,7 +658,7 @@ static void mux_start_peer_iniated_rx(const uint8_t *rx_buf, uint8_t rx_buf_len,
 
 
 /*
- * LOOP UNTIL COMPLETE START RESPONSE FRAME WRITE DONE
+ * LOOP UNTIL DLCI ESTABLISH RESPONSE FRAME WRITE DONE
  * - trigger sigio callback from FileHandleMock
  * - enqueue deferred call to EventQueue
  * - CALL RETURN 
@@ -688,7 +668,11 @@ static void mux_start_peer_iniated_rx(const uint8_t *rx_buf, uint8_t rx_buf_len,
  * - verify completion callback state in the last iteration
  * - CALL RETURN 
  */
-void mux_start_peer_iniated_tx(const uint8_t *buf, uint8_t buf_len, bool expected_mux_start_event_state)
+typedef bool (*compare_func_t)();
+void dlci_establish_peer_iniated_tx(const uint8_t *buf, 
+                                    uint8_t        buf_len, 
+                                    bool           expected_state,
+                                    compare_func_t func)
 {    
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
     const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};    
@@ -720,10 +704,11 @@ void mux_start_peer_iniated_tx(const uint8_t *buf, uint8_t buf_len, bool expecte
         mock_write->return_value                = 1;        
 
         mbed::EventQueueMock::io_control(eq_io_control);  
-        
+
         if (tx_count == (buf_len - 1)) {               
-            /* Last byte of the start response frame written, verify completion callback state. */            
-            CHECK_EQUAL(mux_client.is_mux_start_triggered(), expected_mux_start_event_state);
+            /* Last byte of the dlci establishment response frame written, verify correct completion callback 
+               state. */            
+            CHECK_EQUAL(func(), expected_state);
         }
         
         ++tx_count;        
@@ -738,15 +723,16 @@ void mux_peer_iniated_open(const uint8_t *rx_buf, uint8_t rx_buf_len, bool expec
     {
         FLAG_SEQUENCE_OCTET,        
         ADDRESS_MUX_START_RESP_OCTET, 
-        CONTROL_MUX_START_ACCEPT_RESP_OCTET, 
+        (FRAME_TYPE_UA | PF_BIT), 
         fcs_calculate(&write_byte[1], 2),
         FLAG_SEQUENCE_OCTET
     };
 
-    mux_start_peer_iniated_rx(&(rx_buf[0]), rx_buf_len, &(write_byte[0]));
-    mux_start_peer_iniated_tx(&(write_byte[1]), 
-                              (sizeof(write_byte) - sizeof(write_byte[0])),
-                              expected_mux_start_event_state);  
+    dlci_establish_peer_iniated_rx(&(rx_buf[0]), rx_buf_len, &(write_byte[0]));
+    dlci_establish_peer_iniated_tx(&(write_byte[1]), 
+                                   (sizeof(write_byte) - sizeof(write_byte[0])),
+                                   expected_mux_start_event_state,
+                                   MuxClient::is_mux_start_triggered);  
 }
 
 
@@ -772,7 +758,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_role_responder_succ
     {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_REQ_OCTET, 
-        CONTROL_MUX_START_REQ_OCTET, 
+        (FRAME_TYPE_SABM | PF_BIT), 
         fcs_calculate(&read_byte[1], 2),
         FLAG_SEQUENCE_OCTET
     };        
@@ -809,7 +795,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_allready_open)
     const int ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(ret, 0);    
     
-    CHECK(!mux_client.is_mux_start_triggered());                    
+    CHECK(!MuxClient::is_mux_start_triggered());                    
 }
 
 
@@ -819,7 +805,7 @@ void mux_start_self_initated_sem_wait_rejected_by_peer(const void *)
     {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_RESP_OCTET, 
-        CONTROL_MUX_START_REJECT_RESP_OCTET, 
+        (FRAME_TYPE_DM | PF_BIT), 
         fcs_calculate(&read_byte[1], 2),
         FLAG_SEQUENCE_OCTET
     };
@@ -869,7 +855,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_rejected_by_peer)
     CHECK_EQUAL(ret, 2);
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_REJECT);    
     
-    CHECK(!mux_client.is_mux_start_triggered());                    
+    CHECK(!MuxClient::is_mux_start_triggered());                    
 }
 
 
@@ -905,7 +891,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_write_failure)
     const int ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(ret, -1);
     
-    CHECK(!mux_client.is_mux_start_triggered());                    
+    CHECK(!MuxClient::is_mux_start_triggered());                    
 }
 
 
@@ -985,7 +971,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_timeout)
     CHECK_EQUAL(ret, 2);
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_TIMEOUT);
     
-    CHECK(!mux_client.is_mux_start_triggered());                
+    CHECK(!MuxClient::is_mux_start_triggered());                
 }
 
 
@@ -1011,12 +997,76 @@ TEST(MultiplexerOpenTestGroup, mux_open_peer_initiated)
     {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_REQ_OCTET, 
-        CONTROL_MUX_START_REQ_OCTET, 
+        (FRAME_TYPE_SABM | PF_BIT), 
         fcs_calculate(&read_byte[1], 2),
         FLAG_SEQUENCE_OCTET
     };    
     const bool expected_mux_start_event_state = true;
     mux_peer_iniated_open(&(read_byte[0]), sizeof(read_byte), expected_mux_start_event_state);
+}
+
+
+/* Do successfull peer iniated dlci establishment.*/
+void dlci_peer_iniated_establish(Role           role, 
+                                 const uint8_t *rx_buf, 
+                                 uint8_t        rx_buf_len,                                 
+                                 uint8_t        dlci_id,
+                                 bool           expected_dlci_established_event_state)
+{       
+    const uint8_t write_byte[5] = 
+    {
+        FLAG_SEQUENCE_OCTET,        
+        (((role == ROLE_INITIATOR) ? 1 : 3) | (dlci_id >> 2)),
+        (FRAME_TYPE_UA | PF_BIT),        
+        fcs_calculate(&write_byte[1], 2),
+        FLAG_SEQUENCE_OCTET
+    };
+
+    dlci_establish_peer_iniated_rx(&(rx_buf[0]), rx_buf_len, &(write_byte[0]));
+    const bool expected_dlci_establishment_event_state = true;
+    dlci_establish_peer_iniated_tx(&(write_byte[1]), 
+                                   (sizeof(write_byte) - sizeof(write_byte[0])),
+                                   expected_dlci_establishment_event_state,
+                                   MuxClient::is_dlci_establish_triggered); 
+}
+
+
+/*
+ * TC - dlci establishment sequence, peer initiated, role initiator: successfull establishment
+ * - self iniated open multiplexer
+ * - receive: DLCI establishment request
+ * - respond: DLCI establishment response
+ */
+TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated_role_initiator_success)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+
+    const Role role            = ROLE_INITIATOR;
+    const uint8_t dlci_id      = 1;
+    const uint8_t read_byte[4] = 
+    {
+        (((role == ROLE_INITIATOR) ? 1 : 3) | (dlci_id >> 2)),
+        (FRAME_TYPE_SABM | PF_BIT), 
+        fcs_calculate(&read_byte[0], 2),
+        FLAG_SEQUENCE_OCTET
+    };        
+    
+    const  bool expected_dlci_established_event_state = true;
+    dlci_peer_iniated_establish(role, 
+                                &(read_byte[0]), 
+                                sizeof(read_byte), 
+                                dlci_id,
+                                expected_dlci_established_event_state);
 }
 
 
@@ -1047,7 +1097,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_peer_initiated_allready_open)
     {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_REQ_OCTET, 
-        CONTROL_MUX_START_REQ_OCTET, 
+        (FRAME_TYPE_SABM | PF_BIT), 
         fcs_calculate(&read_byte[1], 2),
         FLAG_SEQUENCE_OCTET
     };    
@@ -1072,12 +1122,12 @@ void mux_open_simultaneous_self_iniated_sem_wait(const void *context)
     {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_REQ_OCTET, 
-        CONTROL_MUX_START_REQ_OCTET, 
+        (FRAME_TYPE_SABM | PF_BIT), 
         fcs_calculate(&read_byte[1], 2),
         FLAG_SEQUENCE_OCTET
     };
     
-    mux_start_peer_iniated_rx(&(read_byte[0]), sizeof(read_byte), NULL);    
+    dlci_establish_peer_iniated_rx(&(read_byte[0]), sizeof(read_byte), NULL);    
     
     /* Generate the remaining part of the mux START request. */
     mux_start_self_iniated_tx();
@@ -1087,7 +1137,7 @@ void mux_open_simultaneous_self_iniated_sem_wait(const void *context)
     const uint8_t read_byte_2[4] = 
     {
         ADDRESS_MUX_START_RESP_OCTET, 
-        CONTROL_MUX_START_ACCEPT_RESP_OCTET, 
+        (FRAME_TYPE_UA | PF_BIT), 
         fcs_calculate(&read_byte[0], 2),
         FLAG_SEQUENCE_OCTET
     };
@@ -1151,22 +1201,22 @@ void mux_open_simultaneous_self_iniated_full_frame_sem_wait(const void *context)
     {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_REQ_OCTET, 
-        CONTROL_MUX_START_REQ_OCTET, 
+        (FRAME_TYPE_SABM | PF_BIT), 
         fcs_calculate(&read_byte[1], 2),
         FLAG_SEQUENCE_OCTET
     };
-    
-    mux_start_peer_iniated_rx(&(read_byte[0]), sizeof(read_byte), NULL);    
+       
+    dlci_establish_peer_iniated_rx(&(read_byte[0]), sizeof(read_byte), NULL);    
    
     /* Generate peer mux START response, which is accepted by the implementation. */
     const uint8_t read_byte_2[4] = 
     {
         ADDRESS_MUX_START_RESP_OCTET, 
-        CONTROL_MUX_START_ACCEPT_RESP_OCTET, 
+        (FRAME_TYPE_UA | PF_BIT), 
         fcs_calculate(&read_byte[0], 2),
         FLAG_SEQUENCE_OCTET
     };
-    
+
     mux_start_self_iniated_rx(&(read_byte_2[0]), sizeof(read_byte_2));
 }
 

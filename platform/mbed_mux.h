@@ -232,19 +232,25 @@ private:
         TX_STATE_MAX
     } TxState;
     
-    /* Definition for implementation internal Rx frame type. */
+    /* Definition for frame type. */
     typedef enum 
     {
-        RX_FRAME_DLCI_0_ESTABLISH_REQUEST = 0,
-        RX_FRAME_DLCI_0_ESTABLISH_RESPONSE,
-        RX_FRAME_NOT_SUPPORTED,/*
-        RX_FRAME_DLCI_ESTABLISH_REQUEST,
-        RX_FRAME_DATA,
-        RX_FRAME_NOT_SUPPORTED,*/
-        RX_FRAME_TYPE_MAX
-    } RxFrameType;
+        FRAME_DECODE_TYPE_SABM = 0,
+        FRAME_DECODE_TYPE_UA,
+        FRAME_DECODE_TYPE_DM,
+        FRAME_DECODE_TYPE_DISC,
+        FRAME_DECODE_TYPE_UIH,        
+        FRAME_DECODE_TYPE_NOT_SUPPORTED,
+        FRAME_DECODE_TYPE_MAX
+    } FrameDecodeType;    
 
-    // @todo: update me
+    /** Calculate fcs.
+     * 
+     *  @param buffer       Input buffer.
+     *  @param input_len    Input length in number of bytes.
+     * 
+     *  @return Calculated fcs.
+     */    
     static uint8_t fcs_calculate(const uint8_t *buffer,  uint8_t input_len);
     
     /** Construct start request message. */
@@ -255,9 +261,15 @@ private:
     
     /** Construct dlci establish message.
      * 
-     *  @param dlci_id  ID of the DLCI to establish. Valid range 1 - 63. 
+     *  @param dlci_id  ID of the DLCI to establish
      */    
     static void dlci_establish_request_construct(uint8_t dlci_id);
+    
+    /** Construct dlci establish response message.
+     * 
+     *  @param dlci_id  ID of the DLCI to establish
+     */        
+    static void dlci_establish_response_construct(uint8_t dlci_id);    
     
     /** Do write operation if pending data available.
      * @todo: document return code
@@ -284,11 +296,11 @@ private:
     
     /** Change frame decoder state machine state. 
      * 
-     *  @param new_state state to transit.
+     *  @param new_state    State to transit.
      */            
     static void decoder_state_change(DecoderState new_state);
     
-    /** Evaluate is rx frame valid fopr further processing. 
+    /** Evaluate is rx frame valid for further processing. 
      * 
      *  @return true when frame is valid, false otherwise.
      */                
@@ -299,13 +311,33 @@ private:
      *  @return true when suspendiung is required, false otherwise.
      */                
     static bool is_rx_suspend_requited();
+       
+    /** Process received SABM frame. */    
+    static void on_rx_frame_sabm();
     
-    // @todo: update me    
-    static void dlci_0_establish_req_do();
-    static void dlci_0_establish_resp_do();
-    static void rx_frame_not_supported_decode_do();
+    /** Process received UA frame. */        
+    static void on_rx_frame_ua();
+    
+    /** Process received DM frame. */        
+    static void on_rx_frame_dm();
+    
+    /** Process received DISC frame. */        
+    static void on_rx_frame_disc();
+    
+    /** Process received UIH frame. */        
+    static void on_rx_frame_uih();
+    
+    /** Process received frame, which is not supported. */        
+    static void on_rx_frame_not_supported();    
+    
+    /** Process valid received frame. */            
     static void valid_rx_frame_decode();
-    static Mux::RxFrameType valid_rx_frame_decode_do();
+    
+    /** Resolve received frame type. 
+     * 
+     *  @return Frame type.
+     */                    
+    static Mux::FrameDecodeType frame_type_resolve();
     
     /** Decode received start multiplexer response frame.
      * 
@@ -317,9 +349,16 @@ private:
     /** Begin the frame retransmit sequence. */
     static void frame_retransmit_begin();
     
-    // @todo: update me
+    /** State entry function. */
     static void tx_retransmit_done_entry_run();    
+   
     typedef void (*tx_state_entry_func_t)();    
+    
+    /** Change frame decoder state machine state. 
+     * 
+     *  @param new_state    State to transit.
+     *  @param entry_func   State entry function.
+     */                
     static void tx_state_change(TxState new_state, tx_state_entry_func_t entry_func);
     
     /* Deny object creation. */    
@@ -355,9 +394,9 @@ private:
     /* Definition for state type. */
     typedef struct
     {
-        uint8_t is_multiplexer_open : 1;        
-        uint8_t is_request_timeout : 1;
-        uint8_t is_initiator : 1;
+        uint8_t is_multiplexer_open : 1;    /* True when multiplexer is open. */        
+        uint8_t is_request_timeout : 1;     /* True when request timeout has occurred. */
+        uint8_t is_initiator : 1;           /* True when role is initiator. */
     } state_t;
     
     static FileHandle      *_serial;                                /* Serial used. */        
