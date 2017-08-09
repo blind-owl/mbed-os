@@ -483,7 +483,7 @@ void dlci_establish_self_iniated_rx(const uint8_t *rx_buf, uint8_t rx_buf_len)
 typedef enum
 {
     ROLE_INITIATOR = 0, 
-    ROLE_RESPONSER,
+    ROLE_RESPONDER,
     ROLE_MAX,
 } Role;
 
@@ -765,7 +765,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_role_responder_succ
     const bool expected_mux_start_event_state = true;
     mux_peer_iniated_open(&(read_byte[0]), sizeof(read_byte), expected_mux_start_event_state);
 
-    dlci_self_iniated_establish(ROLE_RESPONSER);    
+    dlci_self_iniated_establish(ROLE_RESPONDER);    
     CHECK(!mux_client.is_dlci_establish_triggered());
 }
 
@@ -1067,6 +1067,54 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated_role_initiator_succ
                                 sizeof(read_byte), 
                                 dlci_id,
                                 expected_dlci_established_event_state);
+}
+
+
+/*
+ * TC - dlci establishment sequence, peer initiated, role responder: successfull establishment
+ * - peer iniated open multiplexer
+ * - receive: DLCI establishment request
+ * - respond: DLCI establishment response
+ */
+TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated_role_responder_succes)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    const uint8_t read_byte[5] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET, 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        fcs_calculate(&read_byte[1], 2),
+        FLAG_SEQUENCE_OCTET
+    };
+    const bool expected_mux_start_event_state = true;
+    mux_peer_iniated_open(&(read_byte[0]), sizeof(read_byte), expected_mux_start_event_state);    
+
+    const Role role            = ROLE_RESPONDER;
+    const uint8_t dlci_id      = 1;
+    const uint8_t read_byte_2[4] = 
+    {
+        (((role == ROLE_INITIATOR) ? 1 : 3) | (dlci_id >> 2)),
+        (FRAME_TYPE_SABM | PF_BIT), 
+        fcs_calculate(&read_byte_2[0], 2),
+        FLAG_SEQUENCE_OCTET
+    };        
+    
+    const bool expected_dlci_established_event_state = true;
+    dlci_peer_iniated_establish(role, 
+                                &(read_byte_2[0]), 
+                                sizeof(read_byte_2), 
+                                dlci_id,
+                                expected_dlci_established_event_state);    
 }
 
 
