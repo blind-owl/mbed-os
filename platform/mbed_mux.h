@@ -345,7 +345,14 @@ private:
      *  @return MUX_ESTABLISH_SUCCESS for successfull establishment.
      *  @return MUX_ESTABLISH_REJECT peer rejected establishment. 
      */                    
-    static Mux::MuxEstablishStatus start_response_decode();
+    static Mux::MuxEstablishStatus mux_start_response_decode();
+    
+    /** Decode received dlci establish response frame.
+     * 
+     *  @return MUX_ESTABLISH_SUCCESS for successfull establishment.
+     *  @return MUX_ESTABLISH_REJECT peer rejected establishment. 
+     */                        
+    static Mux::MuxEstablishStatus dlci_establish_response_decode();
     
     /** Begin the frame retransmit sequence. */
     static void frame_retransmit_begin();

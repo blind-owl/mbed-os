@@ -595,7 +595,7 @@ ssize_t Mux::write_do()
 }
 
 
-Mux::MuxEstablishStatus Mux::start_response_decode()
+Mux::MuxEstablishStatus Mux::mux_start_response_decode()
 {
     Mux::MuxEstablishStatus status;
     const frame_hdr_t      *frame = reinterpret_cast<const frame_hdr_t*>(&(rx_context.buffer[0]));
@@ -638,10 +638,10 @@ ssize_t Mux::mux_start(Mux::MuxEstablishStatus &status)
                 tx_context.retransmit_counter = RETRANSMIT_COUNT;                
                 const int ret_wait = _semaphore.wait();
                 MBED_ASSERT(ret_wait == 1);                
-                /* Decode response frame from the rx buffer in order to set the correct status code if no request 
-                   timeout occurred. */ 
+                /* Decode response frame from the rx buffer in order to set the correct status code if no request
+                 * timeout occurred. */ 
                 if (!state.is_request_timeout) {
-                    status = start_response_decode();
+                    status = mux_start_response_decode();
                 } else {
                     status = MUX_ESTABLISH_TIMEOUT;
                 }            
@@ -653,6 +653,12 @@ ssize_t Mux::mux_start(Mux::MuxEstablishStatus &status)
     };
     
     return return_code;   
+}
+
+
+Mux::MuxEstablishStatus Mux::dlci_establish_response_decode()
+{
+    return mux_start_response_decode();
 }
 
 
@@ -669,16 +675,26 @@ ssize_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status)
     
     switch (tx_context.tx_state) {
         case TX_IDLE:                
+            /* Construct the frame, start the tx sequence 1-byte at time, reset relevant state contexts and suspend 
+               the call thread. */                        
             status = MUX_ESTABLISH_SUCCESS;
             
             dlci_establish_request_construct(dlci_id);  
-//trace("dlci_establish: ", dlci_id);                    
+//trace("dlci_establish: ", dlci_id);         
+            
             return_code = write_do();    
             MBED_ASSERT(return_code != 0);    
             return_code = 3;
             tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
             const int ret_wait = _semaphore.wait();
             MBED_ASSERT(ret_wait == 1);
+            /* Decode response frame from the rx buffer in order to set the correct status code if no request timeout 
+               occurred. */
+            if (!state.is_request_timeout) {
+                status = dlci_establish_response_decode();                
+            } else {
+                status = MUX_ESTABLISH_TIMEOUT;
+            }                        
             break;
         default:
             MBED_ASSERT(false);

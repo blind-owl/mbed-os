@@ -594,6 +594,74 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_role_initiator_succ
 }
 
 
+/* Multiplexer semaphore wait call from dlci_establish_self_initiated_rejected_by_peer TC. 
+ * Role: initiator
+ */
+void dlci_establish_self_initated_sem_wait_rejected_by_peer(const void *context)
+{
+    const dlci_establish_context_t *cntx = static_cast<const dlci_establish_context_t *>(context);
+    
+    const uint8_t read_byte[4] = 
+    {
+        (((cntx->role == ROLE_INITIATOR) ? 1 : 3) | (cntx->dlci_id << 2)),
+        (FRAME_TYPE_DM | PF_BIT), 
+        fcs_calculate(&read_byte[0], 2),
+        FLAG_SEQUENCE_OCTET
+    };    
+    const uint8_t address = ((cntx->role == ROLE_INITIATOR) ? 3 : 1) | (cntx->dlci_id << 2);        
+
+    dlci_establish_self_iniated_tx(address);
+    dlci_establish_self_iniated_rx(&(read_byte[0]), sizeof(read_byte));
+}
+
+
+/*
+ * TC - dlci establishment sequence, self initiated, role initiator: establishment rejected by peer
+ * - self iniated open multiplexer
+ * - issue DLCI establishment request
+ * - receive DLCI establishment response: rejected by peer
+ */
+TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_rejected_by_peer)
+{   
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+    
+    /* Set mock. */
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = FLAG_SEQUENCE_OCTET;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value = 1;    
+
+    /* Set mock. */    
+    mock_t * mock_wait = mock_free_get("wait");
+    CHECK(mock_wait != NULL);
+    mock_wait->return_value = 1;
+    mock_wait->func         = dlci_establish_self_initated_sem_wait_rejected_by_peer;
+    
+    const dlci_establish_context_t context = {1, ROLE_INITIATOR};
+    mock_wait->func_context                = &context;
+
+    /* Start test sequence. Test set mocks. */
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
+    const int ret = mbed::Mux::dlci_establish(context.dlci_id, status);
+    CHECK_EQUAL(ret, 3);
+    CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_REJECT, status);
+    CHECK(!MuxClient::is_dlci_establish_triggered());
+}
+
+
 /*
  * LOOP UNTIL COMPLETE DLCI ESTABLISH REQUEST FRAME READ DONE
  * - trigger sigio callback from FileHandleMock
@@ -801,7 +869,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_allready_open)
 
 void mux_start_self_initated_sem_wait_rejected_by_peer(const void *)
 {
-    const uint8_t read_byte[] = 
+    const uint8_t read_byte[5] = 
     {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_RESP_OCTET, 
