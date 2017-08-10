@@ -49,13 +49,23 @@ ssize_t FileHandleMock::write(const void *buffer, size_t size)
         FAIL("FAILURE: No mock object found!");
         return -1;
     }
-    
-    if (mock->input_param[0].compare_type == MOCK_COMPARE_TYPE_VALUE) {
-        CHECK(memcmp(&(mock->input_param[0].param), buffer, size) == 0);
-    }
+
     if (mock->input_param[1].compare_type == MOCK_COMPARE_TYPE_VALUE) {
         CHECK_EQUAL(size, mock->input_param[1].param);
-    }   
+    }       
+    if (mock->input_param[0].compare_type == MOCK_COMPARE_TYPE_VALUE) {
+        if (memcmp(&(mock->input_param[0].param), buffer, size) != 0) {
+            uint8_t expected;
+            uint8_t actual;
+            for (uint8_t i = 0; i < size; ++i) {
+                actual   = ((uint8_t*)buffer)[i];
+                expected = ((uint8_t*)(mock->input_param[0].param))[i];
+                trace("actual: ", actual);
+                trace("expected: ", expected);
+            }
+            FAIL("FAILURE:");        
+        }
+    }
     
     return (ssize_t)mock->return_value;   
 }

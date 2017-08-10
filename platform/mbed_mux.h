@@ -178,7 +178,8 @@ typedef enum
      *  @param dlci_id  ID of the DLCI to establish. Valid range 1 - 63. 
      *  @param status   Operation completion code.     
      *
-     *  @return 2   Operation completed successfully, check @ref status for completion code.
+     *  @return 3   Operation completed successfully, check @ref status for completion code.
+     *  @return 2   Operation not started, DLCI ID not in valid range.
      *  @return 1   Operation not started, no established multiplexer control channel exists.
      *  @return 0   Operation not started, all available DLCIs allready established.     
      *  @return <0  Unspecified failure.

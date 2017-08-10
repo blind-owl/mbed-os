@@ -27,6 +27,8 @@ namespace mbed {
 #define FRAME_TYPE_DISC                     0x43u         /* DISC frame type coding in the frame control field. */
 #define FRAME_TYPE_UIH                      0xEFu         /* UIH frame type coding in the frame control field. */
 #define PF_BIT                              (1u << 4)     /* P/F bit position in the frame control field. */
+#define DLCI_ID_LOWER_BOUND                 1u            /* Lower bound value of DLCI id.*/
+#define DLCI_ID_UPPER_BOUND                 63u           /* Upper bound value of DLCI id.*/  
     
 /* Definition for frame header type. */
 typedef struct
@@ -539,7 +541,7 @@ void Mux::dlci_establish_request_construct(uint8_t dlci_id)
     frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::tx_context.buffer[0]));
     
     frame_hdr->flag_seq       = FLAG_SEQUENCE_OCTET;
-    frame_hdr->address        = (state.is_initiator ? 3 : 1) | (dlci_id >> 2);   
+    frame_hdr->address        = (state.is_initiator ? 3 : 1) | (dlci_id << 2);   
     frame_hdr->control        = (FRAME_TYPE_SABM | PF_BIT);            
     frame_hdr->information[0] = fcs_calculate(&(Mux::tx_context.buffer[1]), FCS_INPUT_LEN);    
     (++frame_hdr)->flag_seq   = FLAG_SEQUENCE_OCTET;
@@ -578,6 +580,9 @@ ssize_t Mux::write_do()
     
     if (tx_context.bytes_remaining != 0) {
         const uint8_t encoded_byte = encode_do();
+        
+//trace("WRITE: ", tx_context.offset);
+        
         write_ret                  = _serial->write(&encoded_byte, WRITE_LEN);   
         MBED_ASSERT((write_ret == 1) || (write_ret < 0)); // @todo: FIX ME: can also return 0 if called from on_timeout
         if (write_ret == 1) {
@@ -655,6 +660,9 @@ ssize_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status)
 {
     ssize_t return_code;
     
+    if ((dlci_id < DLCI_ID_LOWER_BOUND) || (dlci_id > DLCI_ID_UPPER_BOUND)) {
+        return 2;
+    }
     if (!state.is_multiplexer_open) {
         return 1;
     }
@@ -664,10 +672,10 @@ ssize_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status)
             status = MUX_ESTABLISH_SUCCESS;
             
             dlci_establish_request_construct(dlci_id);  
-//trace("dlci_establish ", 0);                    
+//trace("dlci_establish: ", dlci_id);                    
             return_code = write_do();    
             MBED_ASSERT(return_code != 0);    
-            return_code = 2;
+            return_code = 3;
             tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
             const int ret_wait = _semaphore.wait();
             MBED_ASSERT(ret_wait == 1);
