@@ -594,6 +594,41 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_role_initiator_succ
 }
 
 
+/*
+ * TC - dlci establishment sequence, self initiated, role initiator: write failure
+ * - write request returns error code, which is forwarded to the user
+ */
+TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_write_failure)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();    
+    
+    /* Set mock. */
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = FLAG_SEQUENCE_OCTET;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = (uint32_t)-1;        
+    
+    /* Start test sequence. Test set mocks. */
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
+    const int ret = mbed::Mux::dlci_establish(1, status);
+    CHECK_EQUAL(ret, -1);
+    CHECK(!MuxClient::is_dlci_establish_triggered());    
+}
+
+
 /* Multiplexer semaphore wait call from dlci_establish_self_initiated_rejected_by_peer TC. 
  * Role: initiator
  */

@@ -677,24 +677,24 @@ ssize_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status)
         case TX_IDLE:                
             /* Construct the frame, start the tx sequence 1-byte at time, reset relevant state contexts and suspend 
                the call thread. */                        
-            status = MUX_ESTABLISH_SUCCESS;
-            
+            status = MUX_ESTABLISH_SUCCESS;            
             dlci_establish_request_construct(dlci_id);  
-//trace("dlci_establish: ", dlci_id);         
-            
+//trace("dlci_establish: ", dlci_id);                    
             return_code = write_do();    
-            MBED_ASSERT(return_code != 0);    
-            return_code = 3;
-            tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
-            const int ret_wait = _semaphore.wait();
-            MBED_ASSERT(ret_wait == 1);
-            /* Decode response frame from the rx buffer in order to set the correct status code if no request timeout 
-               occurred. */
-            if (!state.is_request_timeout) {
-                status = dlci_establish_response_decode();                
-            } else {
-                status = MUX_ESTABLISH_TIMEOUT;
-            }                        
+            MBED_ASSERT(return_code != 0);   
+            if (return_code > 0) {            
+                return_code = 3;
+                tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
+                const int ret_wait = _semaphore.wait();
+                MBED_ASSERT(ret_wait == 1);
+                /* Decode response frame from the rx buffer in order to set the correct status code if no request 
+                   timeout occurred. */
+                if (!state.is_request_timeout) {
+                    status = dlci_establish_response_decode();                
+                } else {
+                    status = MUX_ESTABLISH_TIMEOUT;
+                }
+            }
             break;
         default:
             MBED_ASSERT(false);
