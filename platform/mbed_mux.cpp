@@ -635,7 +635,7 @@ ssize_t Mux::mux_start(Mux::MuxEstablishStatus &status)
                 return_code = 2;
                 tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
                 state.is_request_timeout      = 0;    
-                tx_context.retransmit_counter = RETRANSMIT_COUNT;                
+                tx_context.retransmit_counter = RETRANSMIT_COUNT;
                 const int ret_wait = _semaphore.wait();
                 MBED_ASSERT(ret_wait == 1);                
                 /* Decode response frame from the rx buffer in order to set the correct status code if no request
