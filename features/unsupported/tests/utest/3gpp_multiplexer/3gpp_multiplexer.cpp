@@ -358,9 +358,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_succes)
  * - call poll
  * - call write
  * - call call_in in the last iteration for T1 timer
- * - CALL RETURN 
- * 
- * Role: initiator
+ * - CALL RETURN
  */
 void dlci_establish_self_iniated_tx(uint8_t address)
 {
@@ -512,6 +510,7 @@ void dlci_establish_self_initated_sem_wait(const void *context)
     };    
     const uint8_t address = ((cntx->role == ROLE_INITIATOR) ? 3 : 1) | (cntx->dlci_id << 2);        
 
+    /* Complete the request frame write and read the response frame. */
     dlci_establish_self_iniated_tx(address);
     dlci_establish_self_iniated_rx(&(read_byte[0]), sizeof(read_byte));
 }
@@ -591,6 +590,93 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_role_initiator_succ
    
     dlci_self_iniated_establish(ROLE_INITIATOR, 1);
     CHECK(!MuxClient::is_dlci_establish_triggered());                   
+}
+
+
+void dlci_establish_self_initated_sem_wait_timeout(const void * context)
+{
+    const dlci_establish_context_t *cntx = static_cast<const dlci_establish_context_t *>(context);
+
+    const uint8_t address = ((cntx->role == ROLE_INITIATOR) ? 3 : 1) | (cntx->dlci_id << 2);        
+
+    /* Complete the request frame write. */
+    dlci_establish_self_iniated_tx(address);
+    
+    /* --- begin frame re-transmit sequence --- */
+
+    const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_TIMEOUT_GENERATE};
+    uint8_t                                  counter       = RETRANSMIT_COUNT;
+    do {    
+        mock_t * mock_write = mock_free_get("write");
+        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->input_param[0].param        = FLAG_SEQUENCE_OCTET;        
+        mock_write->input_param[1].param        = WRITE_LEN;
+        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->return_value                = 1;    
+
+        /* Trigger timer timeout. */
+        mbed::EventQueueMock::io_control(eq_io_control);
+        
+        /* Re-transmit the complete remaining part of the frame. */
+        dlci_establish_self_iniated_tx(address);
+        
+        --counter;
+    } while (counter != 0);
+    
+    /* Trigger timer to finish the re-transmission cycle and the whole request. Release the semaphore blocking the call 
+       thread. */
+    mock_t * mock_release = mock_free_get("release");
+    CHECK(mock_release != NULL);
+    mock_release->return_value = osOK;    
+    mbed::EventQueueMock::io_control(eq_io_control);
+}
+
+
+/*
+ * TC - dlci establishment sequence, self initiated, role initiator: request timeout failure:
+ * - self iniated open multiplexer
+ * - issue DLCI establishment request
+ * - request timeout timer expires 
+ * - generate timeout event to the user
+ */
+TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_timeout)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+    
+    /* Set mock. */
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = FLAG_SEQUENCE_OCTET;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 1;    
+
+    /* Set mock. */    
+    mock_t * mock_wait = mock_free_get("wait");
+    CHECK(mock_wait != NULL);
+    mock_wait->return_value = 1;
+    mock_wait->func         = dlci_establish_self_initated_sem_wait_timeout;
+    
+    const dlci_establish_context_t context = {1, ROLE_INITIATOR};
+    mock_wait->func_context                = &context;
+
+    /* Start test sequence. Test set mocks. */
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
+    const int ret = mbed::Mux::dlci_establish(context.dlci_id, status);
+    CHECK_EQUAL(ret, 3);
+    CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_TIMEOUT);           
+    CHECK(!MuxClient::is_dlci_establish_triggered());
 }
 
 
@@ -1000,7 +1086,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_write_failure)
 
 void mux_start_self_initated_sem_wait_timeout(const void *)
 {
-    /* Compelte the frame write. */
+    /* Complete the frame write. */
     mux_start_self_iniated_tx();
 
     /* --- begin frame re-transmit sequence --- */

@@ -685,6 +685,9 @@ ssize_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status)
             if (return_code > 0) {            
                 return_code = 3;
                 tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
+                // @todo: is retransmit block tested?
+                state.is_request_timeout      = 0;    
+                tx_context.retransmit_counter = RETRANSMIT_COUNT;                    
                 const int ret_wait = _semaphore.wait();
                 MBED_ASSERT(ret_wait == 1);
                 /* Decode response frame from the rx buffer in order to set the correct status code if no request 
