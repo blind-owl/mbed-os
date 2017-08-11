@@ -34,7 +34,7 @@
 #define MUX_CRC_TABLE_LEN   256u    /* CRC table length in number of bytes. */
 
 #ifndef MBED_CONF_MUX_DLCI_COUNT
-#define MBED_CONF_MUX_DLCI_COUNT    1u
+#define MBED_CONF_MUX_DLCI_COUNT    3u
 #endif
 #ifndef MBED_CONF_BUFFER_SIZE
 #define MBED_CONF_BUFFER_SIZE       64u
@@ -49,6 +49,7 @@ storage requirements correctly at compile time.
 namespace mbed {
 
 class MuxDataService : public FileHandle {
+friend class Mux;    
 public:
 
     /** Enqueue user data for transmission. 
@@ -177,14 +178,15 @@ typedef enum
      *
      *  @param dlci_id  ID of the DLCI to establish. Valid range 1 - 63. 
      *  @param status   Operation completion code.     
+     *  @param obj      Valid object upon @ref status having success, NULL upon failure.     
      *
      *  @return 3   Operation completed successfully, check @ref status for completion code.
      *  @return 2   Operation not started, DLCI ID not in valid range.
      *  @return 1   Operation not started, no established multiplexer control channel exists.
-     *  @return 0   Operation not started, all available DLCIs allready established.     
+     *  @return 0   Operation not started, DLCI ID allready established.
      *  @return <0  Unspecified failure.
      */        
-    static ssize_t dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status);
+    static ssize_t dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHandle **obj);
         
     /** Attach serial interface to the object.
      *
@@ -368,6 +370,17 @@ private:
      *  @param entry_func   State entry function.
      */                
     static void tx_state_change(TxState new_state, tx_state_entry_func_t entry_func);
+    
+    /** Resolve is supplied DLCI ID allready used or not.
+     * 
+     *  @param dlci_id  DLCI ID to resolve.
+     * 
+     *  @return true if supplied DLCI ID is allready used, false otherwise.
+     */                            
+    static bool is_dlci_id_used(uint8_t dlci_id);
+    
+    // @todo: update me!
+    static FileHandle * dlci_id_append(uint8_t dlci_id);
     
     /* Deny object creation. */    
     Mux();

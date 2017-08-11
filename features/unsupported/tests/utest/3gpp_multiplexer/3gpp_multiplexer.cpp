@@ -538,10 +538,12 @@ void dlci_self_iniated_establish(Role role, uint8_t dlci_id)
     mock_wait->func_context                = &context;
 
     /* Start test sequence. Test set mocks. */
-    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    const int ret = mbed::Mux::dlci_establish(dlci_id, status);
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
+    FileHandle *obj = NULL;
+    const int ret = mbed::Mux::dlci_establish(dlci_id, status, &obj);
     CHECK_EQUAL(ret, 3);
-    CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_SUCCESS);       
+    CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_SUCCESS);      
+    CHECK(obj != NULL);
 }
 
 
@@ -562,9 +564,11 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_mux_not_open)
 
     /* Start test sequence. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    const int ret = mbed::Mux::dlci_establish(1, status);
+    FileHandle *obj = NULL;    
+    const int ret = mbed::Mux::dlci_establish(1, status, &obj);
     CHECK_EQUAL(ret, 1);
     CHECK(!MuxClient::is_dlci_establish_triggered());                        
+    CHECK_EQUAL(obj, NULL);    
 }
 
 
@@ -672,10 +676,12 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_timeout)
     mock_wait->func_context                = &context;
 
     /* Start test sequence. Test set mocks. */
-    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    const int ret = mbed::Mux::dlci_establish(context.dlci_id, status);
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
+    FileHandle *obj = NULL;        
+    const int ret = mbed::Mux::dlci_establish(context.dlci_id, status, &obj);
     CHECK_EQUAL(ret, 3);
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_TIMEOUT);           
+    CHECK_EQUAL(obj, NULL);    
     CHECK(!MuxClient::is_dlci_establish_triggered());
 }
 
@@ -722,15 +728,50 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_success_after_timeo
     mock_wait->func_context                = &context;
 
     /* Start test sequence. Test set mocks. */
-    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    const int ret = mbed::Mux::dlci_establish(context.dlci_id, status);
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
+    FileHandle *obj = NULL;        
+    const int ret = mbed::Mux::dlci_establish(context.dlci_id, status, &obj);
     CHECK_EQUAL(ret, 3);
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_TIMEOUT);           
+    CHECK_EQUAL(obj, NULL);    
     CHECK(!MuxClient::is_dlci_establish_triggered());    
     
     /* 2nd try - success. */
     dlci_self_iniated_establish(ROLE_INITIATOR, 1);
     CHECK(!MuxClient::is_dlci_establish_triggered());                       
+}
+
+
+/*
+ * TC - dlci establishment sequence, self initiated, role initiator: DLCI id allready used
+ * - self iniated open multiplexer
+ * - issue DLCI establishment request: success
+ * - issue DLCI establishment request, same id used: failure
+ */
+TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_dlci_id_used)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+   
+    const uint8_t dlci_id = 1;
+    dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);
+    CHECK(!MuxClient::is_dlci_establish_triggered());                   
+   
+    /* 2nd establishment with the same DLCI id - fail. */
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
+    FileHandle *obj = NULL;
+    const int ret = mbed::Mux::dlci_establish(dlci_id, status, &obj);
+    CHECK_EQUAL(ret, 0);    
+    CHECK_EQUAL(obj, NULL);
 }
 
 
@@ -762,10 +803,12 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_write_failure)
     mock_write->return_value                = (uint32_t)-1;        
     
     /* Start test sequence. Test set mocks. */
-    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    const int ret = mbed::Mux::dlci_establish(1, status);
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
+    FileHandle *obj = NULL;
+    const int ret = mbed::Mux::dlci_establish(1, status, &obj);
     CHECK_EQUAL(ret, -1);
     CHECK(!MuxClient::is_dlci_establish_triggered());    
+    CHECK_EQUAL(obj, NULL);
 }
 
 
@@ -829,10 +872,12 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_rejected_by_peer)
     mock_wait->func_context                = &context;
 
     /* Start test sequence. Test set mocks. */
-    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    const int ret = mbed::Mux::dlci_establish(context.dlci_id, status);
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX); 
+    FileHandle *obj = NULL;    
+    const int ret = mbed::Mux::dlci_establish(context.dlci_id, status, &obj);
     CHECK_EQUAL(ret, 3);
     CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_REJECT, status);
+    CHECK_EQUAL(obj, NULL);    
     CHECK(!MuxClient::is_dlci_establish_triggered());
 }
 
@@ -1472,11 +1517,14 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_id_oob)
     CHECK(mock_sigio != NULL);      
     mbed::Mux::serial_attach(&fh_mock);
    
-    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    int ret = mbed::Mux::dlci_establish((DLCI_ID_LOWER_BOUND - 1), status);
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
+    FileHandle *obj = NULL;    
+    int ret = mbed::Mux::dlci_establish((DLCI_ID_LOWER_BOUND - 1), status, &obj);
     CHECK_EQUAL(2, ret);
-    ret = mbed::Mux::dlci_establish((DLCI_ID_UPPER_BOUND + 1), status);
-    CHECK_EQUAL(2, ret);    
+    CHECK_EQUAL(obj, NULL);
+    ret = mbed::Mux::dlci_establish((DLCI_ID_UPPER_BOUND + 1), status, &obj);
+    CHECK_EQUAL(2, ret);   
+    CHECK_EQUAL(obj, NULL);    
 }
 
 

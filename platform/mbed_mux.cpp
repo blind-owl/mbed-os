@@ -42,6 +42,7 @@ typedef struct
 FileHandle *Mux::_serial      = NULL;
 EventQueueMock *Mux::_event_q = NULL;
 MuxCallback *Mux::_mux_obj_cb = NULL;
+MuxDataService Mux::mux_objects[MBED_CONF_MUX_DLCI_COUNT];
 
 //rtos::Semaphore Mux::_semaphore(0);
 SemaphoreMock Mux::_semaphore;
@@ -83,6 +84,11 @@ void Mux::module_init()
     rx_context.decoder_state = DECODER_STATE_SYNC;    
     
     tx_context.tx_state = TX_IDLE;    
+    
+    const uint8_t end = sizeof(mux_objects) / sizeof(mux_objects[0]);
+    for (uint8_t i = 0; i != end; ++i) {
+        mux_objects[i].dlci = MUX_DLCI_INVALID_ID;
+    }    
 }
 
 
@@ -662,7 +668,35 @@ Mux::MuxEstablishStatus Mux::dlci_establish_response_decode()
 }
 
 
-ssize_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status)
+bool Mux::is_dlci_id_used(uint8_t dlci_id)
+{
+    for (uint8_t i = 0; i != sizeof(mux_objects) / sizeof(mux_objects[0]); ++i) {
+        if (mux_objects[i].dlci == dlci_id) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+
+FileHandle * Mux::dlci_id_append(uint8_t dlci_id)
+{
+    FileHandle *obj = NULL;
+    const uint8_t end = sizeof(mux_objects) / sizeof(mux_objects[0]);
+    for (uint8_t i = 0; i != end; ++i) {   
+        if (mux_objects[i].dlci == MUX_DLCI_INVALID_ID) {
+            mux_objects[i].dlci = dlci_id;
+            obj                 = &(mux_objects[i]);
+            break;
+        }
+    }
+       
+    return obj;
+}
+
+
+ssize_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHandle **obj)
 {
     ssize_t return_code;
     
@@ -671,6 +705,9 @@ ssize_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status)
     }
     if (!state.is_multiplexer_open) {
         return 1;
+    }
+    if (is_dlci_id_used(dlci_id)) {
+        return 0;
     }
     
     switch (tx_context.tx_state) {
@@ -692,7 +729,11 @@ ssize_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status)
                 /* Decode response frame from the rx buffer in order to set the correct status code if no request 
                    timeout occurred. */
                 if (!state.is_request_timeout) {
-                    status = dlci_establish_response_decode();                
+                    status = dlci_establish_response_decode();   
+                    if (status == MUX_ESTABLISH_SUCCESS) {
+                        *obj = dlci_id_append(dlci_id);
+                        MBED_ASSERT(obj != NULL);
+                    }
                 } else {
                     status = MUX_ESTABLISH_TIMEOUT;
                 }
