@@ -681,6 +681,60 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_timeout)
 
 
 /*
+ * TC - dlci establishment sequence, self initiated, role initiator: request timeout failure:
+ * - self iniated open multiplexer
+ * - issue DLCI establishment request
+ * - request timeout timer expires 
+ * - generate timeout event to the user
+ * - send 2nd establishment request
+ * - success
+ */
+TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_success_after_timeout)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+    
+    /* Set mock. */
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = FLAG_SEQUENCE_OCTET;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 1;    
+
+    /* Set mock. */    
+    mock_t * mock_wait = mock_free_get("wait");
+    CHECK(mock_wait != NULL);
+    mock_wait->return_value = 1;
+    mock_wait->func         = dlci_establish_self_initated_sem_wait_timeout;
+    
+    const dlci_establish_context_t context = {1, ROLE_INITIATOR};
+    mock_wait->func_context                = &context;
+
+    /* Start test sequence. Test set mocks. */
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
+    const int ret = mbed::Mux::dlci_establish(context.dlci_id, status);
+    CHECK_EQUAL(ret, 3);
+    CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_TIMEOUT);           
+    CHECK(!MuxClient::is_dlci_establish_triggered());    
+    
+    /* 2nd try - success. */
+    dlci_self_iniated_establish(ROLE_INITIATOR, 1);
+    CHECK(!MuxClient::is_dlci_establish_triggered());                       
+}
+
+
+/*
  * TC - dlci establishment sequence, self initiated, role initiator: write failure
  * - write request returns error code, which is forwarded to the user
  */
