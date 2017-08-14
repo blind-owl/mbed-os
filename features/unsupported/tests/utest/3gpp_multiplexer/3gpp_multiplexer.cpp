@@ -119,6 +119,8 @@ TEST(MultiplexerOpenTestGroup, FirstTest)
                                                                     field. */
 #define FRAME_TYPE_UIH               0xEFu                       /* UIH frame type coding in the frame control field. */
 #define PF_BIT                       (1u << 4)                   /* P/F bit position in the frame control field. */     
+#define DLCI_ID_LOWER_BOUND          1u                          /* Lower bound DLCI id value. */ 
+#define DLCI_ID_UPPER_BOUND          63u                         /* Upper bound DLCI id value. */ 
                       
 static const uint8_t crctable[CRC_TABLE_LEN] = {
     0x00, 0x91, 0xE3, 0x72, 0x07, 0x96, 0xE4, 0x75,  0x0E, 0x9F, 0xED, 0x7C, 0x09, 0x98, 0xEA, 0x7B,
@@ -544,6 +546,7 @@ void dlci_self_iniated_establish(Role role, uint8_t dlci_id)
     CHECK_EQUAL(ret, 3);
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_SUCCESS);      
     CHECK(obj != NULL);
+    CHECK(!MuxClient::is_dlci_establish_triggered());
 }
 
 
@@ -593,7 +596,6 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_role_initiator_succ
     mux_self_iniated_open();
    
     dlci_self_iniated_establish(ROLE_INITIATOR, 1);
-    CHECK(!MuxClient::is_dlci_establish_triggered());                   
 }
 
 
@@ -738,7 +740,6 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_success_after_timeo
     
     /* 2nd try - success. */
     dlci_self_iniated_establish(ROLE_INITIATOR, 1);
-    CHECK(!MuxClient::is_dlci_establish_triggered());                       
 }
 
 
@@ -764,7 +765,6 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_dlci_id_used)
    
     const uint8_t dlci_id = 1;
     dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);
-    CHECK(!MuxClient::is_dlci_establish_triggered());                   
    
     /* 2nd establishment with the same DLCI id - fail. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
@@ -772,6 +772,46 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_dlci_id_used)
     const int ret = mbed::Mux::dlci_establish(dlci_id, status, &obj);
     CHECK_EQUAL(ret, 0);    
     CHECK_EQUAL(obj, NULL);
+}
+
+#define MAX_DLCI_COUNT 3u
+
+/*
+ * TC - dlci establishment sequence, self initiated, role initiator: all DLCI ids used
+ * - self iniated open multiplexer
+ * - establish DLCIs max amount: success
+ * - issue DLCI establishment request: failure as max count reached
+ */
+TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_all_dlci_ids_used)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+    
+    uint8_t i       = MAX_DLCI_COUNT;
+    uint8_t dlci_id = DLCI_ID_LOWER_BOUND;
+    do {
+        dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);
+        
+    
+        --i;
+        ++dlci_id;
+    } while (i != 0);
+    
+    /* All available DLCI ids consumed. Next request will fail. */
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
+    FileHandle *obj = NULL;
+    const int ret = mbed::Mux::dlci_establish(dlci_id, status, &obj);
+    CHECK_EQUAL(ret, 0);    
+    CHECK_EQUAL(obj, NULL);    
 }
 
 
@@ -1053,8 +1093,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_role_responder_succ
     const bool expected_mux_start_event_state = true;
     mux_peer_iniated_open(&(read_byte[0]), sizeof(read_byte), expected_mux_start_event_state);
 
-    dlci_self_iniated_establish(ROLE_RESPONDER, 1);    
-    CHECK(!MuxClient::is_dlci_establish_triggered());
+    dlci_self_iniated_establish(ROLE_RESPONDER, 1);   
 }
 
 
@@ -1455,9 +1494,6 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated_role_responder_succ
 }
 
 
-#define DLCI_ID_LOWER_BOUND 1
-#define DLCI_ID_UPPER_BOUND 63
-
 /*
  * TC - dlci establishment sequence, self initiated: dlci_id lower bound
  */
@@ -1476,7 +1512,6 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_id_lower_bound)
     mux_self_iniated_open();
    
     dlci_self_iniated_establish(ROLE_INITIATOR, DLCI_ID_LOWER_BOUND);
-    CHECK(!MuxClient::is_dlci_establish_triggered());                       
 }
 
 

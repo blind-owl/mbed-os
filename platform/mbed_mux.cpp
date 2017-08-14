@@ -668,15 +668,20 @@ Mux::MuxEstablishStatus Mux::dlci_establish_response_decode()
 }
 
 
-bool Mux::is_dlci_id_used(uint8_t dlci_id)
+bool Mux::is_dlci_append_ok(uint8_t dlci_id)
 {
+    /* Check is supplied DLCI id, and all available DLCI resources, allready in use. */ 
+    bool is_free_slot = false;
     for (uint8_t i = 0; i != sizeof(mux_objects) / sizeof(mux_objects[0]); ++i) {
         if (mux_objects[i].dlci == dlci_id) {
             return true;
         }
+        if (mux_objects[i].dlci == MUX_DLCI_INVALID_ID) {
+            is_free_slot = true;
+        }
     }
     
-    return false;
+    return is_free_slot ? false : true;
 }
 
 
@@ -706,7 +711,7 @@ ssize_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHan
     if (!state.is_multiplexer_open) {
         return 1;
     }
-    if (is_dlci_id_used(dlci_id)) {
+    if (is_dlci_append_ok(dlci_id)) {
         return 0;
     }
     

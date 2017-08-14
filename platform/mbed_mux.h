@@ -183,7 +183,7 @@ typedef enum
      *  @return 3   Operation completed successfully, check @ref status for completion code.
      *  @return 2   Operation not started, DLCI ID not in valid range.
      *  @return 1   Operation not started, no established multiplexer control channel exists.
-     *  @return 0   Operation not started, DLCI ID allready established.
+     *  @return 0   Operation not started, @ref dlci_id, or all available DLCI ID resources, allready in use.
      *  @return <0  Unspecified failure.
      */        
     static ssize_t dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHandle **obj);
@@ -371,13 +371,13 @@ private:
      */                
     static void tx_state_change(TxState new_state, tx_state_entry_func_t entry_func);
     
-    /** Resolve is supplied DLCI ID allready used or not.
+    /** Resolve is supplied DLCI id, and all available DLCI resources, allready in use.
      * 
      *  @param dlci_id  DLCI ID to resolve.
      * 
-     *  @return true if supplied DLCI ID is allready used, false otherwise.
+     *  @return true if supplied DLCI ID is allready used or no resources availabe, false otherwise.
      */                            
-    static bool is_dlci_id_used(uint8_t dlci_id);
+    static bool is_dlci_append_ok(uint8_t dlci_id);
     
     // @todo: update me!
     static FileHandle * dlci_id_append(uint8_t dlci_id);
