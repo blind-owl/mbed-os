@@ -1392,7 +1392,7 @@ void dlci_peer_iniated_establish(Role           role,
     const uint8_t write_byte[5] = 
     {
         FLAG_SEQUENCE_OCTET,        
-        (((role == ROLE_INITIATOR) ? 1 : 3) | (dlci_id >> 2)),
+        (((role == ROLE_INITIATOR) ? 1 : 3) | (dlci_id << 2)),
         (FRAME_TYPE_UA | PF_BIT),        
         fcs_calculate(&write_byte[1], 2),
         FLAG_SEQUENCE_OCTET
@@ -1431,7 +1431,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated_role_initiator_succ
     const uint8_t dlci_id      = 1;
     const uint8_t read_byte[4] = 
     {
-        (((role == ROLE_INITIATOR) ? 1 : 3) | (dlci_id >> 2)),
+        (((role == ROLE_INITIATOR) ? 1 : 3) | (dlci_id << 2)),
         (FRAME_TYPE_SABM | PF_BIT), 
         fcs_calculate(&read_byte[0], 2),
         FLAG_SEQUENCE_OCTET
@@ -1479,7 +1479,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated_role_responder_succ
     const uint8_t dlci_id      = 1;
     const uint8_t read_byte_2[4] = 
     {
-        (((role == ROLE_INITIATOR) ? 1 : 3) | (dlci_id >> 2)),
+        (((role == ROLE_INITIATOR) ? 1 : 3) | (dlci_id << 2)),
         (FRAME_TYPE_SABM | PF_BIT), 
         fcs_calculate(&read_byte_2[0], 2),
         FLAG_SEQUENCE_OCTET
@@ -1516,6 +1516,42 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_id_lower_bound)
 
 
 /*
+ * TC - dlci establishment sequence, peer initiated: dlci_id lower bound
+ */
+TEST(MultiplexerOpenTestGroup, dlci_establish_peer_iniated_id_lower_bound)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+
+    const Role role            = ROLE_INITIATOR;
+    const uint8_t dlci_id      = DLCI_ID_LOWER_BOUND;
+    const uint8_t read_byte[4] = 
+    {
+        (((role == ROLE_INITIATOR) ? 1 : 3) | (dlci_id << 2)),
+        (FRAME_TYPE_SABM | PF_BIT), 
+        fcs_calculate(&read_byte[0], 2),
+        FLAG_SEQUENCE_OCTET
+    };        
+    
+    const  bool expected_dlci_established_event_state = true;
+    dlci_peer_iniated_establish(role, 
+                                &(read_byte[0]), 
+                                sizeof(read_byte), 
+                                dlci_id,
+                                expected_dlci_established_event_state);   
+}
+    
+    
+/*
  * TC - dlci establishment sequence, self initiated: dlci_id upper bound
  */
 TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_id_upper_bound)
@@ -1534,6 +1570,42 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_id_upper_bound)
    
     dlci_self_iniated_establish(ROLE_INITIATOR, DLCI_ID_UPPER_BOUND);
     CHECK(!MuxClient::is_dlci_establish_triggered());                       
+}
+
+
+/*
+ * TC - dlci establishment sequence, peer initiated: dlci_id lower bound
+ */
+TEST(MultiplexerOpenTestGroup, dlci_establish_peer_iniated_id_upper_bound)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+
+    const Role role            = ROLE_INITIATOR;
+    const uint8_t dlci_id      = DLCI_ID_UPPER_BOUND;
+    const uint8_t read_byte[4] = 
+    {
+        (((role == ROLE_INITIATOR) ? 1 : 3) | (dlci_id << 2)),
+        (FRAME_TYPE_SABM | PF_BIT), 
+        fcs_calculate(&read_byte[0], 2),
+        FLAG_SEQUENCE_OCTET
+    };        
+    
+    const  bool expected_dlci_established_event_state = true;
+    dlci_peer_iniated_establish(role, 
+                                &(read_byte[0]), 
+                                sizeof(read_byte), 
+                                dlci_id,
+                                expected_dlci_established_event_state);   
 }
 
 
@@ -1560,6 +1632,16 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_id_oob)
     ret = mbed::Mux::dlci_establish((DLCI_ID_UPPER_BOUND + 1), status, &obj);
     CHECK_EQUAL(2, ret);   
     CHECK_EQUAL(obj, NULL);    
+}
+
+
+/*
+ * TC - dlci establishment sequence, peer initiated: dlci_id out of bound
+ */
+TEST(MultiplexerOpenTestGroup, dlci_establish_peer_iniated_id_oob)
+{
+    /* Both lower and upper bound OOO tests yield to DLCI ID 0 establishment, which is covered by
+     * mux_open_peer_initiated TC. */ 
 }
 
 

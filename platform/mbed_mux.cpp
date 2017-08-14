@@ -191,7 +191,7 @@ void Mux::dlci_establish_response_construct(uint8_t dlci_id)
     frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::tx_context.buffer[0]));
     
     frame_hdr->flag_seq       = FLAG_SEQUENCE_OCTET;
-    frame_hdr->address        = ((state.is_initiator ? 1 : 3) | (dlci_id >> 2));
+    frame_hdr->address        = ((state.is_initiator ? 1 : 3) | (dlci_id << 2));
     frame_hdr->control        = (FRAME_TYPE_UA | PF_BIT);    
     frame_hdr->information[0] = fcs_calculate(&(Mux::tx_context.buffer[1]), FCS_INPUT_LEN);    
     (++frame_hdr)->flag_seq   = FLAG_SEQUENCE_OCTET;
@@ -215,7 +215,7 @@ void Mux::on_rx_frame_sabm()
             
             // @todo: make decoder func for dlci_id;
             // @todo: verify dlci_id: not in use allready, use bitmap for it.
-            dlci_id = rx_context.buffer[1] << 2;
+            dlci_id = rx_context.buffer[1] >> 2;
             if (dlci_id == 0) {
                 start_response_construct(); 
             } else {
