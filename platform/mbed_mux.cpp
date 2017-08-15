@@ -27,6 +27,7 @@ namespace mbed {
 #define FRAME_TYPE_DISC                     0x43u         /* DISC frame type coding in the frame control field. */
 #define FRAME_TYPE_UIH                      0xEFu         /* UIH frame type coding in the frame control field. */
 #define PF_BIT                              (1u << 4)     /* P/F bit position in the frame control field. */
+#define CR_BIT                              (1u << 1)     /* C/R bit position in the frame address field. */
 #define DLCI_ID_LOWER_BOUND                 1u            /* Lower bound value of DLCI id.*/
 #define DLCI_ID_UPPER_BOUND                 63u           /* Upper bound value of DLCI id.*/  
     
@@ -167,6 +168,8 @@ bool Mux::is_rx_suspend_requited()
 
 void Mux::start_response_construct()
 {
+    trace("start_response_construct: ", 0);            
+    
     // @todo: combine common functionality with request function.
     
     frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::tx_context.buffer[0]));
@@ -186,6 +189,8 @@ void Mux::start_response_construct()
 
 void Mux::dlci_establish_response_construct(uint8_t dlci_id)
 {
+    trace("dlci_establish_response_construct: ", dlci_id);        
+    
     // @todo: combine common functionality with request function.
     
     frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::tx_context.buffer[0]));
@@ -202,7 +207,29 @@ void Mux::dlci_establish_response_construct(uint8_t dlci_id)
     tx_context.offset          = 0;           
 }
    
-   
+
+void Mux::dm_response_construct()
+{
+//    trace("dm_response_construct: ", 0);        
+    
+    // @todo: combine common functionality with request function.
+    
+    frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::tx_context.buffer[0]));
+    
+    frame_hdr->flag_seq       = FLAG_SEQUENCE_OCTET;
+    /* As multiplexer is not open we allways invert the C/R bit from the request frame. */
+    frame_hdr->address        = rx_context.buffer[1] ^ CR_BIT;
+    frame_hdr->control        = (FRAME_TYPE_DM | PF_BIT);    
+    frame_hdr->information[0] = fcs_calculate(&(Mux::tx_context.buffer[1]), FCS_INPUT_LEN);    
+    (++frame_hdr)->flag_seq   = FLAG_SEQUENCE_OCTET;
+    
+    // @todo: make XXX_FRAME_LEN define
+    
+    tx_context.bytes_remaining = START_REQ_FRAME_LEN;
+    tx_context.offset          = 0;               
+}
+
+
 void Mux::on_rx_frame_sabm()
 {
     // @todo: assume mux START request internal state inprogress/pending only for now!
@@ -219,7 +246,11 @@ void Mux::on_rx_frame_sabm()
             if (dlci_id == 0) {
                 start_response_construct(); 
             } else {
-                dlci_establish_response_construct(dlci_id);
+                if (state.is_multiplexer_open) {
+                    dlci_establish_response_construct(dlci_id);
+                } else {
+                    dm_response_construct();
+                }
             }
             return_code = write_do();    
             MBED_ASSERT(return_code != 0);
@@ -227,6 +258,7 @@ void Mux::on_rx_frame_sabm()
                 tx_state_change(TX_INTERNAL_RESP, NULL);
             } else {
                 // @todo: propagate write error to user.
+                MBED_ASSERT(false);
             }
             break;
         case TX_RETRANSMIT_ENQUEUE:
@@ -463,7 +495,8 @@ void Mux::on_deferred_call()
                         tx_state_change(TX_IDLE, NULL);
                         break;
                     default:
-                        /* No implementtaion required. */
+                        /* No implementation required. */
+                        trace("tx_context.tx_state", tx_context.tx_state);                        
                         MBED_ASSERT(false);
                         break;
                 }

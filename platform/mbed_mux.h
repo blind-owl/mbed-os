@@ -274,6 +274,10 @@ private:
      */        
     static void dlci_establish_response_construct(uint8_t dlci_id);    
     
+    /** Construct dm response message.
+     */            
+    static void dm_response_construct();
+    
     /** Do write operation if pending data available.
      * @todo: document return code
      */

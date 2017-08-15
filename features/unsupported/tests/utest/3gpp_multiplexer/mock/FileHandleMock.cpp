@@ -59,9 +59,11 @@ ssize_t FileHandleMock::write(const void *buffer, size_t size)
             uint8_t actual;
             for (uint8_t i = 0; i < size; ++i) {
                 actual   = ((uint8_t*)buffer)[i];
-                expected = ((uint8_t*)(mock->input_param[0].param))[i];
+//                expected = ((uint8_t*)(mock->input_param[0].param))[i];
+                expected = (uint8_t)(mock->input_param[0].param);
+                
+                trace("expected: ", expected);                
                 trace("actual: ", actual);
-                trace("expected: ", expected);
             }
             FAIL("FAILURE:");        
         }
