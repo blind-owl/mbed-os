@@ -54,13 +54,12 @@ ssize_t FileHandleMock::write(const void *buffer, size_t size)
         CHECK_EQUAL(size, mock->input_param[1].param);
     }       
     if (mock->input_param[0].compare_type == MOCK_COMPARE_TYPE_VALUE) {
-        if (memcmp(&(mock->input_param[0].param), buffer, size) != 0) {
+        if (memcmp((void *)(mock->input_param[0].param), buffer, size) != 0) {        
             uint8_t expected;
             uint8_t actual;
             for (uint8_t i = 0; i < size; ++i) {
                 actual   = ((uint8_t*)buffer)[i];
-//                expected = ((uint8_t*)(mock->input_param[0].param))[i];
-                expected = (uint8_t)(mock->input_param[0].param);
+                expected = ((uint8_t*)(mock->input_param[0].param))[i];
                 
                 trace("expected: ", expected);                
                 trace("actual: ", actual);

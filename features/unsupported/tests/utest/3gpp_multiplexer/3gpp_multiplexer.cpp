@@ -201,7 +201,7 @@ void mux_start_self_iniated_tx()
         CHECK(mock_write != NULL); 
         
         mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->input_param[0].param        = write_byte[tx_count];        
+        mock_write->input_param[0].param        = (uint32_t)&(write_byte[tx_count]);        
         
         mock_write->input_param[1].param        = WRITE_LEN;
         mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
@@ -310,7 +310,8 @@ void mux_self_iniated_open()
     mock_t * mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->input_param[0].param        = FLAG_SEQUENCE_OCTET;        
+    const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte;        
     mock_write->input_param[1].param        = WRITE_LEN;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 1;    
@@ -394,7 +395,7 @@ void dlci_establish_self_iniated_tx(uint8_t address)
         CHECK(mock_write != NULL); 
         
         mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->input_param[0].param        = write_byte[tx_count];        
+        mock_write->input_param[0].param        = (uint32_t)&(write_byte[tx_count]);        
         
         mock_write->input_param[1].param        = WRITE_LEN;
         mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
@@ -525,7 +526,8 @@ void dlci_self_iniated_establish(Role role, uint8_t dlci_id)
     mock_t * mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->input_param[0].param        = FLAG_SEQUENCE_OCTET;        
+    const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte;        
     mock_write->input_param[1].param        = WRITE_LEN;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 1;    
@@ -615,7 +617,8 @@ void dlci_establish_self_initated_sem_wait_timeout(const void * context)
     do {    
         mock_t * mock_write = mock_free_get("write");
         mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->input_param[0].param        = FLAG_SEQUENCE_OCTET;        
+        const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;
+        mock_write->input_param[0].param        = (uint32_t)&write_byte;        
         mock_write->input_param[1].param        = WRITE_LEN;
         mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_write->return_value                = 1;    
@@ -663,7 +666,8 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_timeout)
     mock_t * mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->input_param[0].param        = FLAG_SEQUENCE_OCTET;        
+    const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte;        
     mock_write->input_param[1].param        = WRITE_LEN;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 1;    
@@ -715,7 +719,8 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_success_after_timeo
     mock_t * mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->input_param[0].param        = FLAG_SEQUENCE_OCTET;        
+    const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte;        
     mock_write->input_param[1].param        = WRITE_LEN;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 1;    
@@ -837,7 +842,8 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_write_failure)
     mock_t * mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->input_param[0].param        = FLAG_SEQUENCE_OCTET;        
+    const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte;                
     mock_write->input_param[1].param        = WRITE_LEN;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = (uint32_t)-1;        
@@ -897,7 +903,8 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_rejected_by_peer)
     mock_t * mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->input_param[0].param        = FLAG_SEQUENCE_OCTET;        
+    const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte;        
     mock_write->input_param[1].param        = WRITE_LEN;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value = 1;    
@@ -970,7 +977,7 @@ static void dlci_establish_peer_iniated_rx(const uint8_t *rx_buf, uint8_t rx_buf
                 CHECK(mock_write != NULL); 
                 
                 mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-                mock_write->input_param[0].param        = *write_byte;       
+                mock_write->input_param[0].param        = (uint32_t)write_byte;       
                 
                 mock_write->input_param[1].param        = WRITE_LEN;
                 mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
@@ -1025,7 +1032,7 @@ void dlci_establish_peer_iniated_tx(const uint8_t *buf,
         CHECK(mock_write != NULL); 
         
         mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->input_param[0].param        = buf[tx_count];        
+        mock_write->input_param[0].param        = (uint32_t)&(buf[tx_count]);        
         
         mock_write->input_param[1].param        = WRITE_LEN;
         mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
@@ -1165,7 +1172,8 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_rejected_by_peer)
     mock_t * mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->input_param[0].param        = FLAG_SEQUENCE_OCTET;        
+    const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;        
+    mock_write->input_param[0].param        = (uint32_t)&write_byte;        
     mock_write->input_param[1].param        = WRITE_LEN;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value = 1;    
@@ -1208,7 +1216,8 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_write_failure)
     mock_t * mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->input_param[0].param        = FLAG_SEQUENCE_OCTET;        
+    const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;        
+    mock_write->input_param[0].param        = (uint32_t)&write_byte;        
     mock_write->input_param[1].param        = WRITE_LEN;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = (uint32_t)-1;    
@@ -1234,7 +1243,8 @@ void mux_start_self_initated_sem_wait_timeout(const void *)
     do {    
         mock_t * mock_write = mock_free_get("write");
         mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->input_param[0].param        = FLAG_SEQUENCE_OCTET;        
+        const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;        
+        mock_write->input_param[0].param        = (uint32_t)&write_byte;        
         mock_write->input_param[1].param        = WRITE_LEN;
         mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_write->return_value                = 1;    
@@ -1281,7 +1291,8 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_timeout)
     mock_t * mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->input_param[0].param        = FLAG_SEQUENCE_OCTET;        
+    const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;        
+    mock_write->input_param[0].param        = (uint32_t)&write_byte;        
     mock_write->input_param[1].param        = WRITE_LEN;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 1;    
@@ -1326,7 +1337,8 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_success_after_timeout)
     mock_t * mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->input_param[0].param        = FLAG_SEQUENCE_OCTET;        
+    const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;        
+    mock_write->input_param[0].param        = (uint32_t)&write_byte;        
     mock_write->input_param[1].param        = WRITE_LEN;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 1;    
@@ -1802,7 +1814,8 @@ TEST(MultiplexerOpenTestGroup, mux_open_simultaneous_self_iniated)
     mock_t * mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->input_param[0].param        = FLAG_SEQUENCE_OCTET;        
+    const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;        
+    mock_write->input_param[0].param        = (uint32_t)&write_byte;        
     mock_write->input_param[1].param        = WRITE_LEN;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 1;    
@@ -1876,7 +1889,8 @@ TEST(MultiplexerOpenTestGroup, mux_open_simultaneous_self_iniated_full_frame)
     mock_t * mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->input_param[0].param        = FLAG_SEQUENCE_OCTET;        
+    const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;        
+    mock_write->input_param[0].param        = (uint32_t)&write_byte;        
     mock_write->input_param[1].param        = WRITE_LEN;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 1;    

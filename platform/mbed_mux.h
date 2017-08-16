@@ -255,28 +255,20 @@ private:
      *  @return Calculated fcs.
      */    
     static uint8_t fcs_calculate(const uint8_t *buffer,  uint8_t input_len);
-    
-    /** Construct start request message. */
-    static void start_request_construct();
-    
-    /** Construct start response message. */    
-    static void start_response_construct();
-    
-    /** Construct dlci establish message.
+
+    /** Construct sabm request message.
      * 
      *  @param dlci_id  ID of the DLCI to establish
      */    
-    static void dlci_establish_request_construct(uint8_t dlci_id);
-    
-    /** Construct dlci establish response message.
-     * 
-     *  @param dlci_id  ID of the DLCI to establish
-     */        
-    static void dlci_establish_response_construct(uint8_t dlci_id);    
+    static void sabm_request_construct(uint8_t dlci);
     
     /** Construct dm response message.
      */            
     static void dm_response_construct();
+    
+    /** Construct ua response message.
+     */                
+    static void ua_response_construct();
     
     /** Do write operation if pending data available.
      * @todo: document return code

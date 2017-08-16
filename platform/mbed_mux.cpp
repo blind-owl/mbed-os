@@ -14,10 +14,10 @@ namespace mbed {
 #define CONTROL_ESCAPE_OCTET                0x7Du         /* Control escape octet used as the transparency 
                                                              identifier. */
 #define WRITE_LEN                           1u            /* Length of write in number of bytes. */    
-#define READ_LEN                            1u            /* Length of read in number of bytes. */    
-#define START_REQ_FRAME_LEN                 5u            /* Length of ther start request frame in number of bytes. */
-#define DLCI_ESTABLISH_REQ_FRAME_LEN        5u            /* Length of ther DLCI establishment request frame in number 
-                                                             of bytes. */
+#define READ_LEN                            1u            /* Length of read in number of bytes. */   
+#define SABM_FRAME_LEN                      5u            /* Length of the SABM frame in number of bytes. */
+#define UA_FRAME_LEN                        5u            /* Length of the UA frame in number of bytes. */
+#define DM_FRAME_LEN                        5u            /* Length of the DM frame in number of bytes. */
 #define T1_TIMER_VALUE                      300u          /* T1 timer value. */
 #define RETRANSMIT_COUNT                    3u            /* Retransmission count for the tx frames requiring a
                                                              response. */
@@ -128,7 +128,7 @@ void Mux::on_timeout()
             }            
             break;
         default:
-            /* No implementtaion required. */
+            /* No implementation required. */
             break;
     }
 }
@@ -166,53 +166,30 @@ bool Mux::is_rx_suspend_requited()
 }
 
 
-void Mux::start_response_construct()
+void Mux::ua_response_construct()
 {
-    trace("start_response_construct: ", 0);            
-    
-    // @todo: combine common functionality with request function.
-    
+//trace("ua_response_construct: ", 0);        
+
     frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::tx_context.buffer[0]));
     
     frame_hdr->flag_seq       = FLAG_SEQUENCE_OCTET;
-    frame_hdr->address        = ADDRESS_MUX_START_RESP_OCTET;
+    frame_hdr->address        = rx_context.buffer[1];
     frame_hdr->control        = (FRAME_TYPE_UA | PF_BIT);    
     frame_hdr->information[0] = fcs_calculate(&(Mux::tx_context.buffer[1]), FCS_INPUT_LEN);    
     (++frame_hdr)->flag_seq   = FLAG_SEQUENCE_OCTET;
     
     // @todo: make START_RESP_FRAME_LEN define
     
-    tx_context.bytes_remaining = START_REQ_FRAME_LEN;
-    tx_context.offset          = 0;       
+    tx_context.bytes_remaining = UA_FRAME_LEN;
+    tx_context.offset          = 0;               
 }
 
-
-void Mux::dlci_establish_response_construct(uint8_t dlci_id)
-{
-    trace("dlci_establish_response_construct: ", dlci_id);        
-    
-    // @todo: combine common functionality with request function.
-    
-    frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::tx_context.buffer[0]));
-    
-    frame_hdr->flag_seq       = FLAG_SEQUENCE_OCTET;
-    frame_hdr->address        = ((state.is_initiator ? 1 : 3) | (dlci_id << 2));
-    frame_hdr->control        = (FRAME_TYPE_UA | PF_BIT);    
-    frame_hdr->information[0] = fcs_calculate(&(Mux::tx_context.buffer[1]), FCS_INPUT_LEN);    
-    (++frame_hdr)->flag_seq   = FLAG_SEQUENCE_OCTET;
-    
-    // @todo: make START_RESP_FRAME_LEN define
-    
-    tx_context.bytes_remaining = START_REQ_FRAME_LEN;
-    tx_context.offset          = 0;           
-}
-   
 
 void Mux::dm_response_construct()
 {
 //    trace("dm_response_construct: ", 0);        
     
-    // @todo: combine common functionality with request function.
+    // @todo: combine common functionality with other response function.
     
     frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::tx_context.buffer[0]));
     
@@ -225,7 +202,7 @@ void Mux::dm_response_construct()
     
     // @todo: make XXX_FRAME_LEN define
     
-    tx_context.bytes_remaining = START_REQ_FRAME_LEN;
+    tx_context.bytes_remaining = DM_FRAME_LEN;
     tx_context.offset          = 0;               
 }
 
@@ -242,16 +219,14 @@ void Mux::on_rx_frame_sabm()
             
             // @todo: make decoder func for dlci_id;
             // @todo: verify dlci_id: not in use allready, use bitmap for it.
-            dlci_id = rx_context.buffer[1] >> 2;
-            if (dlci_id == 0) {
-                start_response_construct(); 
+            dlci_id = rx_context.buffer[1] >> 2;            
+            if ((dlci_id == 0) || 
+                ((dlci_id != 0) && state.is_multiplexer_open)) {
+                ua_response_construct();
             } else {
-                if (state.is_multiplexer_open) {
-                    dlci_establish_response_construct(dlci_id);
-                } else {
-                    dm_response_construct();
-                }
+                dm_response_construct();
             }
+            
             return_code = write_do();    
             MBED_ASSERT(return_code != 0);
             if (return_code > 0) {
@@ -558,35 +533,22 @@ uint8_t Mux::fcs_calculate(const uint8_t *buffer,  uint8_t input_len)
 }
 
 
-void Mux::start_request_construct()
+void Mux::sabm_request_construct(uint8_t dlci_id)
 {
     frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::tx_context.buffer[0]));
     
-    frame_hdr->flag_seq       = FLAG_SEQUENCE_OCTET;
-    frame_hdr->address        = ADDRESS_MUX_START_REQ_OCTET;
-    frame_hdr->control        = (FRAME_TYPE_SABM | PF_BIT);       
-    frame_hdr->information[0] = fcs_calculate(&(Mux::tx_context.buffer[1]), FCS_INPUT_LEN);    
-    (++frame_hdr)->flag_seq   = FLAG_SEQUENCE_OCTET;
-    
-    tx_context.bytes_remaining = START_REQ_FRAME_LEN;
-    tx_context.offset          = 0;        
-}
-
-
-void Mux::dlci_establish_request_construct(uint8_t dlci_id)
-{
-    // @todo: combine with start request
-    
-    frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::tx_context.buffer[0]));
-    
-    frame_hdr->flag_seq       = FLAG_SEQUENCE_OCTET;
-    frame_hdr->address        = (state.is_initiator ? 3 : 1) | (dlci_id << 2);   
+    frame_hdr->flag_seq = FLAG_SEQUENCE_OCTET;
+    if (dlci_id == 0) {
+        frame_hdr->address = 3 | (dlci_id << 2);                  
+    } else {
+        frame_hdr->address = (state.is_initiator ? 3 : 1) | (dlci_id << 2);                  
+    }
     frame_hdr->control        = (FRAME_TYPE_SABM | PF_BIT);            
     frame_hdr->information[0] = fcs_calculate(&(Mux::tx_context.buffer[1]), FCS_INPUT_LEN);    
     (++frame_hdr)->flag_seq   = FLAG_SEQUENCE_OCTET;
     
-    tx_context.bytes_remaining = DLCI_ESTABLISH_REQ_FRAME_LEN;
-    tx_context.offset          = 0;            
+    tx_context.bytes_remaining = SABM_FRAME_LEN;
+    tx_context.offset          = 0;                
 }
 
 
@@ -666,8 +628,8 @@ ssize_t Mux::mux_start(Mux::MuxEstablishStatus &status)
     switch (tx_context.tx_state) {
         case TX_IDLE:
             /* Construct the frame, start the tx sequence 1-byte at time, reset relevant state contexts and suspend 
-               the call thread. */            
-            start_request_construct();                       
+               the call thread. */           
+            sabm_request_construct(0);
             return_code = write_do();    
             MBED_ASSERT(return_code != 0);
             if (return_code > 0) {
@@ -752,8 +714,8 @@ ssize_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHan
         case TX_IDLE:                
             /* Construct the frame, start the tx sequence 1-byte at time, reset relevant state contexts and suspend 
                the call thread. */                        
-            status = MUX_ESTABLISH_SUCCESS;            
-            dlci_establish_request_construct(dlci_id);  
+            status = MUX_ESTABLISH_SUCCESS;           
+            sabm_request_construct(dlci_id);
 //trace("dlci_establish: ", dlci_id);                    
             return_code = write_do();    
             MBED_ASSERT(return_code != 0);   
