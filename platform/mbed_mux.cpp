@@ -383,6 +383,7 @@ void Mux::decoder_state_decode_run()
                     valid_rx_frame_decode();
                 }                
             } else {
+                trace("rx_context.offset: ", rx_context.offset);    
                 MBED_ASSERT(false); // // @todo invalid frame: ASSERT for now               
             }            
         } else {

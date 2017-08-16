@@ -1458,6 +1458,56 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated_role_initiator_succ
 }
 
 
+/*
+ * TC - dlci establishment sequence, peer initiated, role initiator: DLCI id allready used
+ * - self iniated open multiplexer
+ * - receive: DLCI establishment request
+ * - respond: DLCI establishment response
+ * - receive: DLCI establishment request: same DLCI ID
+ * - respond: DLCI establishment response
+ */
+TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated_dlci_id_used)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+
+    const Role role            = ROLE_INITIATOR;
+    const uint8_t dlci_id      = 1;
+    const uint8_t read_byte[4] = 
+    {
+        (((role == ROLE_INITIATOR) ? 1 : 3) | (dlci_id << 2)),
+        (FRAME_TYPE_SABM | PF_BIT), 
+        fcs_calculate(&read_byte[0], 2),
+        FLAG_SEQUENCE_OCTET
+    };      
+    
+    /* 1st cycle. */
+    bool expected_dlci_established_event_state = true;
+    dlci_peer_iniated_establish_accept(role, 
+                                       &(read_byte[0]),
+                                       sizeof(read_byte),
+                                       dlci_id,
+                                       expected_dlci_established_event_state);   
+
+    /* 2nd cycle. */
+    expected_dlci_established_event_state = false;
+    dlci_peer_iniated_establish_accept(role, 
+                                       &(read_byte[0]),
+                                       sizeof(read_byte),
+                                       dlci_id,
+                                       expected_dlci_established_event_state);
+}
+
+
 /* Reject peer iniated dlci establishment request.*/
 void dlci_peer_iniated_establish_reject(uint8_t        address_field, 
                                         const uint8_t *rx_buf, 
