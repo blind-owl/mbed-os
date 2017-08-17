@@ -1399,7 +1399,7 @@ void dlci_peer_iniated_establish_accept(Role           role,
                                         const uint8_t *rx_buf, 
                                         uint8_t        rx_buf_len,                                 
                                         uint8_t        dlci_id,
-                                        bool           expected_dlci_established_event_state)
+                                        bool           expected_dlci_establishment_event_state)
 {       
     const uint8_t write_byte[5] = 
     {
@@ -1411,7 +1411,6 @@ void dlci_peer_iniated_establish_accept(Role           role,
     };
 
     dlci_establish_peer_iniated_rx(&(rx_buf[0]), rx_buf_len, &(write_byte[0]));
-    const bool expected_dlci_establishment_event_state = true;
     dlci_establish_peer_iniated_tx(&(write_byte[1]), 
                                    (sizeof(write_byte) - sizeof(write_byte[0])),
                                    expected_dlci_establishment_event_state,
@@ -1532,6 +1531,57 @@ void dlci_peer_iniated_establish_reject(uint8_t        address_field,
 
 
 /*
+ * TC - dlci establishment sequence, peer initiated, role initiator: all DLCI ids used
+ * - self iniated open multiplexer
+ * - establish DLCIs max amount: success
+ * - receive DLCI establishment request
+ * - responde with DM as max count reached
+ */
+TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated_all_dlci_ids_used)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+    
+    uint8_t i                                  = MAX_DLCI_COUNT;
+    uint8_t dlci_id                            = DLCI_ID_LOWER_BOUND;
+    const Role role                            = ROLE_INITIATOR;
+    bool expected_dlci_established_event_state = true;    
+    uint8_t read_byte[4]                       = 
+    {
+        ~0,
+        (FRAME_TYPE_SABM | PF_BIT), 
+        fcs_calculate(&read_byte[0], 2),
+        FLAG_SEQUENCE_OCTET
+    };        
+    
+    /* Consume all available DLCI IDs. */
+    do {   
+        read_byte[0] = 1 | (dlci_id << 2);
+        dlci_peer_iniated_establish_accept(role,
+                                           &(read_byte[0]),
+                                           sizeof(read_byte),
+                                           dlci_id,
+                                           expected_dlci_established_event_state);   
+
+        --i;
+        ++dlci_id;
+    } while (i != 0);
+
+    read_byte[0]                          = 1 | (dlci_id << 2);
+    dlci_peer_iniated_establish_reject(1u | (dlci_id << 2), &(read_byte[0]), sizeof(read_byte));  
+}
+
+
+/*
  * TC - dlci establishment sequence, peer initiated, multiplexer not open
  * - receive: DLCI establishment request
  * - respond: DM frame
@@ -1558,9 +1608,8 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_iniated_mux_not_open)
         fcs_calculate(&read_byte[1], 2),
         FLAG_SEQUENCE_OCTET
     };        
-      
-    /* We take the role of the responder, implementation will invert the C/R bit off the address field. */
-    dlci_peer_iniated_establish_reject(1u | (dlci_id << 2), &(read_byte[0]), sizeof(read_byte));    
+         
+    dlci_peer_iniated_establish_reject(3u | (dlci_id << 2), &(read_byte[0]), sizeof(read_byte));    
 }
 
 

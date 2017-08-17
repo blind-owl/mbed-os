@@ -194,8 +194,8 @@ void Mux::dm_response_construct()
     frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::tx_context.buffer[0]));
     
     frame_hdr->flag_seq       = FLAG_SEQUENCE_OCTET;
-    /* As multiplexer is not open we allways invert the C/R bit from the request frame. */
-    frame_hdr->address        = rx_context.buffer[1] ^ CR_BIT;
+    /* As multiplexer is not open we allways invert the C/R bit from the request frame. NOT!!*/
+    frame_hdr->address        = rx_context.buffer[1] /*^ CR_BIT*/;
     frame_hdr->control        = (FRAME_TYPE_DM | PF_BIT);    
     frame_hdr->information[0] = fcs_calculate(&(Mux::tx_context.buffer[1]), FCS_INPUT_LEN);    
     (++frame_hdr)->flag_seq   = FLAG_SEQUENCE_OCTET;
@@ -222,7 +222,15 @@ void Mux::on_rx_frame_sabm()
             dlci_id = rx_context.buffer[1] >> 2;            
             if ((dlci_id == 0) || 
                 ((dlci_id != 0) && state.is_multiplexer_open)) {
-                ua_response_construct();
+                if (is_dlci_in_use(dlci_id)) {                                   
+                    ua_response_construct();
+                } else {
+                    if (!is_dlci_q_full()) {
+                        ua_response_construct();
+                    } else {
+                        dm_response_construct();
+                    }                        
+                }
             } else {
                 dm_response_construct();
             }
@@ -319,24 +327,24 @@ void Mux::on_rx_frame_not_supported()
 }
     
 
-Mux::FrameDecodeType Mux::frame_type_resolve()
+Mux::FrameRxType Mux::frame_rx_type_resolve()
 {
 //trace("frame_type_resolve ", rx_context.buffer[2]);    
 
-    const uint8_t frame_type = (rx_context.buffer[2] & ~0x10);
+    const uint8_t frame_type = (rx_context.buffer[2] & ~PF_BIT);
     
     if (frame_type == FRAME_TYPE_SABM) {
-        return FRAME_DECODE_TYPE_SABM;
+        return FRAME_RX_TYPE_SABM;
     } else if (frame_type == FRAME_TYPE_UA) {
-        return FRAME_DECODE_TYPE_UA;
+        return FRAME_RX_TYPE_UA;
     } else if (frame_type == FRAME_TYPE_DM) {
-        return FRAME_DECODE_TYPE_DM;
+        return FRAME_RX_TYPE_DM;
     } else if (frame_type == FRAME_TYPE_DISC) {
-        return FRAME_DECODE_TYPE_DISC;
+        return FRAME_RX_TYPE_DISC;
     } else if (frame_type == FRAME_TYPE_UIH) {
-        return FRAME_DECODE_TYPE_UIH;
+        return FRAME_RX_TYPE_UIH;
     } else {
-        return FRAME_DECODE_TYPE_NOT_SUPPORTED;
+        return FRAME_RX_TYPE_NOT_SUPPORTED;
     }
 }
 
@@ -351,7 +359,7 @@ void Mux::valid_rx_frame_decode()
 #endif // 0    
     
     typedef void (*rx_frame_decoder_func_t)();    
-    static const rx_frame_decoder_func_t decoder_func[FRAME_DECODE_TYPE_MAX] = {
+    static const rx_frame_decoder_func_t decoder_func[FRAME_RX_TYPE_MAX] = {
         on_rx_frame_sabm,
         on_rx_frame_ua,
         on_rx_frame_dm,
@@ -360,8 +368,8 @@ void Mux::valid_rx_frame_decode()
         on_rx_frame_not_supported
     };
 
-    const Mux::FrameDecodeType frame_type = frame_type_resolve();
-    rx_frame_decoder_func_t func    = decoder_func[frame_type];
+    const Mux::FrameRxType frame_type = frame_rx_type_resolve();
+    rx_frame_decoder_func_t func      = decoder_func[frame_type];
     func();      
     
     rx_context.offset = 1;    
@@ -439,7 +447,101 @@ void Mux::tx_retransmit_done_entry_run()
     MBED_ASSERT(tx_context.timer_id != 0);                
 }
  
- 
+
+bool Mux::is_dlci_in_use(uint8_t dlci_id)
+{  
+    const uint8_t end = sizeof(mux_objects) / sizeof(mux_objects[0]);
+    for (uint8_t i = 0; i != end; ++i) {   
+        if (mux_objects[i].dlci == dlci_id) {
+            return true;
+        }        
+    }
+    
+    return false;
+}
+
+
+void Mux::on_post_tx_frame_sabm()
+{
+    switch (tx_context.tx_state) {
+        case TX_RETRANSMIT_ENQUEUE:
+            tx_state_change(TX_RETRANSMIT_DONE, tx_retransmit_done_entry_run);
+            break;
+        default:
+            /* Code that should never be reached. */
+            trace("tx_context.tx_state", tx_context.tx_state);                       
+            MBED_ASSERT(false);
+            break;
+    }       
+}
+
+
+void Mux::on_post_tx_frame_ua()
+{
+    switch (tx_context.tx_state) {
+        case TX_INTERNAL_RESP:
+            if (!state.is_multiplexer_open) {
+                state.is_multiplexer_open = 1;
+                _mux_obj_cb->on_mux_start();                
+            } else {
+                const uint8_t dlci_id = (tx_context.buffer[1] >> 2);
+                if (!is_dlci_in_use(dlci_id)) {
+                    dlci_id_append(dlci_id);
+                    _mux_obj_cb->on_dlci_establish(NULL, 0);                    
+                }                
+            } 
+            
+            tx_state_change(TX_IDLE, NULL);            
+            break;
+        default:
+            /* Code that should never be reached. */
+            trace("tx_context.tx_state", tx_context.tx_state);                       
+            MBED_ASSERT(false);
+            break;
+    }       
+}
+
+
+void Mux::on_post_tx_frame_dm()
+{
+    switch (tx_context.tx_state) {
+        case TX_INTERNAL_RESP:   
+            tx_state_change(TX_IDLE, NULL);            
+            break;
+        default:
+            /* Code that should never be reached. */
+            trace("tx_context.tx_state", tx_context.tx_state);                       
+            MBED_ASSERT(false);
+            break;
+    }                   
+}
+
+
+void Mux::on_post_tx_frame_uih()
+{
+    MBED_ASSERT(false);    
+}
+
+
+Mux::FrameTxType Mux::frame_tx_type_resolve()
+{
+    const uint8_t frame_type = (tx_context.buffer[2] & ~PF_BIT);
+    
+    if (frame_type == FRAME_TYPE_SABM) {
+        return FRAME_TX_TYPE_SABM;
+    } else if (frame_type == FRAME_TYPE_UA) {
+        return FRAME_TX_TYPE_UA;
+    } else if (frame_type == FRAME_TYPE_DM) {
+        return FRAME_TX_TYPE_DM;
+    } else if (frame_type == FRAME_TYPE_UIH) {
+        return FRAME_TX_TYPE_UIH;
+    } else {
+        MBED_ASSERT(false);
+        return FRAME_TX_TYPE_MAX;
+    }
+}
+
+
 void Mux::on_deferred_call()
 {
 //trace("Mux::on_deferred_call ", 0);        
@@ -451,32 +553,20 @@ void Mux::on_deferred_call()
 //trace("write_ret", write_ret);
 //trace("bytes_remaining", tx_context.bytes_remaining);        
         if (write_ret >= 0) {
-            if (tx_context.bytes_remaining == 0) { 
+            if (tx_context.bytes_remaining == 0) {
+                typedef void (*post_tx_frame_func_t)();   
+                static const post_tx_frame_func_t post_tx_func[FRAME_TX_TYPE_MAX] = {
+                    on_post_tx_frame_sabm,
+                    on_post_tx_frame_ua,
+                    on_post_tx_frame_dm,
+                    on_post_tx_frame_uih                    
+                };
                 
-                // @todo: DEFECT WE MIGTH DO EXTRA TIMER SCHEDULING SHOULD USE DEDICATED FLAG FOR THIS         
-#if 1
-//trace("on_deferred_call:tx_context.tx_state", tx_context.tx_state);
-                switch (tx_context.tx_state) {
-                    case TX_RETRANSMIT_ENQUEUE:
-                        tx_state_change(TX_RETRANSMIT_DONE, tx_retransmit_done_entry_run);
-                        break;
-                    case TX_INTERNAL_RESP:
-                        if (!state.is_multiplexer_open) {
-                            state.is_multiplexer_open = 1;
-                            _mux_obj_cb->on_mux_start();
-                        } else {
-                            _mux_obj_cb->on_dlci_establish(NULL, 0);
-                        }
-                        
-                        tx_state_change(TX_IDLE, NULL);
-                        break;
-                    default:
-                        /* No implementation required. */
-                        trace("tx_context.tx_state", tx_context.tx_state);                        
-                        MBED_ASSERT(false);
-                        break;
-                }
-#endif //                
+                const Mux::FrameTxType frame_type = frame_tx_type_resolve();
+                post_tx_frame_func_t func         = post_tx_func[frame_type];
+                func();                
+                
+                // @todo: DEFECT WE MIGTH DO EXTRA TIMER SCHEDULING SHOULD USE DEDICATED FLAG FOR THIS
             }
         } else {
             MBED_ASSERT(false); // @todo write returned < 0 for failure propagate error to the user
@@ -664,6 +754,20 @@ Mux::MuxEstablishStatus Mux::dlci_establish_response_decode()
 }
 
 
+bool Mux::is_dlci_q_full()
+{
+    const uint8_t end = sizeof(mux_objects) / sizeof(mux_objects[0]);
+    for (uint8_t i = 0; i != end; ++i) {  
+        if (mux_objects[i].dlci == MUX_DLCI_INVALID_ID) {     
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+
+// @todo: replace this func with is_dlci_q_full, is_dlci_in_use
 bool Mux::is_dlci_append_ok(uint8_t dlci_id)
 {
     /* Check is supplied DLCI id, and all available DLCI resources, allready in use. */ 

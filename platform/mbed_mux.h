@@ -235,17 +235,27 @@ private:
         TX_STATE_MAX
     } TxState;
     
-    /* Definition for frame type. */
+    /* Definition for frame type within rx path. */
     typedef enum 
     {
-        FRAME_DECODE_TYPE_SABM = 0,
-        FRAME_DECODE_TYPE_UA,
-        FRAME_DECODE_TYPE_DM,
-        FRAME_DECODE_TYPE_DISC,
-        FRAME_DECODE_TYPE_UIH,        
-        FRAME_DECODE_TYPE_NOT_SUPPORTED,
-        FRAME_DECODE_TYPE_MAX
-    } FrameDecodeType;    
+        FRAME_RX_TYPE_SABM = 0,
+        FRAME_RX_TYPE_UA,
+        FRAME_RX_TYPE_DM,
+        FRAME_RX_TYPE_DISC,
+        FRAME_RX_TYPE_UIH,        
+        FRAME_RX_TYPE_NOT_SUPPORTED,
+        FRAME_RX_TYPE_MAX
+    } FrameRxType;
+    
+    /* Definition for frame type within tx path. */
+    typedef enum 
+    {
+        FRAME_TX_TYPE_SABM = 0,
+        FRAME_TX_TYPE_UA,
+        FRAME_TX_TYPE_DM,
+        FRAME_TX_TYPE_UIH,       
+        FRAME_TX_TYPE_MAX
+    } FrameTxType;        
 
     /** Calculate fcs.
      * 
@@ -307,7 +317,7 @@ private:
     
     /** Evaluate is suspending rx processing required.
      * 
-     *  @return true when suspendiung is required, false otherwise.
+     *  @return true when suspending is required, false otherwise.
      */                
     static bool is_rx_suspend_requited();
        
@@ -332,11 +342,29 @@ private:
     /** Process valid received frame. */            
     static void valid_rx_frame_decode();
     
-    /** Resolve received frame type. 
+    /** SABM frame tx path post processing. */    
+    static void on_post_tx_frame_sabm();
+    
+    /** UA frame tx path post processing. */        
+    static void on_post_tx_frame_ua();
+    
+    /** DM frame tx path post processing. */            
+    static void on_post_tx_frame_dm();
+    
+    /** UIH frame tx path post processing. */                
+    static void on_post_tx_frame_uih();
+   
+    /** Resolve rx frame type. 
      * 
      *  @return Frame type.
      */                    
-    static Mux::FrameDecodeType frame_type_resolve();
+    static Mux::FrameRxType frame_rx_type_resolve();
+    
+    /** Resolve tx frame type. 
+     * 
+     *  @return Frame type.
+     */                        
+    static Mux::FrameTxType frame_tx_type_resolve();
     
     /** Decode received start multiplexer response frame.
      * 
@@ -377,6 +405,8 @@ private:
     
     // @todo: update me!
     static FileHandle * dlci_id_append(uint8_t dlci_id);
+    static bool is_dlci_in_use(uint8_t dlci_id);
+    static bool is_dlci_q_full();
     
     /* Deny object creation. */    
     Mux();
