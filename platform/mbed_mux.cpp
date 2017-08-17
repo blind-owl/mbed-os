@@ -739,6 +739,9 @@ ssize_t Mux::mux_start(Mux::MuxEstablishStatus &status)
                 }            
             }                                     
             break;
+        case TX_INTERNAL_RESP:
+            return_code = 1; // @todo: we could be generating a DM now: TC needed
+            break;
         default:
             MBED_ASSERT(false);
             break;

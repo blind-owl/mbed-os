@@ -2007,4 +2007,57 @@ TEST(MultiplexerOpenTestGroup, mux_open_simultaneous_self_iniated_full_frame)
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_SUCCESS);        
 }
 
+/*
+ * TC - mux start-up sequence, peer initiated: peer issues mux start-up request while self iniated is in progress
+ * - START request received completely from the peer 
+ * - send 1st byte of START response
+ * - issue mux open
+ * - API returns dedicated error code to signal peer iniated open is allready in progress
+ * - peer iniated mux open calllback called
+ */
+TEST(MultiplexerOpenTestGroup, mux_open_simultaneous_peer_iniated)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);    
+ 
+    const uint8_t read_byte[5] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET, 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        fcs_calculate(&read_byte[1], 2),
+        FLAG_SEQUENCE_OCTET
+    };   
+    const uint8_t write_byte[5] = 
+    {
+        FLAG_SEQUENCE_OCTET,        
+        ADDRESS_MUX_START_RESP_OCTET, 
+        (FRAME_TYPE_UA | PF_BIT), 
+        fcs_calculate(&write_byte[1], 2),
+        FLAG_SEQUENCE_OCTET
+    };
+
+    dlci_establish_peer_iniated_rx(&(read_byte[0]), sizeof(read_byte), &(write_byte[0]));    
+    
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
+    const int ret = mbed::Mux::mux_start(status);
+    CHECK_EQUAL(ret, 1);
+}
+
+
+/*
+ */
+TEST(MultiplexerOpenTestGroup, mux_open_self_iniated_dm_tx_in_progress)
+{
+// @todo:
+}
+
+
 } // namespace mbed
