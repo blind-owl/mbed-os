@@ -43,15 +43,15 @@ typedef struct
 FileHandle *Mux::_serial      = NULL;
 EventQueueMock *Mux::_event_q = NULL;
 MuxCallback *Mux::_mux_obj_cb = NULL;
-MuxDataService Mux::mux_objects[MBED_CONF_MUX_DLCI_COUNT];
+MuxDataService Mux::_mux_objects[MBED_CONF_MUX_DLCI_COUNT];
 
 //rtos::Semaphore Mux::_semaphore(0);
 SemaphoreMock Mux::_semaphore;
 
-Mux::tx_context_t Mux::tx_context;
-Mux::rx_context_t Mux::rx_context;
-Mux::state_t      Mux::state;
-const uint8_t     Mux::crctable[MUX_CRC_TABLE_LEN] = {
+Mux::tx_context_t Mux::_tx_context;
+Mux::rx_context_t Mux::_rx_context;
+Mux::state_t      Mux::_state;
+const uint8_t     Mux::_crctable[MUX_CRC_TABLE_LEN] = {
     0x00, 0x91, 0xE3, 0x72, 0x07, 0x96, 0xE4, 0x75,  0x0E, 0x9F, 0xED, 0x7C, 0x09, 0x98, 0xEA, 0x7B,
     0x1C, 0x8D, 0xFF, 0x6E, 0x1B, 0x8A, 0xF8, 0x69,  0x12, 0x83, 0xF1, 0x60, 0x15, 0x84, 0xF6, 0x67,
     0x38, 0xA9, 0xDB, 0x4A, 0x3F, 0xAE, 0xDC, 0x4D,  0x36, 0xA7, 0xD5, 0x44, 0x31, 0xA0, 0xD2, 0x43,
@@ -77,18 +77,18 @@ extern void trace(char *string, int data);
 
 void Mux::module_init()
 {
-    state.is_multiplexer_open = 0;
-    state.is_request_timeout  = 0;
-    state.is_initiator        = 0;
+    _state.is_multiplexer_open = 0;
+    _state.is_request_timeout  = 0;
+    _state.is_initiator        = 0;
    
-    rx_context.offset        = 0;
-    rx_context.decoder_state = DECODER_STATE_SYNC;    
+    _rx_context.offset        = 0;
+    _rx_context.decoder_state = DECODER_STATE_SYNC;    
     
-    tx_context.tx_state = TX_IDLE;    
+    _tx_context.tx_state = TX_IDLE;    
     
-    const uint8_t end = sizeof(mux_objects) / sizeof(mux_objects[0]);
+    const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);
     for (uint8_t i = 0; i != end; ++i) {
-        mux_objects[i].dlci = MUX_DLCI_INVALID_ID;
+        _mux_objects[i].dlci = MUX_DLCI_INVALID_ID;
     }    
 }
 
@@ -96,8 +96,8 @@ void Mux::module_init()
 void Mux::frame_retransmit_begin()
 {   
 //trace("Mux::frame_retransmit ", 0);    
-    tx_context.bytes_remaining = tx_context.offset;
-    tx_context.offset          = 0;
+    _tx_context.bytes_remaining = _tx_context.offset;
+    _tx_context.offset          = 0;
    
     const ssize_t ret_write = write_do();   
     if (ret_write < 0) {
@@ -108,19 +108,19 @@ void Mux::frame_retransmit_begin()
 
 void Mux::on_timeout()
 {
-//trace("on_timeout:tx_context.tx_state", tx_context.tx_state);    
+//trace("on_timeout:_tx_context.tx_state", _tx_context.tx_state);    
 // ADD STATE STUFF
-//trace("Mux::on_timeout ", tx_context.retransmit_counter);     
-    switch (tx_context.tx_state) {
+//trace("Mux::on_timeout ", _tx_context.retransmit_counter);     
+    switch (_tx_context.tx_state) {
         case TX_RETRANSMIT_DONE:
-            if (tx_context.retransmit_counter != 0) {
-                --(tx_context.retransmit_counter);
+            if (_tx_context.retransmit_counter != 0) {
+                --(_tx_context.retransmit_counter);
                 frame_retransmit_begin();
                 tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
             } else {
                 /* Retransmission limit reachd, change state and release the suspended call thread with appropriate 
                    status code. */
-                state.is_request_timeout = 1;
+                _state.is_request_timeout = 1;
                 const osStatus os_status = _semaphore.release();
                 MBED_ASSERT(os_status == osOK);    
                 tx_state_change(TX_IDLE, NULL);
@@ -136,16 +136,16 @@ void Mux::on_timeout()
 
 void Mux::decoder_state_change(DecoderState new_state)
 {
-    rx_context.decoder_state = new_state;
+    _rx_context.decoder_state = new_state;
 }
 
 
 void Mux::decoder_state_sync_run()
 {
-//trace("decoder_state_sync_run: ", rx_context.buffer[rx_context.offset]);    
+//trace("decoder_state_sync_run: ", _rx_context.buffer[_rx_context.offset]);    
 
-    if (rx_context.buffer[rx_context.offset] == FLAG_SEQUENCE_OCTET) {
-        ++rx_context.offset;
+    if (_rx_context.buffer[_rx_context.offset] == FLAG_SEQUENCE_OCTET) {
+        ++_rx_context.offset;
         decoder_state_change(DECODER_STATE_DECODE);
     }
 }
@@ -153,9 +153,9 @@ void Mux::decoder_state_sync_run()
 
 bool Mux::is_rx_frame_valid()
 {
-//    trace("is_rx_frame_valid::rx_context.offset: ", rx_context.offset);    
+//    trace("is_rx_frame_valid::_rx_context.offset: ", _rx_context.offset);    
     
-    return (rx_context.offset >= 4) ? true : false;
+    return (_rx_context.offset >= 4) ? true : false;
 }
 
 
@@ -170,18 +170,18 @@ void Mux::ua_response_construct()
 {
 //trace("ua_response_construct: ", 0);        
 
-    frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::tx_context.buffer[0]));
+    frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::_tx_context.buffer[0]));
     
     frame_hdr->flag_seq       = FLAG_SEQUENCE_OCTET;
-    frame_hdr->address        = rx_context.buffer[1];
+    frame_hdr->address        = _rx_context.buffer[1];
     frame_hdr->control        = (FRAME_TYPE_UA | PF_BIT);    
-    frame_hdr->information[0] = fcs_calculate(&(Mux::tx_context.buffer[1]), FCS_INPUT_LEN);    
+    frame_hdr->information[0] = fcs_calculate(&(Mux::_tx_context.buffer[1]), FCS_INPUT_LEN);    
     (++frame_hdr)->flag_seq   = FLAG_SEQUENCE_OCTET;
     
     // @todo: make START_RESP_FRAME_LEN define
     
-    tx_context.bytes_remaining = UA_FRAME_LEN;
-    tx_context.offset          = 0;               
+    _tx_context.bytes_remaining = UA_FRAME_LEN;
+    _tx_context.offset          = 0;               
 }
 
 
@@ -191,19 +191,19 @@ void Mux::dm_response_construct()
     
     // @todo: combine common functionality with other response function.
     
-    frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::tx_context.buffer[0]));
+    frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::_tx_context.buffer[0]));
     
     frame_hdr->flag_seq       = FLAG_SEQUENCE_OCTET;
     /* As multiplexer is not open we allways invert the C/R bit from the request frame. NOT!!*/
-    frame_hdr->address        = rx_context.buffer[1] /*^ CR_BIT*/;
+    frame_hdr->address        = _rx_context.buffer[1] /*^ CR_BIT*/;
     frame_hdr->control        = (FRAME_TYPE_DM | PF_BIT);    
-    frame_hdr->information[0] = fcs_calculate(&(Mux::tx_context.buffer[1]), FCS_INPUT_LEN);    
+    frame_hdr->information[0] = fcs_calculate(&(Mux::_tx_context.buffer[1]), FCS_INPUT_LEN);    
     (++frame_hdr)->flag_seq   = FLAG_SEQUENCE_OCTET;
     
     // @todo: make XXX_FRAME_LEN define
     
-    tx_context.bytes_remaining = DM_FRAME_LEN;
-    tx_context.offset          = 0;               
+    _tx_context.bytes_remaining = DM_FRAME_LEN;
+    _tx_context.offset          = 0;               
 }
 
 
@@ -211,7 +211,7 @@ void Mux::on_rx_frame_sabm()
 {
     // @todo: assume mux START request internal state inprogress/pending only for now!
     
-    switch (tx_context.tx_state) {
+    switch (_tx_context.tx_state) {
         ssize_t return_code;
         uint8_t dlci_id;
         case TX_IDLE:
@@ -219,9 +219,9 @@ void Mux::on_rx_frame_sabm()
             
             // @todo: make decoder func for dlci_id;
             // @todo: verify dlci_id: not in use allready, use bitmap for it.
-            dlci_id = rx_context.buffer[1] >> 2;            
+            dlci_id = _rx_context.buffer[1] >> 2;            
             if ((dlci_id == 0) || 
-                ((dlci_id != 0) && state.is_multiplexer_open)) {
+                ((dlci_id != 0) && _state.is_multiplexer_open)) {
                 if (is_dlci_in_use(dlci_id)) {                                   
                     ua_response_construct();
                 } else {
@@ -249,7 +249,7 @@ void Mux::on_rx_frame_sabm()
             // @todo: assume mux START request internal state inprogress/pending only for now!
             break;
         default:
-            trace("rx_frame_sabm_do: ", tx_context.tx_state);    
+            trace("rx_frame_sabm_do: ", _tx_context.tx_state);    
             MBED_ASSERT(false);
             break;        
     }
@@ -260,10 +260,10 @@ void Mux::on_rx_frame_ua()
 {
     // @todo: verify that we have issued the start request
 
-    switch (tx_context.tx_state) {
+    switch (_tx_context.tx_state) {
         osStatus os_status;
         case TX_RETRANSMIT_DONE:
-            _event_q->cancel(tx_context.timer_id);
+            _event_q->cancel(_tx_context.timer_id);
             
             // @todo: need to verify correct call order for sm change and Semaphore release.
             tx_state_change(TX_IDLE, NULL);
@@ -274,11 +274,11 @@ void Mux::on_rx_frame_ua()
             // TC: 
             // - peer reject mux open
             // - reissue mux start without init in between
-            state.is_multiplexer_open = 1; 
-            state.is_initiator        = 1;
+            _state.is_multiplexer_open = 1; 
+            _state.is_initiator        = 1;
             break;
         default:
-            trace("rx_frame_ua_do: ", tx_context.tx_state);                
+            trace("rx_frame_ua_do: ", _tx_context.tx_state);                
             MBED_ASSERT(false);
             break;
     }
@@ -289,10 +289,10 @@ void Mux::on_rx_frame_dm()
 {
     // @todo: verify that we have issued the start request
 
-    switch (tx_context.tx_state) {
+    switch (_tx_context.tx_state) {
         osStatus os_status;
         case TX_RETRANSMIT_DONE:
-            _event_q->cancel(tx_context.timer_id);
+            _event_q->cancel(_tx_context.timer_id);
             
             // @todo: need to verify correct call order for sm change and Semaphore release.
             tx_state_change(TX_IDLE, NULL);
@@ -300,7 +300,7 @@ void Mux::on_rx_frame_dm()
             MBED_ASSERT(os_status == osOK);                           
             break;
         default:
-            trace("rx_frame_ua_do: ", tx_context.tx_state);                
+            trace("rx_frame_ua_do: ", _tx_context.tx_state);                
             MBED_ASSERT(false);
             break;
     }
@@ -321,7 +321,7 @@ void Mux::on_rx_frame_uih()
 
 void Mux::on_rx_frame_not_supported()
 {
-    trace("rx_frame_not_supported_do: ", rx_context.buffer[2]);        
+    trace("rx_frame_not_supported_do: ", _rx_context.buffer[2]);        
     
     MBED_ASSERT(false);    
 }
@@ -329,9 +329,9 @@ void Mux::on_rx_frame_not_supported()
 
 Mux::FrameRxType Mux::frame_rx_type_resolve()
 {
-//trace("frame_type_resolve ", rx_context.buffer[2]);    
+//trace("frame_type_resolve ", _rx_context.buffer[2]);    
 
-    const uint8_t frame_type = (rx_context.buffer[2] & ~PF_BIT);
+    const uint8_t frame_type = (_rx_context.buffer[2] & ~PF_BIT);
     
     if (frame_type == FRAME_TYPE_SABM) {
         return FRAME_RX_TYPE_SABM;
@@ -352,9 +352,9 @@ Mux::FrameRxType Mux::frame_rx_type_resolve()
 void Mux::valid_rx_frame_decode()
 { 
 #if 0    
-    trace("valid_rx_frame_decode: ", rx_context.offset);  
-    for (uint8_t i = 0; i != rx_context.offset; ++i) {
-        trace("DECODE BYTE:", rx_context.buffer[i]);
+    trace("valid_rx_frame_decode: ", _rx_context.offset);  
+    for (uint8_t i = 0; i != _rx_context.offset; ++i) {
+        trace("DECODE BYTE:", _rx_context.buffer[i]);
     }
 #endif // 0    
     
@@ -372,15 +372,15 @@ void Mux::valid_rx_frame_decode()
     rx_frame_decoder_func_t func      = decoder_func[frame_type];
     func();      
     
-    rx_context.offset = 1;    
+    _rx_context.offset = 1;    
 }
 
 
 void Mux::decoder_state_decode_run()
 {
-//trace("decoder_state_decode_run: ", rx_context.buffer[rx_context.offset]);
+//trace("decoder_state_decode_run: ", _rx_context.buffer[_rx_context.offset]);
     
-    const uint8_t current_byte = rx_context.buffer[rx_context.offset];
+    const uint8_t current_byte = _rx_context.buffer[_rx_context.offset];
        
     if (current_byte != CONTROL_ESCAPE_OCTET) {            
         if (current_byte == FLAG_SEQUENCE_OCTET) {
@@ -391,12 +391,12 @@ void Mux::decoder_state_decode_run()
                     valid_rx_frame_decode();
                 }                
             } else {
-                trace("rx_context.offset: ", rx_context.offset);    
+                trace("_rx_context.offset: ", _rx_context.offset);    
                 MBED_ASSERT(false); // // @todo invalid frame: ASSERT for now               
             }            
         } else {
-            ++rx_context.offset;
-            if (rx_context.offset == sizeof(rx_context.buffer)) {           
+            ++_rx_context.offset;
+            if (_rx_context.offset == sizeof(_rx_context.buffer)) {           
                 MBED_ASSERT(false); // @todo overflow: ASSERT for now            
             }                       
         }                     
@@ -414,16 +414,16 @@ void Mux::decode_do()
         decoder_state_decode_run
     };
     
-    decoder_func_t func = decoder_func[rx_context.decoder_state];
+    decoder_func_t func = decoder_func[_rx_context.decoder_state];
     func();   
 }
 
 
 void Mux::read_do()
 {
-//trace("read_do::rx_context.offset: ", rx_context.offset);    
+//trace("read_do::_rx_context.offset: ", _rx_context.offset);    
     
-    const ssize_t ret = _serial->read(&(rx_context.buffer[rx_context.offset]), READ_LEN);       
+    const ssize_t ret = _serial->read(&(_rx_context.buffer[_rx_context.offset]), READ_LEN);       
     MBED_ASSERT((ret == 1) || (ret < 0));
     decode_do();
 }
@@ -431,9 +431,9 @@ void Mux::read_do()
 
 void Mux::tx_state_change(TxState new_state, tx_state_entry_func_t entry_func)
 {
-    tx_context.tx_state = new_state;
+    _tx_context.tx_state = new_state;
     
-//    trace("tx_state_change: ", tx_context.tx_state);
+//    trace("tx_state_change: ", _tx_context.tx_state);
     
     if (entry_func != NULL) {
         entry_func();
@@ -443,16 +443,16 @@ void Mux::tx_state_change(TxState new_state, tx_state_entry_func_t entry_func)
 
 void Mux::tx_retransmit_done_entry_run()
 {
-    tx_context.timer_id = _event_q->call_in(T1_TIMER_VALUE, Mux::on_timeout);
-    MBED_ASSERT(tx_context.timer_id != 0);                
+    _tx_context.timer_id = _event_q->call_in(T1_TIMER_VALUE, Mux::on_timeout);
+    MBED_ASSERT(_tx_context.timer_id != 0);                
 }
  
 
 bool Mux::is_dlci_in_use(uint8_t dlci_id)
 {  
-    const uint8_t end = sizeof(mux_objects) / sizeof(mux_objects[0]);
+    const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);
     for (uint8_t i = 0; i != end; ++i) {   
-        if (mux_objects[i].dlci == dlci_id) {
+        if (_mux_objects[i].dlci == dlci_id) {
             return true;
         }        
     }
@@ -463,13 +463,13 @@ bool Mux::is_dlci_in_use(uint8_t dlci_id)
 
 void Mux::on_post_tx_frame_sabm()
 {
-    switch (tx_context.tx_state) {
+    switch (_tx_context.tx_state) {
         case TX_RETRANSMIT_ENQUEUE:
             tx_state_change(TX_RETRANSMIT_DONE, tx_retransmit_done_entry_run);
             break;
         default:
             /* Code that should never be reached. */
-            trace("tx_context.tx_state", tx_context.tx_state);                       
+            trace("_tx_context.tx_state", _tx_context.tx_state);                       
             MBED_ASSERT(false);
             break;
     }       
@@ -478,13 +478,13 @@ void Mux::on_post_tx_frame_sabm()
 
 void Mux::on_post_tx_frame_ua()
 {
-    switch (tx_context.tx_state) {
+    switch (_tx_context.tx_state) {
         case TX_INTERNAL_RESP:
-            if (!state.is_multiplexer_open) {
-                state.is_multiplexer_open = 1;
+            if (!_state.is_multiplexer_open) {
+                _state.is_multiplexer_open = 1;
                 _mux_obj_cb->on_mux_start();                
             } else {
-                const uint8_t dlci_id = (tx_context.buffer[1] >> 2);
+                const uint8_t dlci_id = (_tx_context.buffer[1] >> 2);
                 if (!is_dlci_in_use(dlci_id)) {
                     dlci_id_append(dlci_id);
                     _mux_obj_cb->on_dlci_establish(NULL, 0);                    
@@ -495,7 +495,7 @@ void Mux::on_post_tx_frame_ua()
             break;
         default:
             /* Code that should never be reached. */
-            trace("tx_context.tx_state", tx_context.tx_state);                       
+            trace("_tx_context.tx_state", _tx_context.tx_state);                       
             MBED_ASSERT(false);
             break;
     }       
@@ -504,13 +504,13 @@ void Mux::on_post_tx_frame_ua()
 
 void Mux::on_post_tx_frame_dm()
 {
-    switch (tx_context.tx_state) {
+    switch (_tx_context.tx_state) {
         case TX_INTERNAL_RESP:   
             tx_state_change(TX_IDLE, NULL);            
             break;
         default:
             /* Code that should never be reached. */
-            trace("tx_context.tx_state", tx_context.tx_state);                       
+            trace("_tx_context.tx_state", _tx_context.tx_state);                       
             MBED_ASSERT(false);
             break;
     }                   
@@ -525,7 +525,7 @@ void Mux::on_post_tx_frame_uih()
 
 Mux::FrameTxType Mux::frame_tx_type_resolve()
 {
-    const uint8_t frame_type = (tx_context.buffer[2] & ~PF_BIT);
+    const uint8_t frame_type = (_tx_context.buffer[2] & ~PF_BIT);
     
     if (frame_type == FRAME_TYPE_SABM) {
         return FRAME_TX_TYPE_SABM;
@@ -551,9 +551,9 @@ void Mux::on_deferred_call()
         /* Continue the write sequence if feasible. */
         const ssize_t write_ret = write_do();
 //trace("write_ret", write_ret);
-//trace("bytes_remaining", tx_context.bytes_remaining);        
+//trace("bytes_remaining", _tx_context.bytes_remaining);        
         if (write_ret >= 0) {
-            if (tx_context.bytes_remaining == 0) {
+            if (_tx_context.bytes_remaining == 0) {
                 typedef void (*post_tx_frame_func_t)();   
                 static const post_tx_frame_func_t post_tx_func[FRAME_TX_TYPE_MAX] = {
                     on_post_tx_frame_sabm,
@@ -612,7 +612,7 @@ uint8_t Mux::fcs_calculate(const uint8_t *buffer,  uint8_t input_len)
     uint8_t fcs = 0xFFu;
 
     while (input_len-- != 0) {
-        fcs = crctable[fcs^*buffer++];
+        fcs = _crctable[fcs^*buffer++];
     }
     
     /* Ones complement. */
@@ -626,37 +626,37 @@ uint8_t Mux::fcs_calculate(const uint8_t *buffer,  uint8_t input_len)
 
 void Mux::sabm_request_construct(uint8_t dlci_id)
 {
-    frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::tx_context.buffer[0]));
+    frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::_tx_context.buffer[0]));
     
     frame_hdr->flag_seq = FLAG_SEQUENCE_OCTET;
     if (dlci_id == 0) {
         frame_hdr->address = 3 | (dlci_id << 2);                  
     } else {
-        frame_hdr->address = (state.is_initiator ? 3 : 1) | (dlci_id << 2);                  
+        frame_hdr->address = (_state.is_initiator ? 3 : 1) | (dlci_id << 2);                  
     }
     frame_hdr->control        = (FRAME_TYPE_SABM | PF_BIT);            
-    frame_hdr->information[0] = fcs_calculate(&(Mux::tx_context.buffer[1]), FCS_INPUT_LEN);    
+    frame_hdr->information[0] = fcs_calculate(&(Mux::_tx_context.buffer[1]), FCS_INPUT_LEN);    
     (++frame_hdr)->flag_seq   = FLAG_SEQUENCE_OCTET;
     
-    tx_context.bytes_remaining = SABM_FRAME_LEN;
-    tx_context.offset          = 0;                
+    _tx_context.bytes_remaining = SABM_FRAME_LEN;
+    _tx_context.offset          = 0;                
 }
 
 
 uint8_t Mux::encode_do()
 {
     uint8_t       encoded_byte;
-    const uint8_t current_byte = tx_context.buffer[tx_context.offset];
+    const uint8_t current_byte = _tx_context.buffer[_tx_context.offset];
     
     /* Encoding done only between the opening and closing flag. */
-    if ((tx_context.offset != 0) && (tx_context.bytes_remaining != 1)) {
+    if ((_tx_context.offset != 0) && (_tx_context.bytes_remaining != 1)) {
         if ((current_byte != FLAG_SEQUENCE_OCTET) && (current_byte != CONTROL_ESCAPE_OCTET)) {
             encoded_byte = current_byte;
         } else {
             MBED_ASSERT(false); // @todo ASSERT for now
             
-            tx_context.buffer[tx_context.offset] ^= (1 << 5);
-            encoded_byte                          = CONTROL_ESCAPE_OCTET;
+            _tx_context.buffer[_tx_context.offset] ^= (1 << 5);
+            encoded_byte                            = CONTROL_ESCAPE_OCTET;
         }
     } else {
         encoded_byte = current_byte;
@@ -670,16 +670,16 @@ ssize_t Mux::write_do()
 {
     ssize_t write_ret = 0;
     
-    if (tx_context.bytes_remaining != 0) {
+    if (_tx_context.bytes_remaining != 0) {
         const uint8_t encoded_byte = encode_do();
         
-//trace("WRITE: ", tx_context.offset);
+//trace("WRITE: ", _tx_context.offset);
         
         write_ret                  = _serial->write(&encoded_byte, WRITE_LEN);   
         MBED_ASSERT((write_ret == 1) || (write_ret < 0)); // @todo: FIX ME: can also return 0 if called from on_timeout
         if (write_ret == 1) {
-            --(tx_context.bytes_remaining);
-            ++(tx_context.offset);
+            --(_tx_context.bytes_remaining);
+            ++(_tx_context.offset);
         } 
     }
     
@@ -690,7 +690,7 @@ ssize_t Mux::write_do()
 Mux::MuxEstablishStatus Mux::mux_start_response_decode()
 {
     Mux::MuxEstablishStatus status;
-    const frame_hdr_t      *frame = reinterpret_cast<const frame_hdr_t*>(&(rx_context.buffer[0]));
+    const frame_hdr_t      *frame = reinterpret_cast<const frame_hdr_t*>(&(_rx_context.buffer[0]));
     
     switch (frame->control) {
         case (FRAME_TYPE_UA | PF_BIT):
@@ -712,11 +712,11 @@ ssize_t Mux::mux_start(Mux::MuxEstablishStatus &status)
 {
     ssize_t return_code;
     
-    if (state.is_multiplexer_open) {
+    if (_state.is_multiplexer_open) {
         return 0;
     }
    
-    switch (tx_context.tx_state) {
+    switch (_tx_context.tx_state) {
         case TX_IDLE:
             /* Construct the frame, start the tx sequence 1-byte at time, reset relevant state contexts and suspend 
                the call thread. */           
@@ -726,13 +726,13 @@ ssize_t Mux::mux_start(Mux::MuxEstablishStatus &status)
             if (return_code > 0) {
                 return_code = 2;
                 tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
-                state.is_request_timeout      = 0;    
-                tx_context.retransmit_counter = RETRANSMIT_COUNT;
+                _state.is_request_timeout      = 0;    
+                _tx_context.retransmit_counter = RETRANSMIT_COUNT;
                 const int ret_wait = _semaphore.wait();
                 MBED_ASSERT(ret_wait == 1);                
                 /* Decode response frame from the rx buffer in order to set the correct status code if no request
                  * timeout occurred. */ 
-                if (!state.is_request_timeout) {
+                if (!_state.is_request_timeout) {
                     status = mux_start_response_decode();
                 } else {
                     status = MUX_ESTABLISH_TIMEOUT;
@@ -756,9 +756,9 @@ Mux::MuxEstablishStatus Mux::dlci_establish_response_decode()
 
 bool Mux::is_dlci_q_full()
 {
-    const uint8_t end = sizeof(mux_objects) / sizeof(mux_objects[0]);
+    const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);
     for (uint8_t i = 0; i != end; ++i) {  
-        if (mux_objects[i].dlci == MUX_DLCI_INVALID_ID) {     
+        if (_mux_objects[i].dlci == MUX_DLCI_INVALID_ID) {     
             return false;
         }
     }
@@ -772,11 +772,11 @@ bool Mux::is_dlci_append_ok(uint8_t dlci_id)
 {
     /* Check is supplied DLCI id, and all available DLCI resources, allready in use. */ 
     bool is_free_slot = false;
-    for (uint8_t i = 0; i != sizeof(mux_objects) / sizeof(mux_objects[0]); ++i) {
-        if (mux_objects[i].dlci == dlci_id) {
+    for (uint8_t i = 0; i != sizeof(_mux_objects) / sizeof(_mux_objects[0]); ++i) {
+        if (_mux_objects[i].dlci == dlci_id) {
             return true;
         }
-        if (mux_objects[i].dlci == MUX_DLCI_INVALID_ID) {
+        if (_mux_objects[i].dlci == MUX_DLCI_INVALID_ID) {
             is_free_slot = true;
         }
     }
@@ -788,11 +788,11 @@ bool Mux::is_dlci_append_ok(uint8_t dlci_id)
 FileHandle * Mux::dlci_id_append(uint8_t dlci_id)
 {
     FileHandle *obj = NULL;
-    const uint8_t end = sizeof(mux_objects) / sizeof(mux_objects[0]);
+    const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);
     for (uint8_t i = 0; i != end; ++i) {   
-        if (mux_objects[i].dlci == MUX_DLCI_INVALID_ID) {
-            mux_objects[i].dlci = dlci_id;
-            obj                 = &(mux_objects[i]);
+        if (_mux_objects[i].dlci == MUX_DLCI_INVALID_ID) {
+            _mux_objects[i].dlci = dlci_id;
+            obj                 = &(_mux_objects[i]);
             break;
         }
     }
@@ -808,14 +808,14 @@ ssize_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHan
     if ((dlci_id < DLCI_ID_LOWER_BOUND) || (dlci_id > DLCI_ID_UPPER_BOUND)) {
         return 2;
     }
-    if (!state.is_multiplexer_open) {
+    if (!_state.is_multiplexer_open) {
         return 1;
     }
     if (is_dlci_append_ok(dlci_id)) {
         return 0;
     }
     
-    switch (tx_context.tx_state) {
+    switch (_tx_context.tx_state) {
         case TX_IDLE:                
             /* Construct the frame, start the tx sequence 1-byte at time, reset relevant state contexts and suspend 
                the call thread. */                        
@@ -827,13 +827,13 @@ ssize_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHan
             if (return_code > 0) {            
                 return_code = 3;
                 tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
-                state.is_request_timeout      = 0;    
-                tx_context.retransmit_counter = RETRANSMIT_COUNT;
+                _state.is_request_timeout      = 0;    
+                _tx_context.retransmit_counter = RETRANSMIT_COUNT;
                 const int ret_wait = _semaphore.wait();
                 MBED_ASSERT(ret_wait == 1);
                 /* Decode response frame from the rx buffer in order to set the correct status code if no request 
                    timeout occurred. */
-                if (!state.is_request_timeout) {
+                if (!_state.is_request_timeout) {
                     status = dlci_establish_response_decode();   
                     if (status == MUX_ESTABLISH_SUCCESS) {
                         *obj = dlci_id_append(dlci_id);

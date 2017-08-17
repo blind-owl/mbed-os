@@ -451,12 +451,12 @@ private:
     static EventQueueMock  *_event_q;                               /* Event queue used. */  
 //    static rtos::Semaphore  _semaphore;                             /* Semaphore. */
     static SemaphoreMock    _semaphore;
-    static MuxDataService   mux_objects[MBED_CONF_MUX_DLCI_COUNT];  /* Number of supported DLCIs (multiplexer 
+    static MuxDataService   _mux_objects[MBED_CONF_MUX_DLCI_COUNT]; /* Number of supported DLCIs (multiplexer 
                                                                        object pool) is fixed at compile time. */
-    static tx_context_t     tx_context;                             /* Tx context. */
-    static rx_context_t     rx_context;                             /* Rx context. */    
-    static state_t          state;
-    static const uint8_t    crctable[MUX_CRC_TABLE_LEN];            /* CRC table used for frame FCS. */
+    static tx_context_t     _tx_context;                            /* Tx context. */
+    static rx_context_t     _rx_context;                            /* Rx context. */    
+    static state_t          _state;                                 /* General state context. */
+    static const uint8_t    _crctable[MUX_CRC_TABLE_LEN];           /* CRC table used for frame FCS. */
 };
 
 
