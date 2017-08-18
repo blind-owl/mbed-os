@@ -2044,11 +2044,20 @@ TEST(MultiplexerOpenTestGroup, mux_open_simultaneous_peer_iniated)
         FLAG_SEQUENCE_OCTET
     };
 
+    /* Generate peer iniated establishment and trigger TX of 1st response byte. */
     dlci_establish_peer_iniated_rx(&(read_byte[0]), sizeof(read_byte), &(write_byte[0]));    
     
+    /* Start while peer iniated is in progress. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
     const int ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(ret, 1);
+    
+    /* Complete the existing peer iniated establishent cycle. */
+    const bool expected_mux_start_event_state = true;    
+    dlci_establish_peer_iniated_tx(&(write_byte[1]), 
+                                   (sizeof(write_byte) - sizeof(write_byte[0])),
+                                   expected_mux_start_event_state,
+                                   MuxClient::is_mux_start_triggered);      
 }
 
 
