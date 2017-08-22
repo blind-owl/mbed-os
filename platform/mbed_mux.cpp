@@ -77,9 +77,10 @@ extern void trace(char *string, int data);
 
 void Mux::module_init()
 {
-    _state.is_multiplexer_open = 0;
-    _state.is_request_timeout  = 0;
-    _state.is_initiator        = 0;
+    _state.is_multiplexer_open              = 0;
+    _state.is_request_timeout               = 0;
+    _state.is_initiator                     = 0;
+    _state.is_mux_open_self_iniated_pending = 0;
    
     _rx_context.offset        = 0;
     _rx_context.decoder_state = DECODER_STATE_SYNC;    
@@ -309,7 +310,31 @@ void Mux::on_rx_frame_dm()
 
 void Mux::on_rx_frame_disc()
 {
-    MBED_ASSERT(false);        
+    if (!_state.is_multiplexer_open) {
+        switch (_tx_context.tx_state) {
+            ssize_t return_code;
+            case TX_IDLE:
+                dm_response_construct();
+                
+                return_code = write_do();    
+                MBED_ASSERT(return_code != 0);
+                if (return_code > 0) {
+                    tx_state_change(TX_INTERNAL_RESP, NULL);
+                } else {
+                    // @todo: propagate write error to user.
+                    MBED_ASSERT(false);
+                }                
+                break;
+            default:
+                /* @todo: implement missing functionality. we might get a new trigger while DM response is in progress*/
+                trace("_tx_context.tx_state: ", _tx_context.tx_state);                
+                MBED_ASSERT(false);        
+                break;
+        }
+    } else {
+        /* @todo: implement missing functionality. */
+        MBED_ASSERT(false);        
+    }
 }
 
 
@@ -502,11 +527,31 @@ void Mux::on_post_tx_frame_ua()
 }
 
 
+//  @todo: check that all tx_idle transits call this function. */
+void Mux::tx_idle_entry_run()
+{
+    if (_state.is_mux_open_self_iniated_pending) {
+        /* Construct the frame, start the tx sequence 1-byte at time, reset relevant state contexts. */               
+        _state.is_mux_open_self_iniated_pending = 0;
+        sabm_request_construct(0);
+        const ssize_t return_code = write_do();  
+        if (return_code >= 0) {        
+            tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);        
+            _state.is_request_timeout      = 0;   
+            _tx_context.retransmit_counter = RETRANSMIT_COUNT;                
+        } else {
+            // @todo: propagate error event to user and remove assert. */
+            MBED_ASSERT(false);
+        }
+    }
+}
+ 
+ 
 void Mux::on_post_tx_frame_dm()
 {
     switch (_tx_context.tx_state) {
         case TX_INTERNAL_RESP:   
-            tx_state_change(TX_IDLE, NULL);            
+            tx_state_change(TX_IDLE, tx_idle_entry_run);           
             break;
         default:
             /* Code that should never be reached. */
@@ -536,6 +581,7 @@ Mux::FrameTxType Mux::frame_tx_type_resolve()
     } else if (frame_type == FRAME_TYPE_UIH) {
         return FRAME_TX_TYPE_UIH;
     } else {
+        trace("frame_type: ", frame_type);                               
         MBED_ASSERT(false);
         return FRAME_TX_TYPE_MAX;
     }
@@ -675,7 +721,7 @@ ssize_t Mux::write_do()
         
 //trace("WRITE: ", _tx_context.offset);
         
-        write_ret                  = _serial->write(&encoded_byte, WRITE_LEN);   
+        write_ret = _serial->write(&encoded_byte, WRITE_LEN);   
         MBED_ASSERT((write_ret == 1) || (write_ret < 0)); // @todo: FIX ME: can also return 0 if called from on_timeout
         if (write_ret == 1) {
             --(_tx_context.bytes_remaining);
@@ -700,6 +746,7 @@ Mux::MuxEstablishStatus Mux::mux_start_response_decode()
             status = MUX_ESTABLISH_REJECT;
             break;
         default:
+            // @todo: need to specify new return value for this.
             MBED_ASSERT(false);
             break;
     }
@@ -710,13 +757,18 @@ Mux::MuxEstablishStatus Mux::mux_start_response_decode()
 
 ssize_t Mux::mux_start(Mux::MuxEstablishStatus &status)
 {
+// @todo: add mutex_lock
+    
     ssize_t return_code;
     
     if (_state.is_multiplexer_open) {
+// @todo: add mutex_free        
         return 0;
     }
    
     switch (_tx_context.tx_state) {
+        Mux::FrameTxType tx_frame_type;
+        int              ret_wait;
         case TX_IDLE:
             /* Construct the frame, start the tx sequence 1-byte at time, reset relevant state contexts and suspend 
                the call thread. */           
@@ -728,7 +780,10 @@ ssize_t Mux::mux_start(Mux::MuxEstablishStatus &status)
                 tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
                 _state.is_request_timeout      = 0;    
                 _tx_context.retransmit_counter = RETRANSMIT_COUNT;
-                const int ret_wait = _semaphore.wait();
+                
+// @todo: add mutex_free
+                
+                ret_wait = _semaphore.wait();
                 MBED_ASSERT(ret_wait == 1);                
                 /* Decode response frame from the rx buffer in order to set the correct status code if no request
                  * timeout occurred. */ 
@@ -740,13 +795,34 @@ ssize_t Mux::mux_start(Mux::MuxEstablishStatus &status)
             }                                     
             break;
         case TX_INTERNAL_RESP:
-            return_code = 1; // @todo: we could be generating a DM now: TC needed
+            tx_frame_type = frame_tx_type_resolve();
+            if (tx_frame_type == FRAME_TX_TYPE_UA) {
+                return_code = 1;
+            } else {               
+                _state.is_mux_open_self_iniated_pending = 1u;
+// @todo: add mutex_free                
+                ret_wait = _semaphore.wait();
+//                trace("!!ret_wait", ret_wait);
+                MBED_ASSERT(ret_wait == 1);  
+                
+                // @todo: we should have better handling for return code as write can fail.*/
+                
+                return_code = 2; 
+                /* Decode response frame from the rx buffer in order to set the correct status code if no request
+                 * timeout occurred. */ 
+                if (!_state.is_request_timeout) {
+                    status = mux_start_response_decode();
+                } else {
+                    status = MUX_ESTABLISH_TIMEOUT;
+                }                            
+            }           
             break;
         default:
             MBED_ASSERT(false);
             break;
     };
     
+// @todo: add mutex_free    
     return return_code;   
 }
 

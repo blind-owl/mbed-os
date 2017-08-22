@@ -43,9 +43,20 @@ typedef struct
     char             name[NAME_LEN];
 } mock_t; 
 
+/* Below ones to be called only outside the mock object. */
 void mock_init(void);
 void mock_verify(void);
-mock_t * mock_open(const char *name);
 mock_t * mock_free_get(const char *name);
+
+/* Below ones to be called only within the mock object. */
+
+typedef enum 
+{
+    MockInvalidateTypeYes = 0,
+    MockInvalidateTypeNo,
+    MockInvalidateTypeMax
+} MockInvalidateType;        
+mock_t * mock_open(const char *name, MockInvalidateType type);
+void mock_invalidate(const char *name);
 
 #endif

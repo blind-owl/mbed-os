@@ -384,10 +384,9 @@ private:
     static void frame_retransmit_begin();
     
     /** State entry function. */
-    static void tx_retransmit_done_entry_run();    
-   
-    typedef void (*tx_state_entry_func_t)();    
-    
+    static void tx_retransmit_done_entry_run();  
+    static void tx_idle_entry_run();   
+    typedef void (*tx_state_entry_func_t)();       
     /** Change frame decoder state machine state. 
      * 
      *  @param new_state    State to transit.
@@ -441,9 +440,15 @@ private:
     /* Definition for state type. */
     typedef struct
     {
-        uint8_t is_multiplexer_open : 1;    /* True when multiplexer is open. */        
-        uint8_t is_request_timeout : 1;     /* True when request timeout has occurred. */
-        uint8_t is_initiator : 1;           /* True when role is initiator. */
+        uint8_t is_multiplexer_open : 1;        /* True when multiplexer is open. */        
+        uint8_t is_request_timeout : 1;         /* True when request timeout has occurred. */
+        uint8_t is_initiator : 1;               /* True when role is initiator. */
+        uint8_t is_mux_open_self_iniated_pending : 1;
+#if 0        
+        uint8_t is_dlci_establish_pending : 1;  /* True if @ref mux_start or @ref dlci_establish is pending. */
+        uint8_t is_user_tx_pending : 1;         /* True if user TX request is pending. */
+        uint8_t is_internal_tx_pending : 1;     /* True if internal TX response is pending. */
+#endif //         
     } state_t;
     
     static FileHandle      *_serial;                                /* Serial used. */        

@@ -289,7 +289,7 @@ void mux_start_self_iniated_rx(const uint8_t *rx_buf, uint8_t rx_buf_len)
 /* Multiplexer semaphore wait call from self initiated multiplexer open TC(s). */
 void mux_start_self_initated_sem_wait(const void *context)
 {
-    const uint8_t read_byte[] = 
+    const uint8_t read_byte[5] = 
     {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_RESP_OCTET, 
@@ -930,19 +930,19 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_rejected_by_peer)
 
 
 /*
- * LOOP UNTIL COMPLETE DLCI ESTABLISH REQUEST FRAME READ DONE
+ * LOOP UNTIL COMPLETE FRAME READ DONE
  * - trigger sigio callback from FileHandleMock
  * - enqueue deferred call to EventQueue
  * - CALL RETURN 
  * - trigger deferred call from EventQueueMock
  * - call poll
  * - call read
- * - begin start response frame sequence in the last iteration
+ * - begin start response frame sequence in the last iteration if parameter supplied
  * - CALL RETURN 
  */
-static void dlci_establish_peer_iniated_rx(const uint8_t *rx_buf, uint8_t rx_buf_len, const uint8_t *write_byte)
+static void peer_iniated_rx(const uint8_t *rx_buf, uint8_t rx_buf_len, const uint8_t *write_byte)
 {    
-    /* read the complete start request frame. */
+    /* read the complete frame. */
     uint8_t                                  rx_count      = 0;      
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
     const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};    
@@ -971,7 +971,7 @@ static void dlci_establish_peer_iniated_rx(const uint8_t *rx_buf, uint8_t rx_buf
         if (write_byte != NULL)  {
             if (rx_count == (rx_buf_len - 1)) {
                 
-                /* Start request frame read sequence gets completed, now begin the start response frame sequence. */   
+                /* RX frame gets completed start the frame TX sequence. */   
                 
                 mock_t * mock_write = mock_free_get("write");
                 CHECK(mock_write != NULL); 
@@ -1049,7 +1049,7 @@ void dlci_establish_peer_iniated_tx(const uint8_t *buf,
         ++tx_count;        
     } while (tx_count != buf_len);    
 }
-
+// 
 
 /* Do successfull multiplexer peer iniated open.*/
 void mux_peer_iniated_open(const uint8_t *rx_buf, uint8_t rx_buf_len, bool expected_mux_start_event_state)
@@ -1063,7 +1063,7 @@ void mux_peer_iniated_open(const uint8_t *rx_buf, uint8_t rx_buf_len, bool expec
         FLAG_SEQUENCE_OCTET
     };
 
-    dlci_establish_peer_iniated_rx(&(rx_buf[0]), rx_buf_len, &(write_byte[0]));
+    peer_iniated_rx(&(rx_buf[0]), rx_buf_len, &(write_byte[0]));
     dlci_establish_peer_iniated_tx(&(write_byte[1]), 
                                    (sizeof(write_byte) - sizeof(write_byte[0])),
                                    expected_mux_start_event_state,
@@ -1410,7 +1410,7 @@ void dlci_peer_iniated_establish_accept(Role           role,
         FLAG_SEQUENCE_OCTET
     };
 
-    dlci_establish_peer_iniated_rx(&(rx_buf[0]), rx_buf_len, &(write_byte[0]));
+    peer_iniated_rx(&(rx_buf[0]), rx_buf_len, &(write_byte[0]));
     dlci_establish_peer_iniated_tx(&(write_byte[1]), 
                                    (sizeof(write_byte) - sizeof(write_byte[0])),
                                    expected_dlci_establishment_event_state,
@@ -1521,7 +1521,7 @@ void dlci_peer_iniated_establish_reject(uint8_t        address_field,
         FLAG_SEQUENCE_OCTET
     };
 
-    dlci_establish_peer_iniated_rx(&(rx_buf[0]), rx_buf_len, &(write_byte[0]));
+    peer_iniated_rx(&(rx_buf[0]), rx_buf_len, &(write_byte[0]));
     const bool expected_dlci_establishment_event_state = false;
     dlci_establish_peer_iniated_tx(&(write_byte[1]), 
                                    (sizeof(write_byte) - sizeof(write_byte[0])),
@@ -1869,7 +1869,7 @@ void mux_open_simultaneous_self_iniated_sem_wait(const void *context)
         FLAG_SEQUENCE_OCTET
     };
     
-    dlci_establish_peer_iniated_rx(&(read_byte[0]), sizeof(read_byte), NULL);    
+    peer_iniated_rx(&(read_byte[0]), sizeof(read_byte), NULL);    
     
     /* Generate the remaining part of the mux START request. */
     mux_start_self_iniated_tx();
@@ -1949,7 +1949,7 @@ void mux_open_simultaneous_self_iniated_full_frame_sem_wait(const void *context)
         FLAG_SEQUENCE_OCTET
     };
        
-    dlci_establish_peer_iniated_rx(&(read_byte[0]), sizeof(read_byte), NULL);    
+    peer_iniated_rx(&(read_byte[0]), sizeof(read_byte), NULL);    
    
     /* Generate peer mux START response, which is accepted by the implementation. */
     const uint8_t read_byte_2[4] = 
@@ -2045,7 +2045,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_simultaneous_peer_iniated)
     };
 
     /* Generate peer iniated establishment and trigger TX of 1st response byte. */
-    dlci_establish_peer_iniated_rx(&(read_byte[0]), sizeof(read_byte), &(write_byte[0]));    
+    peer_iniated_rx(&(read_byte[0]), sizeof(read_byte), &(write_byte[0]));    
     
     /* Start while peer iniated is in progress. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
@@ -2061,11 +2061,124 @@ TEST(MultiplexerOpenTestGroup, mux_open_simultaneous_peer_iniated)
 }
 
 
+/* Multiplexer semaphore wait call from mux_open_self_iniated_dm_tx_in_progress TC. */
+void mux_start_self_initated_tx_in_progress(const void *context)
+{
+    const uint8_t *dlci_id = static_cast<const uint8_t*>(context);
+   
+    const uint8_t write_byte[4] = 
+    {
+        3u | (*dlci_id << 2),
+        (FRAME_TYPE_DM | PF_BIT),        
+        fcs_calculate(&write_byte[0], 2),
+        FLAG_SEQUENCE_OCTET
+    };    
+
+    /* write the remainder of the DM frame. */
+    uint8_t                                  tx_count      = 0;           
+    const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};    
+    const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};
+    do {   
+        /* Enqueue deferred call to EventQueue. 
+         * Trigger sigio callback with POLLOUT event from the Filehandle used by the Mux (component under test). */
+        mock_t * mock_call = mock_free_get("call");
+        CHECK(mock_call != NULL);           
+        mock_call->return_value = 1;
+        
+        mbed::FileHandleMock::io_control(io_control);
+
+        /* Trigger deferred call from EventQueue.
+         * Continue with the frame write sequence. */
+        mock_t * mock_poll      = mock_free_get("poll");    
+        CHECK(mock_poll != NULL);         
+        mock_poll->return_value = POLLOUT;
+        mock_t * mock_write     = mock_free_get("write");
+        CHECK(mock_write != NULL); 
+        
+        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->input_param[0].param        = (uint32_t)&(write_byte[tx_count]);               
+        mock_write->input_param[1].param        = WRITE_LEN;
+        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->return_value                = 1;        
+        
+        /* DM response will get completed,
+         *  - TX 1st byte of mux start-up establishment */
+            if (tx_count == (sizeof(write_byte) - 1)) {
+                mock_t * mock_write = mock_free_get("write");
+                CHECK(mock_write != NULL);                 
+                const uint8_t new_write_byte            = FLAG_SEQUENCE_OCTET;
+                mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+                mock_write->input_param[0].param        = (uint32_t)&new_write_byte;                       
+                mock_write->input_param[1].param        = WRITE_LEN;
+                mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+                mock_write->return_value                = 1;           
+            }
+        
+        mbed::EventQueueMock::io_control(eq_io_control);   
+        
+        ++tx_count;        
+    } while (tx_count != sizeof(write_byte)); 
+    
+    /* DM response completed, complete the mux start-up establishent. */
+    const uint8_t read_byte[4] = 
+    {
+        ADDRESS_MUX_START_RESP_OCTET, 
+        (FRAME_TYPE_UA | PF_BIT), 
+        fcs_calculate(&read_byte[0], 2),
+        FLAG_SEQUENCE_OCTET
+    };
+    
+    mux_start_self_iniated_tx();
+    mux_start_self_iniated_rx(&(read_byte[0]), sizeof(read_byte));
+}
+
+
 /*
+ * TC - mux start-up sequence, self initiated with delay as DM frame TX is in progress: 
+ * - peer sends a DISC command to DLCI 0 
+ * - send 1st byte of DM response 
+ * - issue mux open, will be put pending until ongoing DM response gets completed.
+ * - DM response gets completed
+ * - complete mux start-up establishment.
  */
 TEST(MultiplexerOpenTestGroup, mux_open_self_iniated_dm_tx_in_progress)
 {
-// @todo:
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+  
+    const uint8_t dlci_id      = 0;
+    const uint8_t read_byte[5] = 
+    {
+        FLAG_SEQUENCE_OCTET,        
+        /* Peer assumes the role of initiator. */
+        3u | (dlci_id << 2),
+        (FRAME_TYPE_DISC | PF_BIT), 
+        fcs_calculate(&read_byte[1], 2),
+        FLAG_SEQUENCE_OCTET
+    };           
+
+    /* Generate DISC from peer and trigger TX of 1st response byte of DM. */        
+    const uint8_t write_byte = FLAG_SEQUENCE_OCTET;
+    peer_iniated_rx(&(read_byte[0]), sizeof(read_byte), &write_byte);
+    
+    /* Issue multiplexer start while DM is in progress. */
+    mock_t * mock_wait = mock_free_get("wait");
+    CHECK(mock_wait != NULL);
+    mock_wait->return_value = 1;
+    mock_wait->func         = mux_start_self_initated_tx_in_progress;    
+    mock_wait->func_context = dlci_id;
+    
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
+    const int ret = mbed::Mux::mux_start(status);
+    CHECK_EQUAL(2, ret);
+    CHECK_EQUAL(Mux::MUX_ESTABLISH_SUCCESS, status);
 }
 
 

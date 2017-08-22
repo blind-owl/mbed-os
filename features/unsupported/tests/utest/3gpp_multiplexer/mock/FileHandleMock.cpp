@@ -24,7 +24,7 @@ void FileHandleMock::io_control(const io_control_t &control)
 
 ssize_t FileHandleMock::read(void *buffer, size_t size)
 {
-    mock_t *mock = mock_open(__FUNCTION__);
+    mock_t *mock = mock_open(__FUNCTION__, MockInvalidateTypeYes);
     if (mock == NULL) {
         FAIL("FAILURE: No mock object found!");
         return -1;
@@ -44,7 +44,7 @@ ssize_t FileHandleMock::read(void *buffer, size_t size)
     
 ssize_t FileHandleMock::write(const void *buffer, size_t size)
 {    
-    mock_t *mock = mock_open(__FUNCTION__);
+    mock_t *mock = mock_open(__FUNCTION__, MockInvalidateTypeYes);
     if (mock == NULL) {
         FAIL("FAILURE: No mock object found!");
         return -1;
@@ -76,7 +76,7 @@ short FileHandleMock::poll(short events) const
 {
 //trace("FileHandleMock::poll ", 0);
 
-    mock_t *mock = mock_open(__FUNCTION__);
+    mock_t *mock = mock_open(__FUNCTION__, MockInvalidateTypeYes);
     if (mock == NULL) {
         FAIL("FAILURE: No mock object found!");
         return -1;
@@ -88,7 +88,7 @@ short FileHandleMock::poll(short events) const
     
 void FileHandleMock::sigio(Callback<void()> func)
 {
-    mock_t *mock = mock_open(__FUNCTION__);
+    mock_t *mock = mock_open(__FUNCTION__, MockInvalidateTypeYes);
     if (mock == NULL) {
         FAIL("FAILURE: No mock object found!");
     }
@@ -99,7 +99,7 @@ void FileHandleMock::sigio(Callback<void()> func)
 
 off_t FileHandleMock::seek(off_t offset, int whence)
 {
-    mock_t *mock = mock_open(__FUNCTION__);
+    mock_t *mock = mock_open(__FUNCTION__, MockInvalidateTypeYes);
     if (mock == NULL) {
         FAIL("FAILURE: No mock object found!");
         return -1;
@@ -111,7 +111,7 @@ off_t FileHandleMock::seek(off_t offset, int whence)
 
 int FileHandleMock::close()
 {
-    mock_t *mock = mock_open(__FUNCTION__);
+    mock_t *mock = mock_open(__FUNCTION__, MockInvalidateTypeYes);
     if (mock == NULL) {
         FAIL("FAILURE: No mock object found!");
         return -1;

@@ -28,7 +28,7 @@ void EventQueueMock::io_control(const io_control_t &control)
  
 int EventQueueMock::call(Callback<void()> func)
 {
-    mock_t *mock = mock_open(__FUNCTION__);
+    mock_t *mock = mock_open(__FUNCTION__, MockInvalidateTypeYes);
     if (mock == NULL) {
         FAIL("FAILURE: No mock object found!");
         return -1;
@@ -42,7 +42,7 @@ int EventQueueMock::call(Callback<void()> func)
 
 int EventQueueMock::call_in(int ms, Callback<void()> func)
 {
-    mock_t *mock = mock_open(__FUNCTION__);
+    mock_t *mock = mock_open(__FUNCTION__, MockInvalidateTypeYes);
     if (mock == NULL) {
         FAIL("FAILURE: No mock object found!");
         return -1;
@@ -62,7 +62,7 @@ int EventQueueMock::call_in(int ms, Callback<void()> func)
 
 void EventQueueMock::cancel(int id)
 {
-    mock_t *mock = mock_open(__FUNCTION__);
+    mock_t *mock = mock_open(__FUNCTION__, MockInvalidateTypeYes);
     if (mock == NULL) {
         FAIL("FAILURE: No mock object found!");
     }
