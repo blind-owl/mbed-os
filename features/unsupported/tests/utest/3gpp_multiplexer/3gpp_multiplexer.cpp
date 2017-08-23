@@ -352,6 +352,82 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_succes)
 }
 
 
+/* Multiplexer semaphore wait call from self initiated multiplexer open TC(s). */
+void mux_start_self_initated_existing_open_pending_sem_wait(const void *context)
+{
+    /* Issue new self iniated mux open, which fails. */
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
+    const int ret = mbed::Mux::mux_start(status);   
+    CHECK_EQUAL(ret, 1);
+    
+    /* Finish the mux open establishment with success. */
+    mux_start_self_initated_sem_wait(NULL);
+}
+
+
+/*
+ * TC - mux start-up sequence, self initiated: issue new mux open while existing self iniated mux open is in TX cycle
+ * - start self iniated mux open: start the TX cycle but don't finish it
+ * - issue new self iniated mux open -> returns appropriate error code
+ * - finish the mux open establishment cycle with success
+ * - issue new self iniated mux open -> returns appropriate error code
+ */
+TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_existing_open_pending)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    /* Set mock. */
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 1;    
+
+    /* Set mock. */    
+    mock_t * mock_wait = mock_free_get("wait");
+    CHECK(mock_wait != NULL);
+    mock_wait->return_value = 1;
+    mock_wait->func = mux_start_self_initated_existing_open_pending_sem_wait;
+
+    /* Start test sequence. Test set mocks. */
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
+    int ret = mbed::Mux::mux_start(status);    
+    CHECK_EQUAL(ret, 2);
+    CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_SUCCESS);        
+    CHECK(!MuxClient::is_mux_start_triggered());    
+    
+    /* Issue new self iniated mux open, which fails. */
+    ret = mbed::Mux::mux_start(status);   
+    CHECK_EQUAL(0, ret);    
+}
+
+
+/*
+ * TC - mux start-up sequence, self initiated: issue new mux open while existing self iniated mux open is pending for
+ * TX cycle
+ * - peer sends a DISC command to DLCI 0 
+ * - send 1st byte of DM response
+ * - start self iniated mux open: TX cycle for it is NOT started and put to pending
+ * - issue new self iniated mux open
+ * - returns appropriate error code 
+ */
+TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_existing_open_pending_2)
+{
+    
+}
+
+
 /*
  * LOOP UNTIL COMPLETE DLCI ESTABLISH FRAME WRITE DONE
  * - trigger sigio callback from FileHandleMock

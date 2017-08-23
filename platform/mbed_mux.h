@@ -165,7 +165,7 @@ typedef enum
      *  @param status   Operation completion code.
      *
      *  @return 2   Operation completed successfully, check @ref status for completion code.
-     *  @return 1   Operation not started, peer initiated control channel open in progress.     
+     *  @return 1   Operation not started, peer or self initiated control channel open allready in progress.     
      *  @return 0   Operation not started, multiplexer control channel allready open.     
      *  @return <0  Unspecified failure.
      */
@@ -440,10 +440,11 @@ private:
     /* Definition for state type. */
     typedef struct
     {
-        uint8_t is_multiplexer_open : 1;        /* True when multiplexer is open. */        
+        uint8_t is_mux_open        : 1;         /* True when multiplexer is open. */        
         uint8_t is_request_timeout : 1;         /* True when request timeout has occurred. */
         uint8_t is_initiator : 1;               /* True when role is initiator. */
         uint8_t is_mux_open_self_iniated_pending : 1;
+        uint8_t is_write_error : 1;
 #if 0        
         uint8_t is_dlci_establish_pending : 1;  /* True if @ref mux_start or @ref dlci_establish is pending. */
         uint8_t is_user_tx_pending : 1;         /* True if user TX request is pending. */
