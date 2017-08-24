@@ -417,8 +417,11 @@ void Mux::decoder_state_decode_run()
                     valid_rx_frame_decode();
                 }                
             } else {
-                trace("_rx_context.offset: ", _rx_context.offset);    
-                MBED_ASSERT(false); // // @todo invalid frame: ASSERT for now               
+                // @todo: below code needs TC
+                if (!((_rx_context.offset == 1u) && (current_byte == FLAG_SEQUENCE_OCTET))) {
+                    trace("_rx_context.offset: ", _rx_context.offset);    
+                    MBED_ASSERT(false); // // @todo invalid frame: ASSERT for now               
+                }
             }            
         } else {
             ++_rx_context.offset;

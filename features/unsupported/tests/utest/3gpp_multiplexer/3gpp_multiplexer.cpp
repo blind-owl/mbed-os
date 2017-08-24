@@ -1234,14 +1234,14 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_rejected_by_peer)
     mbed::EventQueueMock eq_mock;
     
     mbed::Mux::eventqueue_attach(&eq_mock);
-    
-    /* --- begin verify TX sequence --- */
-    
+       
     /* Set and test mock. */
     mock_t * mock_sigio = mock_free_get("sigio");    
     CHECK(mock_sigio != NULL);      
     mbed::Mux::serial_attach(&fh_mock);
       
+    /* 1st establishent: reject by peer. */
+
     /* Set mock. */
     mock_t * mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
@@ -1262,9 +1262,13 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_rejected_by_peer)
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
     const int ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(ret, 2);
-    CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_REJECT);    
+    CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_REJECT);       
+    CHECK(!MuxClient::is_mux_start_triggered());            
     
-    CHECK(!MuxClient::is_mux_start_triggered());                    
+    /* 2nd establishent: success. */
+    
+    mux_self_iniated_open();
+    CHECK(!MuxClient::is_mux_start_triggered());
 }
 
 
