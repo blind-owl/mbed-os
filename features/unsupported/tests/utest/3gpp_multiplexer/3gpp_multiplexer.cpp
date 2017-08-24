@@ -172,7 +172,7 @@ uint8_t fcs_calculate(const uint8_t *buffer,  uint8_t input_len)
  */
 void self_iniated_request_tx(const uint8_t *tx_buf, uint8_t tx_buf_len)
 {
-    /* Write the complete start request frame in the do...while. */
+    /* Write the complete request frame in the do...while. */
     uint8_t                                  tx_count      = 0;           
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};    
     const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};
@@ -219,7 +219,7 @@ void self_iniated_request_tx(const uint8_t *tx_buf, uint8_t tx_buf_len)
 
 
 /*
- * LOOP UNTIL COMPLETE START RESPONSE FRAME READ DONE
+ * LOOP UNTIL COMPLETE RESPONSE FRAME READ DONE
  * - trigger sigio callback from FileHandleMock
  * - enqueue deferred call to EventQueue
  * - CALL RETURN 
@@ -229,9 +229,9 @@ void self_iniated_request_tx(const uint8_t *tx_buf, uint8_t tx_buf_len)
  * - call cancel in the last iteration to cancel T1 timer
  * - CALL RETURN 
  */
-void mux_start_self_iniated_rx(const uint8_t *rx_buf, uint8_t rx_buf_len)
-{      
-    /* read the complete start response frame. */
+void self_iniated_response_rx(const uint8_t *rx_buf, uint8_t rx_buf_len)
+{
+    /* Read the complete response frame in do...while. */
     uint8_t                                  rx_count      = 0;       
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
     const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};    
@@ -275,7 +275,7 @@ void mux_start_self_iniated_rx(const uint8_t *rx_buf, uint8_t rx_buf_len)
         mbed::EventQueueMock::io_control(eq_io_control);   
 
         ++rx_count;        
-    } while (rx_count != rx_buf_len);       
+    } while (rx_count != rx_buf_len);           
 }
 
 
@@ -299,7 +299,7 @@ void mux_start_self_initated_sem_wait(const void *context)
     };
     
     self_iniated_request_tx(&(write_byte[0]), sizeof(write_byte));
-    mux_start_self_iniated_rx(&(read_byte[0]), sizeof(read_byte));    
+    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte));    
 }
 
 
@@ -552,7 +552,7 @@ void mux_start_self_initated_tx_in_progress(const void *context)
     };
     
     self_iniated_request_tx(&(write_byte_2[0]), sizeof(write_byte_2));
-    mux_start_self_iniated_rx(&(read_byte[0]), sizeof(read_byte));
+    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte));
 }
 
 
@@ -1364,7 +1364,7 @@ void mux_start_self_initated_sem_wait_rejected_by_peer(const void *)
     };
     
     self_iniated_request_tx(&(write_byte[0]), sizeof(write_byte));
-    mux_start_self_iniated_rx(&(read_byte[0]), sizeof(read_byte));
+    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte));
 }
 
 
@@ -2119,7 +2119,7 @@ void mux_open_simultaneous_self_iniated_sem_wait(const void *context)
         FLAG_SEQUENCE_OCTET
     };
     
-    mux_start_self_iniated_rx(&(read_byte_2[0]), sizeof(read_byte_2));
+    self_iniated_response_rx(&(read_byte_2[0]), sizeof(read_byte_2));
 }
 
 
@@ -2203,7 +2203,7 @@ void mux_open_simultaneous_self_iniated_full_frame_sem_wait(const void *context)
         FLAG_SEQUENCE_OCTET
     };
 
-    mux_start_self_iniated_rx(&(read_byte_2[0]), sizeof(read_byte_2));
+    self_iniated_response_rx(&(read_byte_2[0]), sizeof(read_byte_2));
 }
 
 
