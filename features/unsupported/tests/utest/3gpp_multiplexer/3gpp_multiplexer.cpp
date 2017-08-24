@@ -622,73 +622,6 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_existing_open_pending_2)
 }
 
 
-/*
- * LOOP UNTIL COMPLETE DLCI ESTABLISH FRAME WRITE DONE
- * - trigger sigio callback from FileHandleMock
- * - enqueue deferred call to EventQueue
- * - CALL RETURN 
- * - trigger deferred call from EventQueueMock
- * - call poll
- * - call write
- * - call call_in in the last iteration for T1 timer
- * - CALL RETURN
- */
-void dlci_establish_self_iniated_tx(uint8_t address)
-{
-    const uint8_t write_byte[4] = 
-    {
-        address, 
-        (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&write_byte[0], 2),
-        FLAG_SEQUENCE_OCTET
-    };
-
-    /* write the complete start request frame. */
-    uint8_t                                  tx_count      = 0;           
-    const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};    
-    const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};
-    do {   
-        /* Enqueue deferred call to EventQueue. 
-         * Trigger sigio callback with POLLOUT event from the Filehandle used by the Mux (component under test). */
-        mock_t * mock = mock_free_get("call");
-        CHECK(mock != NULL);           
-        mock->return_value = 1;
-        
-        mbed::FileHandleMock::io_control(io_control);
-
-        /* Trigger deferred call from EventQueue.
-         * Continue with the frame write sequence. */
-        mock_t * mock_poll      = mock_free_get("poll");    
-        CHECK(mock_poll != NULL);         
-        mock_poll->return_value = POLLOUT;
-        mock_t * mock_write     = mock_free_get("write");
-        CHECK(mock_write != NULL); 
-        
-        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->input_param[0].param        = (uint32_t)&(write_byte[tx_count]);        
-        
-        mock_write->input_param[1].param        = WRITE_LEN;
-        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->return_value                = 1;        
-
-        if (tx_count == (sizeof(write_byte) - 1)) {
-            
-            /* Start frame write sequence gets completed, now start T1 timer. */   
-            
-            mock_t * mock_call_in   = mock_free_get("call_in");    
-            CHECK(mock_call_in != NULL);     
-            mock_call_in->return_value = T1_TIMER_EVENT_ID;        
-            mock_call_in->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-            mock_call_in->input_param[0].param        = T1_TIMER_VALUE;                  
-        }
-        
-        mbed::EventQueueMock::io_control(eq_io_control);   
-        
-        ++tx_count;        
-    } while (tx_count != sizeof(write_byte));       
-}
-
-
 /* Definition for the multiplexer role type. */
 typedef enum
 {
@@ -713,17 +646,24 @@ void dlci_establish_self_initated_sem_wait(const void *context)
 {
     const dlci_establish_context_t *cntx = static_cast<const dlci_establish_context_t *>(context);
     
-    const uint8_t read_byte[4] = 
+    const uint8_t read_byte[4]  = 
     {
         (((cntx->role == ROLE_INITIATOR) ? 1 : 3) | (cntx->dlci_id << 2)),
         (FRAME_TYPE_UA | PF_BIT), 
         fcs_calculate(&read_byte[0], 2),
         FLAG_SEQUENCE_OCTET
     };    
-    const uint8_t address = ((cntx->role == ROLE_INITIATOR) ? 3 : 1) | (cntx->dlci_id << 2);        
+    const uint8_t address       = ((cntx->role == ROLE_INITIATOR) ? 3 : 1) | (cntx->dlci_id << 2);    
+    const uint8_t write_byte[4] = 
+    {
+        address, 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        fcs_calculate(&write_byte[0], 2),
+        FLAG_SEQUENCE_OCTET
+    };    
 
     /* Complete the request frame write and read the response frame. */
-    dlci_establish_self_iniated_tx(address);
+    self_iniated_request_tx(&(write_byte[0]), sizeof(write_byte));
     self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte));
 }
 
@@ -814,10 +754,17 @@ void dlci_establish_self_initated_sem_wait_timeout(const void * context)
 {
     const dlci_establish_context_t *cntx = static_cast<const dlci_establish_context_t *>(context);
 
-    const uint8_t address = ((cntx->role == ROLE_INITIATOR) ? 3 : 1) | (cntx->dlci_id << 2);        
+    const uint8_t address       = ((cntx->role == ROLE_INITIATOR) ? 3 : 1) | (cntx->dlci_id << 2);        
+    const uint8_t write_buf[4]  = 
+    {
+        address, 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        fcs_calculate(&write_buf[0], 2),
+        FLAG_SEQUENCE_OCTET
+    };    
 
     /* Complete the request frame write. */
-    dlci_establish_self_iniated_tx(address);
+    self_iniated_request_tx(&(write_buf[0]), sizeof(write_buf));
     
     /* --- begin frame re-transmit sequence --- */
 
@@ -836,7 +783,7 @@ void dlci_establish_self_initated_sem_wait_timeout(const void * context)
         mbed::EventQueueMock::io_control(eq_io_control);
         
         /* Re-transmit the complete remaining part of the frame. */
-        dlci_establish_self_iniated_tx(address);
+        self_iniated_request_tx(&(write_buf[0]), sizeof(write_buf));
         
         --counter;
     } while (counter != 0);
@@ -1080,9 +1027,17 @@ void dlci_establish_self_initated_sem_wait_rejected_by_peer(const void *context)
         fcs_calculate(&read_byte[0], 2),
         FLAG_SEQUENCE_OCTET
     };    
-    const uint8_t address = ((cntx->role == ROLE_INITIATOR) ? 3 : 1) | (cntx->dlci_id << 2);        
+    const uint8_t address       = ((cntx->role == ROLE_INITIATOR) ? 3 : 1) | (cntx->dlci_id << 2);        
+    const uint8_t write_byte[4] = 
+    {
+        address, 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        fcs_calculate(&write_byte[0], 2),
+        FLAG_SEQUENCE_OCTET
+    };    
 
-    dlci_establish_self_iniated_tx(address);
+    /* Complete the request frame write and read the response frame. */
+    self_iniated_request_tx(&(write_byte[0]), sizeof(write_byte));
     self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte));
 }
 
