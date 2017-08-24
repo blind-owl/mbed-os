@@ -689,67 +689,6 @@ void dlci_establish_self_iniated_tx(uint8_t address)
 }
 
 
-/*
- * LOOP UNTIL COMPLETE DLCI ESTABLISH FRAME READ DONE
- * - trigger sigio callback from FileHandleMock
- * - enqueue deferred call to EventQueue
- * - CALL RETURN 
- * - trigger deferred call from EventQueueMock
- * - call poll
- * - call read
- * - call cancel in the last iteration to cancel T1 timer
- * - CALL RETURN 
- */
-void dlci_establish_self_iniated_rx(const uint8_t *rx_buf, uint8_t rx_buf_len)
-{      
-    /* read the complete start response frame. */
-    uint8_t                                  rx_count      = 0;       
-    const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
-    const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};    
-    do {
-        /* Enqueue deferred call to EventQueue. 
-         * Trigger sigio callback with POLLIN event from the Filehandle used by the Mux (component under test). */
-        mock_t * mock = mock_free_get("call");
-        CHECK(mock != NULL);           
-        mock->return_value = 1;
-
-        mbed::FileHandleMock::io_control(io_control);
-
-        /* Trigger deferred call from EventQueue.
-         * Continue with the frame read sequence. */
-        mock_t * mock_poll = mock_free_get("poll");    
-        CHECK(mock_poll != NULL);         
-        mock_poll->return_value = POLLIN;
-        mock_t * mock_read      = mock_free_get("read");
-        CHECK(mock_read != NULL); 
-        mock_read->output_param[0].param       = &(rx_buf[rx_count]);
-        mock_read->output_param[0].len         = sizeof(rx_buf[0]);
-        mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_read->input_param[0].param        = READ_LEN;
-        mock_read->return_value                = 1;  
-
-        if (rx_count == (rx_buf_len - 1)) {
-            
-            /* Start frame read sequence gets completed, now cancel T1 timer. */   
-            
-            mock_t * mock_cancel = mock_free_get("cancel");    
-            CHECK(mock_cancel != NULL);    
-            mock_cancel->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-            mock_cancel->input_param[0].param        = T1_TIMER_EVENT_ID;     
-            
-            /* Release the semaphore blocking the call thread. */
-            mock_t * mock_release = mock_free_get("release");
-            CHECK(mock_release != NULL);
-            mock_release->return_value = osOK;
-        }
-
-        mbed::EventQueueMock::io_control(eq_io_control);   
-
-        ++rx_count;        
-    } while (rx_count != rx_buf_len);       
-}
-
-
 /* Definition for the multiplexer role type. */
 typedef enum
 {
@@ -785,7 +724,7 @@ void dlci_establish_self_initated_sem_wait(const void *context)
 
     /* Complete the request frame write and read the response frame. */
     dlci_establish_self_iniated_tx(address);
-    dlci_establish_self_iniated_rx(&(read_byte[0]), sizeof(read_byte));
+    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte));
 }
 
 
@@ -1144,7 +1083,7 @@ void dlci_establish_self_initated_sem_wait_rejected_by_peer(const void *context)
     const uint8_t address = ((cntx->role == ROLE_INITIATOR) ? 3 : 1) | (cntx->dlci_id << 2);        
 
     dlci_establish_self_iniated_tx(address);
-    dlci_establish_self_iniated_rx(&(read_byte[0]), sizeof(read_byte));
+    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte));
 }
 
 
