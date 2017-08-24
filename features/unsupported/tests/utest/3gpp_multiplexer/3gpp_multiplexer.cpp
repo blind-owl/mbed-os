@@ -338,6 +338,65 @@ void peer_iniated_request_rx(const uint8_t *rx_buf, uint8_t rx_buf_len, const ui
 }
 
 
+/*
+ * LOOP UNTIL COMPLETE RESPONSE FRAME WRITE DONE
+ * - trigger sigio callback from FileHandleMock
+ * - enqueue deferred call to EventQueue
+ * - CALL RETURN 
+ * - trigger deferred call from EventQueueMock
+ * - call poll
+ * - call write
+ * - verify completion callback state in the last iteration
+ * - CALL RETURN 
+ */
+typedef bool (*compare_func_t)();
+void peer_iniated_response_tx(const uint8_t *buf,
+                              uint8_t        buf_len, 
+                              bool           expected_state,
+                              compare_func_t func)
+{
+    const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
+    const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};    
+    uint8_t                                  tx_count      = 0;          
+    
+    /* Write the complete response frame in do...while. */
+    do {    
+        /* Enqueue deferred call to EventQueue. 
+         * Trigger sigio callback with POLLOUT event from the Filehandle used by the Mux (component under test). */
+        mock_t * mock = mock_free_get("call");
+        CHECK(mock != NULL);           
+        mock->return_value = 1;
+        
+        mbed::FileHandleMock::io_control(io_control);
+
+        /* Trigger deferred call from EventQueue.
+         * Continue with the frame write sequence. */
+        mock_t * mock_poll      = mock_free_get("poll");    
+        CHECK(mock_poll != NULL);         
+        mock_poll->return_value = POLLOUT;
+        mock_t * mock_write     = mock_free_get("write");
+        CHECK(mock_write != NULL); 
+        
+        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->input_param[0].param        = (uint32_t)&(buf[tx_count]);        
+        
+        mock_write->input_param[1].param        = WRITE_LEN;
+        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->return_value                = 1;        
+
+        mbed::EventQueueMock::io_control(eq_io_control);  
+
+        if (tx_count == (buf_len - 1)) {               
+            /* Last byte of the response frame written, verify correct completion callback state. */     
+            // @todo :add NULL check
+            CHECK_EQUAL(func(), expected_state);
+        }
+        
+        ++tx_count;        
+    } while (tx_count != buf_len);    
+}
+
+
 /* Multiplexer semaphore wait call from self initiated multiplexer open TC(s). */
 void mux_start_self_initated_sem_wait(const void *context)
 {
@@ -1092,66 +1151,6 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_rejected_by_peer)
 }
 
 
-/*
- * LOOP UNTIL DLCI ESTABLISH RESPONSE FRAME WRITE DONE
- * - trigger sigio callback from FileHandleMock
- * - enqueue deferred call to EventQueue
- * - CALL RETURN 
- * - trigger deferred call from EventQueueMock
- * - call poll
- * - call write
- * - verify completion callback state in the last iteration
- * - CALL RETURN 
- */
-typedef bool (*compare_func_t)();
-void dlci_establish_peer_iniated_tx(const uint8_t *buf, 
-                                    uint8_t        buf_len, 
-                                    bool           expected_state,
-                                    compare_func_t func)
-{    
-    const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
-    const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};    
-    uint8_t                                  tx_count      = 0;          
-    
-    /* write the remainder of the start response frame. */
-    do {    
-        /* Enqueue deferred call to EventQueue. 
-         * Trigger sigio callback with POLLOUT event from the Filehandle used by the Mux (component under test). */
-        mock_t * mock = mock_free_get("call");
-        CHECK(mock != NULL);           
-        mock->return_value = 1;
-        
-        mbed::FileHandleMock::io_control(io_control);
-
-        /* Trigger deferred call from EventQueue.
-         * Continue with the frame write sequence. */
-        mock_t * mock_poll      = mock_free_get("poll");    
-        CHECK(mock_poll != NULL);         
-        mock_poll->return_value = POLLOUT;
-        mock_t * mock_write     = mock_free_get("write");
-        CHECK(mock_write != NULL); 
-        
-        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->input_param[0].param        = (uint32_t)&(buf[tx_count]);        
-        
-        mock_write->input_param[1].param        = WRITE_LEN;
-        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->return_value                = 1;        
-
-        mbed::EventQueueMock::io_control(eq_io_control);  
-
-        if (tx_count == (buf_len - 1)) {               
-            /* Last byte of the dlci establishment response frame written, verify correct completion callback 
-               state. */     
-            // @todo :add NULL check
-            CHECK_EQUAL(func(), expected_state);
-        }
-        
-        ++tx_count;        
-    } while (tx_count != buf_len);    
-}
-// 
-
 /* Do successfull multiplexer peer iniated open.*/
 void mux_peer_iniated_open(const uint8_t *rx_buf, uint8_t rx_buf_len, bool expected_mux_start_event_state)
 {    
@@ -1165,10 +1164,10 @@ void mux_peer_iniated_open(const uint8_t *rx_buf, uint8_t rx_buf_len, bool expec
     };
 
     peer_iniated_request_rx(&(rx_buf[0]), rx_buf_len, &(write_byte[0]));
-    dlci_establish_peer_iniated_tx(&(write_byte[1]), 
-                                   (sizeof(write_byte) - sizeof(write_byte[0])),
-                                   expected_mux_start_event_state,
-                                   MuxClient::is_mux_start_triggered);  
+    peer_iniated_response_tx(&(write_byte[1]),
+                             (sizeof(write_byte) - sizeof(write_byte[0])),
+                             expected_mux_start_event_state,
+                             MuxClient::is_mux_start_triggered);  
 }
 
 
@@ -1528,10 +1527,10 @@ void dlci_peer_iniated_establish_accept(Role           role,
     };
 
     peer_iniated_request_rx(&(rx_buf[0]), rx_buf_len, &(write_byte[0]));
-    dlci_establish_peer_iniated_tx(&(write_byte[1]), 
-                                   (sizeof(write_byte) - sizeof(write_byte[0])),
-                                   expected_dlci_establishment_event_state,
-                                   MuxClient::is_dlci_establish_triggered); 
+    peer_iniated_response_tx(&(write_byte[1]),
+                             (sizeof(write_byte) - sizeof(write_byte[0])),
+                             expected_dlci_establishment_event_state,
+                             MuxClient::is_dlci_establish_triggered); 
 }
 
 
@@ -1640,10 +1639,10 @@ void dlci_peer_iniated_establish_reject(uint8_t        address_field,
 
     peer_iniated_request_rx(&(rx_buf[0]), rx_buf_len, &(write_byte[0]));
     const bool expected_dlci_establishment_event_state = false;
-    dlci_establish_peer_iniated_tx(&(write_byte[1]), 
-                                   (sizeof(write_byte) - sizeof(write_byte[0])),
-                                   expected_dlci_establishment_event_state,
-                                   MuxClient::is_dlci_establish_triggered);     
+    peer_iniated_response_tx(&(write_byte[1]),
+                             (sizeof(write_byte) - sizeof(write_byte[0])),
+                             expected_dlci_establishment_event_state,
+                             MuxClient::is_dlci_establish_triggered);     
 }
 
 
@@ -2187,10 +2186,10 @@ TEST(MultiplexerOpenTestGroup, mux_open_simultaneous_peer_iniated)
     
     /* Complete the existing peer iniated establishent cycle. */
     const bool expected_mux_start_event_state = true;    
-    dlci_establish_peer_iniated_tx(&(write_byte[1]), 
-                                   (sizeof(write_byte) - sizeof(write_byte[0])),
-                                   expected_mux_start_event_state,
-                                   MuxClient::is_mux_start_triggered);      
+    peer_iniated_response_tx(&(write_byte[1]),
+                             (sizeof(write_byte) - sizeof(write_byte[0])),
+                             expected_mux_start_event_state,
+                             MuxClient::is_mux_start_triggered);      
 }
 
 
