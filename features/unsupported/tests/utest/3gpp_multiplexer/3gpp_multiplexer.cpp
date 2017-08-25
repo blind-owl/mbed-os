@@ -459,8 +459,8 @@ void mux_self_iniated_open()
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
     const int ret = mbed::Mux::mux_start(status);
-    CHECK_EQUAL(ret, 2);
-    CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_SUCCESS);    
+    CHECK_EQUAL(2, ret);
+    CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_SUCCESS, status);    
 }
 
 
@@ -1031,7 +1031,8 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_write_failure)
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
     FileHandle *obj = NULL;
     const int ret = mbed::Mux::dlci_establish(1, status, &obj);
-    CHECK_EQUAL(ret, -1);
+    CHECK_EQUAL(3, ret);
+    CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_WRITE_ERROR, status);
     CHECK(!MuxClient::is_dlci_establish_triggered());    
     CHECK_EQUAL(obj, NULL);
 }
@@ -1261,12 +1262,12 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_rejected_by_peer)
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
     const int ret = mbed::Mux::mux_start(status);
-    CHECK_EQUAL(ret, 2);
-    CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_REJECT);       
+    CHECK_EQUAL(2, ret);
+    CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_REJECT, status);       
     CHECK(!MuxClient::is_mux_start_triggered());            
     
     /* 2nd establishent: success. */
-    
+
     mux_self_iniated_open();
     CHECK(!MuxClient::is_mux_start_triggered());
 }
@@ -1282,9 +1283,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_write_failure)
     mbed::EventQueueMock eq_mock;
     
     mbed::Mux::eventqueue_attach(&eq_mock);
-    
-    /* --- begin verify TX sequence --- */
-    
+       
     /* Set and test mock. */
     mock_t * mock_sigio = mock_free_get("sigio");    
     CHECK(mock_sigio != NULL);      
@@ -1303,7 +1302,8 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_write_failure)
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
     const int ret = mbed::Mux::mux_start(status);
-    CHECK_EQUAL(ret, -1);
+    CHECK_EQUAL(2, ret);
+    CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_WRITE_ERROR, status);    
     
     CHECK(!MuxClient::is_mux_start_triggered());                    
 }

@@ -40,9 +40,10 @@ typedef struct
     uint8_t information[1]; /* Begin of the information field if present. */
 } frame_hdr_t;    
 
-FileHandle *Mux::_serial      = NULL;
-EventQueueMock *Mux::_event_q = NULL;
-MuxCallback *Mux::_mux_obj_cb = NULL;
+volatile uint8_t Mux::_establish_status = 0;
+FileHandle *Mux::_serial                = NULL;
+EventQueueMock *Mux::_event_q           = NULL;
+MuxCallback *Mux::_mux_obj_cb           = NULL;
 MuxDataService Mux::_mux_objects[MBED_CONF_MUX_DLCI_COUNT];
 
 //rtos::Semaphore Mux::_semaphore(0);
@@ -78,7 +79,6 @@ extern void trace(char *string, int data);
 void Mux::module_init()
 {
     _state.is_mux_open                      = 0;
-    _state.is_request_timeout               = 0;
     _state.is_initiator                     = 0;
     _state.is_mux_open_self_iniated_pending = 0;
     _state.is_write_error                   = 0;
@@ -87,6 +87,8 @@ void Mux::module_init()
     _rx_context.decoder_state = DECODER_STATE_SYNC;    
     
     _tx_context.tx_state = TX_IDLE;    
+    
+    _establish_status = static_cast<MuxEstablishStatus>(Mux::MUX_ESTABLISH_MAX);
     
     const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);
     for (uint8_t i = 0; i != end; ++i) {
@@ -122,7 +124,8 @@ void Mux::on_timeout()
             } else {
                 /* Retransmission limit reachd, change state and release the suspended call thread with appropriate 
                    status code. */
-                _state.is_request_timeout = 1;
+//                _state.is_request_timeout = 1;
+                _establish_status = MUX_ESTABLISH_TIMEOUT;
                 const osStatus os_status = _semaphore.release();
                 MBED_ASSERT(os_status == osOK);    
                 tx_state_change(TX_IDLE, NULL);
@@ -269,6 +272,7 @@ void Mux::on_rx_frame_ua()
             
             // @todo: need to verify correct call order for sm change and Semaphore release.
             tx_state_change(TX_IDLE, NULL);
+            _establish_status = Mux::MUX_ESTABLISH_SUCCESS;
             os_status = _semaphore.release();
             MBED_ASSERT(os_status == osOK); 
                             
@@ -276,6 +280,7 @@ void Mux::on_rx_frame_ua()
             // TC: 
             // - peer reject mux open
             // - reissue mux start without init in between
+// trace("!MUX_OPEN", 0);                                   
             _state.is_mux_open = 1; 
             _state.is_initiator        = 1;
             break;
@@ -298,6 +303,7 @@ void Mux::on_rx_frame_dm()
             
             // @todo: need to verify correct call order for sm change and Semaphore release.
             tx_state_change(TX_IDLE, NULL);
+            _establish_status = Mux::MUX_ESTABLISH_REJECT;
             os_status = _semaphore.release();
             MBED_ASSERT(os_status == osOK);                           
             break;
@@ -418,7 +424,7 @@ void Mux::decoder_state_decode_run()
                 }                
             } else {
                 // @todo: below code needs TC
-                if (!((_rx_context.offset == 1u) && (current_byte == FLAG_SEQUENCE_OCTET))) {
+                if (_rx_context.offset != 1u) {
                     trace("_rx_context.offset: ", _rx_context.offset);    
                     MBED_ASSERT(false); // // @todo invalid frame: ASSERT for now               
                 }
@@ -541,7 +547,7 @@ void Mux::tx_idle_entry_run()
         const ssize_t return_code = write_do();  
         if (return_code >= 0) {        
             tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);        
-            _state.is_request_timeout      = 0;   
+//            _state.is_request_timeout      = 0;   
             _tx_context.retransmit_counter = RETRANSMIT_COUNT;                
         } else {
             // @todo: propagate error event to user and remove assert. */
@@ -737,6 +743,8 @@ ssize_t Mux::write_do()
 }
 
 
+// @todo: can be removed as bit is set in on_rx_frame_ua func and this call can be too late -> rx buffer overwritten. 
+#if 0
 Mux::MuxEstablishStatus Mux::mux_start_response_decode()
 {
     Mux::MuxEstablishStatus status;
@@ -757,261 +765,15 @@ Mux::MuxEstablishStatus Mux::mux_start_response_decode()
     
     return status;
 }
-
-
-ssize_t Mux::mux_start(Mux::MuxEstablishStatus &status)
-{
-// @todo: add mutex_lock
-    
-    ssize_t return_code;
-    
-    if (_state.is_mux_open) { // @todo: THIS NEEDS TO BE SET IN THIS FUNCTION
-// @todo: add mutex_free        
-        return 0;
-    }
-    if (_state.is_mux_open_self_iniated_pending) { 
-// @todo: add mutex_free                
-        return 1;
-    }
-
-    _state.is_mux_open_self_iniated_pending = 1u;
-
-    switch (_tx_context.tx_state) {
-        Mux::FrameTxType tx_frame_type;
-        int              ret_wait;
-        case TX_IDLE:
-            /* Construct the frame, start the tx sequence 1-byte at time, reset relevant state contexts and suspend 
-               the call thread. */           
-            sabm_request_construct(0);
-            return_code = write_do();   
-            if (return_code >= 0) {
-                tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
-                _state.is_request_timeout      = 0;    
-                _tx_context.retransmit_counter = RETRANSMIT_COUNT;
-               
-                _state.is_write_error                   = 0; // @todo: set to TX_IDLE EXIT? SHOULD BE OK
-//                _state.is_mux_open_self_iniated_pending = 1u;
-// @todo: add mutex_free here                
-                ret_wait = _semaphore.wait();
-                MBED_ASSERT(ret_wait == 1);               
-                return_code = (!_state.is_write_error) ? 2 : -1; 
-                
-                /* Decode response frame from the rx buffer in order to set the correct status code if no request
-                 * timeout occurred. */
-                if (return_code == 2) { 
-                    // if no write error the TX cycle was completed.
-                    
-                    if (!_state.is_request_timeout) {
-                        status = mux_start_response_decode();
-                    } else {
-                        status = MUX_ESTABLISH_TIMEOUT;
-                    }
-                }
-            } else {
-// @todo: add mutex free
-            }
-            break;
-        case TX_INTERNAL_RESP:
-            tx_frame_type = frame_tx_type_resolve();
-            if (tx_frame_type == FRAME_TX_TYPE_UA) {
-// @todo: add mutex free                
-                return_code = 1;
-            } else {               
-//                _state.is_mux_open_self_iniated_pending = 1u;
-// @todo: add mutex_free                
-                ret_wait = _semaphore.wait();
-//                trace("!!ret_wait", ret_wait);
-                MBED_ASSERT(ret_wait == 1); 
-                return_code = (!_state.is_write_error) ? 2 : -1;
-                /* Decode response frame from the rx buffer in order to set the correct status code if no request
-                 * timeout occurred. */
-                if (return_code == 2) {
-                    if (!_state.is_request_timeout) {
-                        status = mux_start_response_decode();
-                    } else {
-                        status = MUX_ESTABLISH_TIMEOUT;
-                    }
-                }
-            }           
-            break;
-        default:
-            /* Code that should never be reached. */
-            MBED_ASSERT(false);
-            break;
-    };
-                
-    _state.is_mux_open_self_iniated_pending = 0;
-   
-    return return_code;   
-}
-
-
-#if 0 // 2nd iteration
-ssize_t Mux::mux_start(Mux::MuxEstablishStatus &status)
-{
-// @todo: add mutex_lock
-    
-    ssize_t return_code;
-    
-    if (_state.is_mux_open) { // @todo: THIS NEEDS TO BE SET IN THIS FUNCTION
-// @todo: add mutex_free        
-        return 0;
-    }
-    if (_state.is_mux_open_self_iniated_pending) {
-        return 1;
-    }
-    
-    switch (_tx_context.tx_state) {
-        Mux::FrameTxType tx_frame_type;
-        int              ret_wait;
-        case TX_IDLE:
-            /* Construct the frame, start the tx sequence 1-byte at time, reset relevant state contexts and suspend 
-               the call thread. */           
-            sabm_request_construct(0);
-            return_code = write_do();    
-//            MBED_ASSERT(return_code != 0);  // @todo: DEFECT could return 0 as DM TX done prior.
-            if (return_code >= 0) {
-//                return_code = 2;
-                tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
-                _state.is_request_timeout      = 0;    
-                _tx_context.retransmit_counter = RETRANSMIT_COUNT;
-               
-                _state.is_write_error = 0; // @todo: set to TX_IDLE EXIT? SHOULD BE OK
-                _state.is_mux_open_self_iniated_pending = 1u;
-// @todo: add mutex_free here                
-                ret_wait = _semaphore.wait();
-                MBED_ASSERT(ret_wait == 1);                
-                
-                return_code = (!_state.is_write_error) ? 2 : -1; 
-                
-                /* Decode response frame from the rx buffer in order to set the correct status code if no request
-                 * timeout occurred. */
-                if (return_code == 2) { 
-                    // if no write error the TX cycle was completed.
-                    
-                    if (!_state.is_request_timeout) {
-                        status = mux_start_response_decode();
-                    } else {
-                        status = MUX_ESTABLISH_TIMEOUT;
-                    }
-                }
-            }                                     
-            break;
-        case TX_INTERNAL_RESP:
-            tx_frame_type = frame_tx_type_resolve();
-            if (tx_frame_type == FRAME_TX_TYPE_UA) {
-                return_code = 1;
-            } else {               
-                _state.is_mux_open_self_iniated_pending = 1u;
-// @todo: add mutex_free                
-                ret_wait = _semaphore.wait();
-//                trace("!!ret_wait", ret_wait);
-                MBED_ASSERT(ret_wait == 1);  
-// TOO EARLY                _state.is_mux_open_self_iniated_pending = 0;
-                                             
-                return_code = (!_state.is_write_error) ? 2 : -1;
-                /* Decode response frame from the rx buffer in order to set the correct status code if no request
-                 * timeout occurred. */
-                if (return_code == 2) {
-                    if (!_state.is_request_timeout) {
-                        status = mux_start_response_decode();
-                    } else {
-                        status = MUX_ESTABLISH_TIMEOUT;
-                    }
-                }
-            }           
-            break;
-        default:
-            /* Code that should never be reached. */
-            MBED_ASSERT(false);
-            break;
-    };
-    
-    _state.is_mux_open_self_iniated_pending = 0;
-    
-// @todo: add mutex_free    
-    return return_code;   
-}
 #endif // 0
+
 
 #if 0
-ssize_t Mux::mux_start(Mux::MuxEstablishStatus &status)
-{
-// @todo: add mutex_lock
-    
-    ssize_t return_code;
-    
-    if (_state.is_multiplexer_open) {
-// @todo: add mutex_free        
-        return 0;
-    }
-   
-    switch (_tx_context.tx_state) {
-        Mux::FrameTxType tx_frame_type;
-        int              ret_wait;
-        case TX_IDLE:
-            /* Construct the frame, start the tx sequence 1-byte at time, reset relevant state contexts and suspend 
-               the call thread. */           
-            sabm_request_construct(0);
-            return_code = write_do();    
-            MBED_ASSERT(return_code != 0);
-            if (return_code > 0) {
-                return_code = 2;
-                tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
-                _state.is_request_timeout      = 0;    
-                _tx_context.retransmit_counter = RETRANSMIT_COUNT;
-                
-// @todo: add mutex_free
-                
-                ret_wait = _semaphore.wait();
-                MBED_ASSERT(ret_wait == 1);                
-                /* Decode response frame from the rx buffer in order to set the correct status code if no request
-                 * timeout occurred. */ 
-                if (!_state.is_request_timeout) {
-                    status = mux_start_response_decode();
-                } else {
-                    status = MUX_ESTABLISH_TIMEOUT;
-                }            
-            }                                     
-            break;
-        case TX_INTERNAL_RESP:
-            tx_frame_type = frame_tx_type_resolve();
-            if (tx_frame_type == FRAME_TX_TYPE_UA) {
-                return_code = 1;
-            } else {               
-                _state.is_mux_open_self_iniated_pending = 1u;
-// @todo: add mutex_free                
-                ret_wait = _semaphore.wait();
-//                trace("!!ret_wait", ret_wait);
-                MBED_ASSERT(ret_wait == 1);  
-                
-                // @todo: we should have better handling for return code as write can fail.*/
-                
-                return_code = 2; 
-                /* Decode response frame from the rx buffer in order to set the correct status code if no request
-                 * timeout occurred. */ 
-                if (!_state.is_request_timeout) {
-                    status = mux_start_response_decode();
-                } else {
-                    status = MUX_ESTABLISH_TIMEOUT;
-                }                            
-            }           
-            break;
-        default:
-            MBED_ASSERT(false);
-            break;
-    };
-    
-// @todo: add mutex_free    
-    return return_code;   
-}
-#endif // 0
-
 Mux::MuxEstablishStatus Mux::dlci_establish_response_decode()
 {
     return mux_start_response_decode();
 }
-
+#endif // 0
 
 bool Mux::is_dlci_q_full()
 {
@@ -1059,7 +821,7 @@ FileHandle * Mux::dlci_id_append(uint8_t dlci_id)
     return obj;
 }
 
-
+#if 0
 ssize_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHandle **obj)
 {
     ssize_t return_code;
@@ -1109,6 +871,156 @@ ssize_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHan
     }
 
     return return_code;   
+}
+#endif // 0
+
+uint32_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHandle **obj)
+{       
+    if ((dlci_id < DLCI_ID_LOWER_BOUND) || (dlci_id > DLCI_ID_UPPER_BOUND)) {
+        return 2;
+    }
+// @todo: add mutex_lock    
+    if (!_state.is_mux_open) {
+// @todo: add mutex_free                
+        return 1;
+    }
+    if (is_dlci_append_ok(dlci_id)) {
+// @todo: add mutex_free        
+        return 0;
+    }
+    
+    switch (_tx_context.tx_state) {
+        int              ret_wait;
+        ssize_t          write_err;        
+        case TX_IDLE:                
+            /* Construct the frame, start the tx sequence 1-byte at time, reset relevant state contexts and suspend 
+               the call thread. */                        
+            status = MUX_ESTABLISH_SUCCESS;           
+            sabm_request_construct(dlci_id);
+            write_err = write_do();   
+            if (write_err < 0) {
+                status = MUX_ESTABLISH_WRITE_ERROR;
+// @todo: add mutex_free                                
+                return 3u;
+            }
+            tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
+//            _state.is_request_timeout      = 0;   
+            _tx_context.retransmit_counter = RETRANSMIT_COUNT; // SET TO TX_IDLE EXIT
+               
+            _state.is_write_error                   = 0; // @todo: set to TX_IDLE EXIT? SHOULD BE OK
+// @todo: add mutex_free here               
+            ret_wait = _semaphore.wait();
+            MBED_ASSERT(ret_wait == 1); 
+            status = static_cast<MuxEstablishStatus>(_establish_status);
+            if (status == MUX_ESTABLISH_SUCCESS) {
+                *obj = dlci_id_append(dlci_id);
+                MBED_ASSERT(obj != NULL);
+            }           
+            break;
+        default:
+            MBED_ASSERT(false);
+            break;
+    }    
+    
+    return 3u;
+}
+
+
+uint32_t Mux::mux_start(Mux::MuxEstablishStatus &status)
+{
+// @todo: add mutex_lock
+       
+    if (_state.is_mux_open) { // @todo: THIS NEEDS TO BE SET IN THIS FUNCTION
+// @todo: add mutex_free        
+        return 0;
+    }
+    if (_state.is_mux_open_self_iniated_pending) { 
+// @todo: add mutex_free                
+        return 1u;
+    }
+
+    _state.is_mux_open_self_iniated_pending = 1u;
+
+    switch (_tx_context.tx_state) {
+        Mux::FrameTxType tx_frame_type;
+        int              ret_wait;
+        ssize_t          write_err;
+        case TX_IDLE:
+            /* Construct the frame, start the tx sequence 1-byte at time, reset relevant state contexts and suspend 
+               the call thread. */           
+            sabm_request_construct(0);
+            write_err = write_do();   
+            if (write_err < 0) {
+                status = MUX_ESTABLISH_WRITE_ERROR;
+// @todo: add mutex_free                                
+                return 2u;
+            }
+
+            
+            tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
+//            _state.is_request_timeout      = 0;   
+            _tx_context.retransmit_counter = RETRANSMIT_COUNT;
+               
+            _state.is_write_error = 0; // @todo: set to TX_IDLE EXIT? SHOULD BE OK
+// @todo: add mutex_free here               
+            ret_wait = _semaphore.wait();
+            MBED_ASSERT(ret_wait == 1); 
+            status = static_cast<MuxEstablishStatus>(_establish_status);
+            if (status == MUX_ESTABLISH_SUCCESS) {
+                _state.is_mux_open = 1u;                
+            }
+                   
+#if 0 // LEGACY                
+                return_code = (!_state.is_write_error) ? 2 : -1; 
+                
+                /* Decode response frame from the rx buffer in order to set the correct status code if no request
+                 * timeout occurred. */
+                if (return_code == 2) { 
+                    // if no write error the TX cycle was completed.
+                    
+                    if (!_state.is_request_timeout) {
+                        status = mux_start_response_decode();
+                    } else {
+                        status = MUX_ESTABLISH_TIMEOUT;
+                    }
+                }
+#endif // 0               
+            break;
+        case TX_INTERNAL_RESP:
+            tx_frame_type = frame_tx_type_resolve();
+            if (tx_frame_type == FRAME_TX_TYPE_UA) {
+// @todo: add mutex free                
+                return 1;
+            } 
+// @todo: add mutex_free               
+            ret_wait = _semaphore.wait();
+            MBED_ASSERT(ret_wait == 1);
+            status = static_cast<MuxEstablishStatus>(_establish_status);
+            if (status == MUX_ESTABLISH_SUCCESS) {
+                _state.is_mux_open = 1u;                
+            }                
+#if 0
+                return_code = (!_state.is_write_error) ? 2 : -1;
+                /* Decode response frame from the rx buffer in order to set the correct status code if no request
+                 * timeout occurred. */
+                if (return_code == 2) {
+                    if (!_state.is_request_timeout) {
+                        status = mux_start_response_decode();
+                    } else {
+                        status = MUX_ESTABLISH_TIMEOUT;
+                    }
+                }
+#endif // 0               
+            break;
+        default:
+            /* Code that should never be reached. */
+            MBED_ASSERT(false);
+            break;
+    };
+                
+    _state.is_mux_open_self_iniated_pending = 0;
+   
+    return 2u;   
 }
 
 } // namespace mbed

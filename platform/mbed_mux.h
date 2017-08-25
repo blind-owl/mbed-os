@@ -151,6 +151,7 @@ typedef enum
     MUX_ESTABLISH_SUCCESS = 0, /* Peer accepted the request. */
     MUX_ESTABLISH_REJECT,      /* Peer rejected the request. */
     MUX_ESTABLISH_TIMEOUT,     /* Timeout occurred for the request. */
+    MUX_ESTABLISH_WRITE_ERROR, /* Write error occurred for the request. */    
     MUX_ESTABLISH_MAX          /* Enumeration upper bound. */
 } MuxEstablishStatus;
 
@@ -160,33 +161,33 @@ typedef enum
     /** Establish the multiplexer control channel.
      *
      *  @note: Relevant request specific parameters are fixed at compile time within multiplexer component.     
-     *  @note: Call returns when either response from the peer is received or timeout occurs.
+     *  @note: Call returns when response from the peer is received, timeout or write error occurs.
      *
-     *  @param status   Operation completion code.
+     *  @param status Operation completion code.
      *
-     *  @return 2   Operation completed successfully, check @ref status for completion code.
+     *  @return 2   Operation completed, check @ref status for completion code.
      *  @return 1   Operation not started, peer or self initiated control channel open allready in progress.     
-     *  @return 0   Operation not started, multiplexer control channel allready open.     
-     *  @return <0  Unspecified failure.
+     *  @return 0   Operation not started, multiplexer control channel allready open.    
      */
-    static ssize_t mux_start(MuxEstablishStatus &status);
+    static uint32_t mux_start(MuxEstablishStatus &status);
         
     /** Establish a DLCI.
      *
      *  @note: Relevant request specific parameters are fixed at compile time within multiplexer component.
-     *  @note: Call returns when either response from the peer is received or timeout occurs.     
+     *  @note: Call returns when response from the peer is received, timeout or write error occurs.
      *
      *  @param dlci_id  ID of the DLCI to establish. Valid range 1 - 63. 
      *  @param status   Operation completion code.     
      *  @param obj      Valid object upon @ref status having success, NULL upon failure.     
      *
-     *  @return 3   Operation completed successfully, check @ref status for completion code.
+     *  @return 3   Operation completed, check @ref status for completion code.
      *  @return 2   Operation not started, DLCI ID not in valid range.
      *  @return 1   Operation not started, no established multiplexer control channel exists.
      *  @return 0   Operation not started, @ref dlci_id, or all available DLCI ID resources, allready in use.
-     *  @return <0  Unspecified failure.
+     *  
+     * @todo: ADD Operation not started, peer or self initiated channel open for DLCI ID allready in progress.     
      */        
-    static ssize_t dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHandle **obj);
+    static uint32_t dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHandle **obj);
         
     /** Attach serial interface to the object.
      *
@@ -365,7 +366,7 @@ private:
      *  @return Frame type.
      */                        
     static Mux::FrameTxType frame_tx_type_resolve();
-    
+#if 0    
     /** Decode received start multiplexer response frame.
      * 
      *  @return MUX_ESTABLISH_SUCCESS for successfull establishment.
@@ -379,7 +380,7 @@ private:
      *  @return MUX_ESTABLISH_REJECT peer rejected establishment. 
      */                        
     static Mux::MuxEstablishStatus dlci_establish_response_decode();
-    
+#endif // 0    
     /** Begin the frame retransmit sequence. */
     static void frame_retransmit_begin();
     
@@ -441,7 +442,7 @@ private:
     typedef struct
     {
         uint8_t is_mux_open        : 1;         /* True when multiplexer is open. */        
-        uint8_t is_request_timeout : 1;         /* True when request timeout has occurred. */
+//        uint8_t is_request_timeout : 1;         /* True when request timeout has occurred. */
         uint8_t is_initiator : 1;               /* True when role is initiator. */
         uint8_t is_mux_open_self_iniated_pending : 1;
         uint8_t is_write_error : 1;
@@ -463,6 +464,8 @@ private:
     static rx_context_t     _rx_context;                            /* Rx context. */    
     static state_t          _state;                                 /* General state context. */
     static const uint8_t    _crctable[MUX_CRC_TABLE_LEN];           /* CRC table used for frame FCS. */
+    
+    static volatile uint8_t _establish_status;
 };
 
 
