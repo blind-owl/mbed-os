@@ -81,6 +81,7 @@ void Mux::module_init()
     _state.is_mux_open                      = 0;
     _state.is_initiator                     = 0;
     _state.is_mux_open_self_iniated_pending = 0;
+    _state.is_mux_open_self_iniated_running = 0;
     _state.is_write_error                   = 0;
    
     _rx_context.offset        = 0;
@@ -122,13 +123,12 @@ void Mux::on_timeout()
                 frame_retransmit_begin();
                 tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
             } else {
-                /* Retransmission limit reachd, change state and release the suspended call thread with appropriate 
+                /* Retransmission limit reached, change state and release the suspended call thread with appropriate 
                    status code. */
-//                _state.is_request_timeout = 1;
-                _establish_status = MUX_ESTABLISH_TIMEOUT;
+                _establish_status        = MUX_ESTABLISH_TIMEOUT;
                 const osStatus os_status = _semaphore.release();
                 MBED_ASSERT(os_status == osOK);    
-                tx_state_change(TX_IDLE, NULL);
+                tx_state_change(TX_IDLE, tx_idle_entry_run);
                 // @todo: need to be carefull of call order between the thread release and state change.
             }            
             break;
@@ -268,21 +268,13 @@ void Mux::on_rx_frame_ua()
     switch (_tx_context.tx_state) {
         osStatus os_status;
         case TX_RETRANSMIT_DONE:
-            _event_q->cancel(_tx_context.timer_id);
-            
-            // @todo: need to verify correct call order for sm change and Semaphore release.
-            tx_state_change(TX_IDLE, NULL);
-            _establish_status = Mux::MUX_ESTABLISH_SUCCESS;
+            _event_q->cancel(_tx_context.timer_id);           
+            _establish_status   = Mux::MUX_ESTABLISH_SUCCESS;
+            _state.is_initiator = 1;            
             os_status = _semaphore.release();
             MBED_ASSERT(os_status == osOK); 
-                            
-            // @todo: DEFECT ONLY OPEN AFTER RX RESPONSE SUCCESS DECODED
-            // TC: 
-            // - peer reject mux open
-            // - reissue mux start without init in between
-// trace("!MUX_OPEN", 0);                                   
-            _state.is_mux_open = 1; 
-            _state.is_initiator        = 1;
+            // @todo: need to verify correct call order for sm change and Semaphore release.
+            tx_state_change(TX_IDLE, tx_idle_entry_run);          
             break;
         default:
             trace("rx_frame_ua_do: ", _tx_context.tx_state);                
@@ -299,13 +291,12 @@ void Mux::on_rx_frame_dm()
     switch (_tx_context.tx_state) {
         osStatus os_status;
         case TX_RETRANSMIT_DONE:
-            _event_q->cancel(_tx_context.timer_id);
-            
-            // @todo: need to verify correct call order for sm change and Semaphore release.
-            tx_state_change(TX_IDLE, NULL);
+            _event_q->cancel(_tx_context.timer_id);           
             _establish_status = Mux::MUX_ESTABLISH_REJECT;
             os_status = _semaphore.release();
-            MBED_ASSERT(os_status == osOK);                           
+            MBED_ASSERT(os_status == osOK);        
+            // @todo: need to verify correct call order for sm change and Semaphore release.
+            tx_state_change(TX_IDLE, tx_idle_entry_run);            
             break;
         default:
             trace("rx_frame_ua_do: ", _tx_context.tx_state);                
@@ -526,7 +517,7 @@ void Mux::on_post_tx_frame_ua()
                 }                
             } 
             
-            tx_state_change(TX_IDLE, NULL);            
+            tx_state_change(TX_IDLE, tx_idle_entry_run);            
             break;
         default:
             /* Code that should never be reached. */
@@ -541,16 +532,16 @@ void Mux::on_post_tx_frame_ua()
 void Mux::tx_idle_entry_run()
 {
     if (_state.is_mux_open_self_iniated_pending) {
-        /* Construct the frame, start the tx sequence 1-byte at time, reset relevant state contexts. */               
+        /* Construct the frame, start the tx sequence 1-byte at time, set and reset relevant state contexts. */
+        _state.is_mux_open_self_iniated_running = 1u;       
         _state.is_mux_open_self_iniated_pending = 0;
         sabm_request_construct(0);
         const ssize_t return_code = write_do();  
         if (return_code >= 0) {        
-            tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);        
-//            _state.is_request_timeout      = 0;   
+            tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
             _tx_context.retransmit_counter = RETRANSMIT_COUNT;                
         } else {
-            // @todo: propagate error event to user and remove assert. */
+            // @todo: as self iniated we release the Semaphore with proper error code. */
             MBED_ASSERT(false);
         }
     }
@@ -626,9 +617,10 @@ void Mux::on_deferred_call()
             }
         } else {
             switch (_tx_context.tx_state) {
+                osStatus os_status;
                 case TX_RETRANSMIT_ENQUEUE:
-                    _establish_status        = MUX_ESTABLISH_WRITE_ERROR;
-                    const osStatus os_status = _semaphore.release();
+                    _establish_status = MUX_ESTABLISH_WRITE_ERROR;
+                    os_status         = _semaphore.release();
                     MBED_ASSERT(os_status == osOK);    
                     tx_state_change(TX_IDLE, NULL);                    
                     break;
@@ -948,6 +940,10 @@ uint32_t Mux::mux_start(Mux::MuxEstablishStatus &status)
 // @todo: add mutex_free                
         return 1u;
     }
+    if (_state.is_mux_open_self_iniated_running) {
+// @todo: add mutex_free                
+        return 1u;        
+    }
 
 // NOT    _state.is_mux_open_self_iniated_pending = 1u;
 
@@ -966,7 +962,7 @@ uint32_t Mux::mux_start(Mux::MuxEstablishStatus &status)
                 return 2u;
             }
             
-            _state.is_mux_open_self_iniated_pending = 1u;
+            _state.is_mux_open_self_iniated_running = 1u;
             tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
 //            _state.is_request_timeout      = 0;   
             _tx_context.retransmit_counter = RETRANSMIT_COUNT;
@@ -974,7 +970,7 @@ uint32_t Mux::mux_start(Mux::MuxEstablishStatus &status)
             _state.is_write_error = 0; // @todo: set to TX_IDLE EXIT? SHOULD BE OK
 // @todo: add mutex_free here               
             ret_wait = _semaphore.wait();
-            MBED_ASSERT(ret_wait == 1); 
+            MBED_ASSERT(ret_wait == 1);
             status = static_cast<MuxEstablishStatus>(_establish_status);
             if (status == MUX_ESTABLISH_SUCCESS) {
                 _state.is_mux_open = 1u;                
@@ -989,7 +985,7 @@ uint32_t Mux::mux_start(Mux::MuxEstablishStatus &status)
             _state.is_mux_open_self_iniated_pending = 1u;
 // @todo: add mutex_free               
             ret_wait = _semaphore.wait();
-            MBED_ASSERT(ret_wait == 1);
+            MBED_ASSERT(ret_wait == 1);        
             status = static_cast<MuxEstablishStatus>(_establish_status);
             if (status == MUX_ESTABLISH_SUCCESS) {
                 _state.is_mux_open = 1u;                
@@ -997,11 +993,13 @@ uint32_t Mux::mux_start(Mux::MuxEstablishStatus &status)
             break;
         default:
             /* Code that should never be reached. */
+            trace("tx_state: ", _tx_context.tx_state);
             MBED_ASSERT(false);
             break;
     };
                 
-    _state.is_mux_open_self_iniated_pending = 0;
+    _state.is_mux_open_self_iniated_running = 0;
+    _state.is_mux_open_self_iniated_pending = 0; 
    
     return 2u;   
 }

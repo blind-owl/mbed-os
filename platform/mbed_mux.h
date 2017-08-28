@@ -441,10 +441,10 @@ private:
     /* Definition for state type. */
     typedef struct
     {
-        uint8_t is_mux_open        : 1;         /* True when multiplexer is open. */        
-//        uint8_t is_request_timeout : 1;         /* True when request timeout has occurred. */
+        uint8_t is_mux_open        : 1;         /* True when multiplexer is open. */       
         uint8_t is_initiator : 1;               /* True when role is initiator. */
         uint8_t is_mux_open_self_iniated_pending : 1;
+        uint8_t is_mux_open_self_iniated_running : 1;
         uint8_t is_write_error : 1;
 #if 0        
         uint8_t is_dlci_establish_pending : 1;  /* True if @ref mux_start or @ref dlci_establish is pending. */

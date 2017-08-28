@@ -2248,17 +2248,15 @@ void mux_open_self_iniated_dm_tx_in_progress_sem_wait(const void *context)
     };       
     const uint8_t new_write_byte = FLAG_SEQUENCE_OCTET;
     
-    /* Finish the mux open establishment with success. */    
+    /* Finish the DM TX sequence and TX 1st byte of the pending mux start-up request. */    
     peer_iniated_response_tx(&write_byte[0], sizeof(write_byte), &new_write_byte, false, NULL);    
 
-    /* DM response completed, complete the mux start-up establishent. */
-    const uint8_t read_byte[4] = 
-    {
-        ADDRESS_MUX_START_RESP_OCTET, 
-        (FRAME_TYPE_UA | PF_BIT), 
-        fcs_calculate(&read_byte[0], 2),
-        FLAG_SEQUENCE_OCTET
-    };    
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
+    int ret = mbed::Mux::mux_start(status);
+    CHECK_EQUAL(1, ret);
+    CHECK(!MuxClient::is_mux_start_triggered()); 
+   
+    /* TX remainder of the mux start-up request. */
     const uint8_t write_byte_2[4] = 
     {
         ADDRESS_MUX_START_REQ_OCTET, 
@@ -2268,7 +2266,21 @@ void mux_open_self_iniated_dm_tx_in_progress_sem_wait(const void *context)
     };
     
     self_iniated_request_tx(&(write_byte_2[0]), sizeof(write_byte_2));
-    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte));   
+    
+    status = mbed::Mux::MUX_ESTABLISH_MAX;    
+    ret    = mbed::Mux::mux_start(status);
+    CHECK_EQUAL(1, ret);        
+    CHECK(!MuxClient::is_mux_start_triggered());     
+    
+    /* RX mux start-up response. */
+    const uint8_t read_byte[4] = 
+    {
+        ADDRESS_MUX_START_RESP_OCTET, 
+        (FRAME_TYPE_UA | PF_BIT), 
+        fcs_calculate(&read_byte[0], 2),
+        FLAG_SEQUENCE_OCTET
+    };        
+    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte));     
 }
 
 
@@ -2278,7 +2290,12 @@ void mux_open_self_iniated_dm_tx_in_progress_sem_wait(const void *context)
  * - send 1st byte of DM response 
  * - issue mux open, will be put pending until ongoing DM response gets completed.
  * - DM response gets completed
- * - complete mux start-up establishment.
+ * - TX 1st byte of mux start-up request
+ * - issue mux open: fails
+ * - TX remainder of mux start-up request
+ * - issue mux open: fails
+ * - receive mux start-up response: establishent success
+ * - issue mux open: fails
  */
 TEST(MultiplexerOpenTestGroup, mux_open_self_iniated_dm_tx_in_progress)
 {
@@ -2315,9 +2332,15 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_iniated_dm_tx_in_progress)
     mock_wait->func_context = dlci_id;
     
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    const int ret = mbed::Mux::mux_start(status);
+    int ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(2, ret);
     CHECK_EQUAL(Mux::MUX_ESTABLISH_SUCCESS, status);
+    CHECK(!MuxClient::is_mux_start_triggered());
+    
+    status = mbed::Mux::MUX_ESTABLISH_MAX;    
+    ret    = mbed::Mux::mux_start(status);
+    CHECK_EQUAL(0, ret);            
+    CHECK(!MuxClient::is_mux_start_triggered());         
 }
 
 
