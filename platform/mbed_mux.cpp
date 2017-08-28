@@ -541,8 +541,9 @@ void Mux::tx_idle_entry_run()
             tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
             _tx_context.retransmit_counter = RETRANSMIT_COUNT;                
         } else {
-            // @todo: as self iniated we release the Semaphore with proper error code. */
-            MBED_ASSERT(false);
+            _establish_status        = MUX_ESTABLISH_WRITE_ERROR;
+            const osStatus os_status = _semaphore.release();
+            MBED_ASSERT(os_status == osOK);
         }
     }
 }
