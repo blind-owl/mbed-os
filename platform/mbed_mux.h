@@ -366,21 +366,7 @@ private:
      *  @return Frame type.
      */                        
     static Mux::FrameTxType frame_tx_type_resolve();
-#if 0    
-    /** Decode received start multiplexer response frame.
-     * 
-     *  @return MUX_ESTABLISH_SUCCESS for successfull establishment.
-     *  @return MUX_ESTABLISH_REJECT peer rejected establishment. 
-     */                    
-    static Mux::MuxEstablishStatus mux_start_response_decode();
-    
-    /** Decode received dlci establish response frame.
-     * 
-     *  @return MUX_ESTABLISH_SUCCESS for successfull establishment.
-     *  @return MUX_ESTABLISH_REJECT peer rejected establishment. 
-     */                        
-    static Mux::MuxEstablishStatus dlci_establish_response_decode();
-#endif // 0    
+
     /** Begin the frame retransmit sequence. */
     static void frame_retransmit_begin();
     
@@ -394,15 +380,7 @@ private:
      *  @param entry_func   State entry function.
      */                
     static void tx_state_change(TxState new_state, tx_state_entry_func_t entry_func);
-    
-    /** Resolve is supplied DLCI id, and all available DLCI resources, allready in use.
-     * 
-     *  @param dlci_id  DLCI ID to resolve.
-     * 
-     *  @return true if supplied DLCI ID is allready used or no resources availabe, false otherwise.
-     */                            
-    static bool is_dlci_append_ok(uint8_t dlci_id);
-    
+       
     // @todo: update me!
     static FileHandle * dlci_id_append(uint8_t dlci_id);
     static bool is_dlci_in_use(uint8_t dlci_id);
@@ -445,7 +423,6 @@ private:
         uint8_t is_initiator : 1;               /* True when role is initiator. */
         uint8_t is_mux_open_self_iniated_pending : 1;
         uint8_t is_mux_open_self_iniated_running : 1;
-        uint8_t is_write_error : 1;
 #if 0        
         uint8_t is_dlci_establish_pending : 1;  /* True if @ref mux_start or @ref dlci_establish is pending. */
         uint8_t is_user_tx_pending : 1;         /* True if user TX request is pending. */

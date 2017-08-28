@@ -82,7 +82,6 @@ void Mux::module_init()
     _state.is_initiator                     = 0;
     _state.is_mux_open_self_iniated_pending = 0;
     _state.is_mux_open_self_iniated_running = 0;
-    _state.is_write_error                   = 0;
    
     _rx_context.offset        = 0;
     _rx_context.decoder_state = DECODER_STATE_SYNC;    
@@ -746,38 +745,6 @@ ssize_t Mux::write_do()
 }
 
 
-// @todo: can be removed as bit is set in on_rx_frame_ua func and this call can be too late -> rx buffer overwritten. 
-#if 0
-Mux::MuxEstablishStatus Mux::mux_start_response_decode()
-{
-    Mux::MuxEstablishStatus status;
-    const frame_hdr_t      *frame = reinterpret_cast<const frame_hdr_t*>(&(_rx_context.buffer[0]));
-    
-    switch (frame->control) {
-        case (FRAME_TYPE_UA | PF_BIT):
-            status = MUX_ESTABLISH_SUCCESS;
-            break;
-        case (FRAME_TYPE_DM | PF_BIT):
-            status = MUX_ESTABLISH_REJECT;
-            break;
-        default:
-            // @todo: need to specify new return value for this.
-            MBED_ASSERT(false);
-            break;
-    }
-    
-    return status;
-}
-#endif // 0
-
-
-#if 0
-Mux::MuxEstablishStatus Mux::dlci_establish_response_decode()
-{
-    return mux_start_response_decode();
-}
-#endif // 0
-
 bool Mux::is_dlci_q_full()
 {
     const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);
@@ -788,24 +755,6 @@ bool Mux::is_dlci_q_full()
     }
     
     return true;
-}
-
-
-// @todo: replace this func with is_dlci_q_full, is_dlci_in_use
-bool Mux::is_dlci_append_ok(uint8_t dlci_id)
-{
-    /* Check is supplied DLCI id, and all available DLCI resources, allready in use. */ 
-    bool is_free_slot = false;
-    for (uint8_t i = 0; i != sizeof(_mux_objects) / sizeof(_mux_objects[0]); ++i) {
-        if (_mux_objects[i].dlci == dlci_id) {
-            return true;
-        }
-        if (_mux_objects[i].dlci == MUX_DLCI_INVALID_ID) {
-            is_free_slot = true;
-        }
-    }
-    
-    return is_free_slot ? false : true;
 }
 
 
@@ -887,8 +836,12 @@ uint32_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHa
 // @todo: add mutex_free                
         return 1;
     }
-    if (is_dlci_append_ok(dlci_id)) {
-// @todo: add mutex_free        
+    if (is_dlci_q_full()) {
+// @todo: add mutex_free                        
+        return 0;
+    }
+    if (is_dlci_in_use(dlci_id)) {
+// @todo: add mutex_free                        
         return 0;
     }
     
@@ -909,8 +862,7 @@ uint32_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHa
             tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
 //            _state.is_request_timeout      = 0;   
             _tx_context.retransmit_counter = RETRANSMIT_COUNT; // SET TO TX_IDLE EXIT
-               
-            _state.is_write_error                   = 0; // @todo: set to TX_IDLE EXIT? SHOULD BE OK
+              
 // @todo: add mutex_free here               
             ret_wait = _semaphore.wait();
             MBED_ASSERT(ret_wait == 1); 
@@ -946,8 +898,6 @@ uint32_t Mux::mux_start(Mux::MuxEstablishStatus &status)
         return 1u;        
     }
 
-// NOT    _state.is_mux_open_self_iniated_pending = 1u;
-
     switch (_tx_context.tx_state) {
         Mux::FrameTxType tx_frame_type;
         int              ret_wait;
@@ -967,8 +917,7 @@ uint32_t Mux::mux_start(Mux::MuxEstablishStatus &status)
             tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
 //            _state.is_request_timeout      = 0;   
             _tx_context.retransmit_counter = RETRANSMIT_COUNT;
-               
-            _state.is_write_error = 0; // @todo: set to TX_IDLE EXIT? SHOULD BE OK
+              
 // @todo: add mutex_free here               
             ret_wait = _semaphore.wait();
             MBED_ASSERT(ret_wait == 1);
@@ -1000,7 +949,6 @@ uint32_t Mux::mux_start(Mux::MuxEstablishStatus &status)
     };
                 
     _state.is_mux_open_self_iniated_running = 0;
-    _state.is_mux_open_self_iniated_pending = 0; 
    
     return 2u;   
 }
