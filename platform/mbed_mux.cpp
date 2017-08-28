@@ -78,10 +78,12 @@ extern void trace(char *string, int data);
 
 void Mux::module_init()
 {
-    _state.is_mux_open                      = 0;
-    _state.is_initiator                     = 0;
-    _state.is_mux_open_self_iniated_pending = 0;
-    _state.is_mux_open_self_iniated_running = 0;
+    _state.is_mux_open                       = 0;
+    _state.is_initiator                      = 0;
+    _state.is_mux_open_self_iniated_pending  = 0;
+    _state.is_mux_open_self_iniated_running  = 0;    
+    _state.is_dlci_open_self_iniated_pending = 0;
+    _state.is_dlci_open_self_iniated_running = 0;        
    
     _rx_context.offset        = 0;
     _rx_context.decoder_state = DECODER_STATE_SYNC;    
@@ -844,6 +846,14 @@ uint32_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHa
 // @todo: add mutex_free                        
         return 0;
     }
+    if (_state.is_dlci_open_self_iniated_pending) {
+// @todo: add mutex_free                        
+        return 3;        
+    }
+    if (_state.is_dlci_open_self_iniated_running) {
+// @todo: add mutex_free                        
+        return 3;                
+    }
     
     switch (_tx_context.tx_state) {
         int              ret_wait;
@@ -857,10 +867,11 @@ uint32_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHa
             if (write_err < 0) {
                 status = MUX_ESTABLISH_WRITE_ERROR;
 // @todo: add mutex_free                                
-                return 3u;
+                return 4u;
             }
+
+            _state.is_dlci_open_self_iniated_running = 1u;            
             tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
-//            _state.is_request_timeout      = 0;   
             _tx_context.retransmit_counter = RETRANSMIT_COUNT; // SET TO TX_IDLE EXIT
               
 // @todo: add mutex_free here               
@@ -872,12 +883,18 @@ uint32_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHa
                 MBED_ASSERT(obj != NULL);
             }           
             break;
+        case TX_INTERNAL_RESP:
+            // @todo: implement the pending functionality
+            MBED_ASSERT(false);
+            break;            
         default:
             MBED_ASSERT(false);
             break;
     }    
     
-    return 3u;
+    _state.is_dlci_open_self_iniated_running = 0;            
+
+    return 4u;
 }
 
 
@@ -915,7 +932,6 @@ uint32_t Mux::mux_start(Mux::MuxEstablishStatus &status)
             
             _state.is_mux_open_self_iniated_running = 1u;
             tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
-//            _state.is_request_timeout      = 0;   
             _tx_context.retransmit_counter = RETRANSMIT_COUNT;
               
 // @todo: add mutex_free here               

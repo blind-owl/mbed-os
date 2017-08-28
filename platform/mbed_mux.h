@@ -180,12 +180,11 @@ typedef enum
      *  @param status   Operation completion code.     
      *  @param obj      Valid object upon @ref status having success, NULL upon failure.     
      *
-     *  @return 3   Operation completed, check @ref status for completion code.
+     *  @return 4   Operation completed, check @ref status for completion code.
+     *  @return 3   Operation not started, peer or self initiated DLCI establishment allready in progress.     
      *  @return 2   Operation not started, DLCI ID not in valid range.
      *  @return 1   Operation not started, no established multiplexer control channel exists.
      *  @return 0   Operation not started, @ref dlci_id, or all available DLCI ID resources, allready in use.
-     *  
-     * @todo: ADD Operation not started, peer or self initiated channel open for DLCI ID allready in progress.     
      */        
     static uint32_t dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHandle **obj);
         
@@ -423,6 +422,8 @@ private:
         uint8_t is_initiator : 1;               /* True when role is initiator. */
         uint8_t is_mux_open_self_iniated_pending : 1;
         uint8_t is_mux_open_self_iniated_running : 1;
+        uint8_t is_dlci_open_self_iniated_pending : 1;
+        uint8_t is_dlci_open_self_iniated_running : 1;        
 #if 0        
         uint8_t is_dlci_establish_pending : 1;  /* True if @ref mux_start or @ref dlci_establish is pending. */
         uint8_t is_user_tx_pending : 1;         /* True if user TX request is pending. */

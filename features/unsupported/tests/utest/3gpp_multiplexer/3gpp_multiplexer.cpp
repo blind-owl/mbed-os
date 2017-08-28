@@ -785,7 +785,7 @@ void dlci_self_iniated_establish(Role role, uint8_t dlci_id)
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
     FileHandle *obj = NULL;
     const int ret = mbed::Mux::dlci_establish(dlci_id, status, &obj);
-    CHECK_EQUAL(ret, 3);
+    CHECK_EQUAL(ret, 4);
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_SUCCESS);      
     CHECK(obj != NULL);
     CHECK(!MuxClient::is_dlci_establish_triggered());
@@ -932,7 +932,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_timeout)
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
     FileHandle *obj = NULL;        
     const int ret = mbed::Mux::dlci_establish(context.dlci_id, status, &obj);
-    CHECK_EQUAL(ret, 3);
+    CHECK_EQUAL(ret, 4);
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_TIMEOUT);           
     CHECK_EQUAL(obj, NULL);    
     CHECK(!MuxClient::is_dlci_establish_triggered());
@@ -985,7 +985,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_success_after_timeo
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
     FileHandle *obj = NULL;        
     const int ret = mbed::Mux::dlci_establish(context.dlci_id, status, &obj);
-    CHECK_EQUAL(ret, 3);
+    CHECK_EQUAL(ret, 4);
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_TIMEOUT);           
     CHECK_EQUAL(obj, NULL);    
     CHECK(!MuxClient::is_dlci_establish_triggered());    
@@ -1098,7 +1098,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_write_failure)
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
     FileHandle *obj = NULL;
     const int ret = mbed::Mux::dlci_establish(1, status, &obj);
-    CHECK_EQUAL(3, ret);
+    CHECK_EQUAL(4, ret);
     CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_WRITE_ERROR, status);
     CHECK(!MuxClient::is_dlci_establish_triggered());    
     CHECK_EQUAL(obj, NULL);
@@ -1139,6 +1139,7 @@ void dlci_establish_self_initated_sem_wait_rejected_by_peer(const void *context)
  * - self iniated open multiplexer
  * - issue DLCI establishment request
  * - receive DLCI establishment response: rejected by peer
+ * - issue new DLCI establishment request: success
  */
 TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_rejected_by_peer)
 {   
@@ -1177,10 +1178,13 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_rejected_by_peer)
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX); 
     FileHandle *obj = NULL;    
     const int ret = mbed::Mux::dlci_establish(context.dlci_id, status, &obj);
-    CHECK_EQUAL(ret, 3);
+    CHECK_EQUAL(ret, 4);
     CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_REJECT, status);
     CHECK_EQUAL(obj, NULL);    
     CHECK(!MuxClient::is_dlci_establish_triggered());
+    
+    /* 2nd time: establishment success. */
+    dlci_self_iniated_establish(ROLE_INITIATOR, 1);
 }
 
 
@@ -1295,6 +1299,7 @@ void mux_start_self_initated_sem_wait_rejected_by_peer(const void *)
  * TC - mux start-up sequence, self initiated: establishment rejected by peer
  * - issue START request
  * - receive START response: rejected by peer
+ * - issue 2nd START request: establishment success
  */
 TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_rejected_by_peer)
 {    
