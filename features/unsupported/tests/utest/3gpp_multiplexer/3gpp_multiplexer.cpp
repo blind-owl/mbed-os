@@ -1066,9 +1066,50 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_all_dlci_ids_used)
 }
 
 
+/* Multiplexer semaphore wait call from dlci_establish_self_initiated_write_failure TC. */
+void dlci_establish_self_initated_write_fail_sem_wait(const void *context)
+{
+    const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};    
+    const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};
+    
+    /* Enqueue deferred call to EventQueue.
+     * Trigger sigio callback with POLLOUT event from the Filehandle used by the Mux (component under test). */
+    mock_t * mock = mock_free_get("call");
+    CHECK(mock != NULL);          
+    mock->return_value = 1;
+        
+    mbed::FileHandleMock::io_control(io_control);
+
+    /* Trigger deferred call from EventQueue.
+     * Continue with the frame write sequence. */
+    mock_t * mock_poll      = mock_free_get("poll");   
+    CHECK(mock_poll != NULL);        
+    mock_poll->return_value = POLLOUT;
+    
+    mock_t * mock_write     = mock_free_get("write");
+    CHECK(mock_write != NULL);    
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    const uint8_t write_byte                = 3u | (1u << 2);        
+    mock_write->input_param[0].param        = (uint32_t)&write_byte;               
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = (uint32_t)-1;    
+    
+    /* Release the call thread after write error. */
+    mock_t * mock_release = mock_free_get("release");
+    CHECK(mock_release != NULL);
+    mock_release->return_value = osOK;        
+
+    mbed::EventQueueMock::io_control(eq_io_control);
+}
+
+
 /*
  * TC - dlci establishment sequence, self initiated, role initiator: write failure
- * - write request returns error code, which is forwarded to the user
+ * - start write failure 1st phase
+ * - start write failure 2nd phase
+ * - start success
+ * - start failure as allready open
  */
 TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_write_failure)
 {
@@ -1094,13 +1135,46 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_write_failure)
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = (uint32_t)-1;        
     
-    /* Start test sequence. Test set mocks. */
+    /* 1st test sequence start: fails in 1st phase. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
     FileHandle *obj = NULL;
-    const int ret = mbed::Mux::dlci_establish(1, status, &obj);
+    int ret         = mbed::Mux::dlci_establish(1u, status, &obj);
     CHECK_EQUAL(4, ret);
     CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_WRITE_ERROR, status);
     CHECK(!MuxClient::is_dlci_establish_triggered());    
+    CHECK_EQUAL(obj, NULL);
+    
+    /* 2nd test sequence start: fails in 2nd phase. */
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 1;
+    
+    /* Set mock. */    
+    mock_t * mock_wait = mock_free_get("wait");
+    CHECK(mock_wait != NULL);
+    mock_wait->return_value = 1;
+    mock_wait->func         = dlci_establish_self_initated_write_fail_sem_wait;
+
+    obj    = NULL;
+    status = mbed::Mux::MUX_ESTABLISH_MAX;  
+    ret    = mbed::Mux::dlci_establish(1u, status, &obj);
+    CHECK_EQUAL(4, ret);
+    CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_WRITE_ERROR, status);
+    CHECK(!MuxClient::is_dlci_establish_triggered());    
+    CHECK_EQUAL(obj, NULL);
+    
+    /* 3rd test sequence start: establishment success. */
+    dlci_self_iniated_establish(ROLE_INITIATOR, 1);
+    
+    /* 4th test sequence start: establishment with the same DLCI id - fail. */
+    status = mbed::Mux::MUX_ESTABLISH_MAX;    
+    obj    = NULL;
+    ret    = mbed::Mux::dlci_establish(1u, status, &obj);
+    CHECK_EQUAL(ret, 0);    
     CHECK_EQUAL(obj, NULL);
 }
 
