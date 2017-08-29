@@ -525,7 +525,7 @@ void mux_self_iniated_open()
 
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    const int ret = mbed::Mux::mux_start(status);
+    const uint32_t ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(2, ret);
     CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_SUCCESS, status);    
 }
@@ -558,7 +558,7 @@ void mux_start_self_initated_existing_open_pending_sem_wait(const void *context)
 {
     /* Issue new self iniated mux open, which fails. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    const int ret = mbed::Mux::mux_start(status);   
+    const uint32_t ret = mbed::Mux::mux_start(status);   
     CHECK_EQUAL(ret, 1);
     
     /* Finish the mux open establishment with success. */
@@ -603,7 +603,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_existing_open_pending)
 
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    int ret = mbed::Mux::mux_start(status);    
+    uint32_t ret = mbed::Mux::mux_start(status);    
     CHECK_EQUAL(ret, 2);
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_SUCCESS);        
     CHECK(!MuxClient::is_mux_start_triggered());    
@@ -619,7 +619,7 @@ void mux_start_self_initated_existing_open_pending_2_sem_wait(const void *contex
 {
     /* Issue new self iniated mux open, which fails. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    const int ret = mbed::Mux::mux_start(status);   
+    const uint32_t ret = mbed::Mux::mux_start(status);   
     CHECK_EQUAL(ret, 1);
        
     const uint8_t *dlci_id      = static_cast<const uint8_t*>(context);    
@@ -702,7 +702,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_existing_open_pending_2)
     
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    int ret = mbed::Mux::mux_start(status);    
+    uint32_t ret = mbed::Mux::mux_start(status);    
     CHECK_EQUAL(ret, 2);
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_SUCCESS);        
     CHECK(!MuxClient::is_mux_start_triggered());    
@@ -783,8 +783,8 @@ void dlci_self_iniated_establish(Role role, uint8_t dlci_id)
 
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
-    FileHandle *obj = NULL;
-    const int ret = mbed::Mux::dlci_establish(dlci_id, status, &obj);
+    FileHandle *obj    = NULL;
+    const uint32_t ret = mbed::Mux::dlci_establish(dlci_id, status, &obj);
     CHECK_EQUAL(ret, 4);
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_SUCCESS);      
     CHECK(obj != NULL);
@@ -809,8 +809,8 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_mux_not_open)
 
     /* Start test sequence. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    FileHandle *obj = NULL;    
-    const int ret = mbed::Mux::dlci_establish(1, status, &obj);
+    FileHandle *obj    = NULL;    
+    const uint32_t ret = mbed::Mux::dlci_establish(1, status, &obj);
     CHECK_EQUAL(ret, 1);
     CHECK(!MuxClient::is_dlci_establish_triggered());                        
     CHECK_EQUAL(obj, NULL);    
@@ -930,8 +930,8 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_timeout)
 
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
-    FileHandle *obj = NULL;        
-    const int ret = mbed::Mux::dlci_establish(context.dlci_id, status, &obj);
+    FileHandle *obj    = NULL;        
+    const uint32_t ret = mbed::Mux::dlci_establish(context.dlci_id, status, &obj);
     CHECK_EQUAL(ret, 4);
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_TIMEOUT);           
     CHECK_EQUAL(obj, NULL);    
@@ -983,8 +983,8 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_success_after_timeo
 
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
-    FileHandle *obj = NULL;        
-    const int ret = mbed::Mux::dlci_establish(context.dlci_id, status, &obj);
+    FileHandle *obj    = NULL;        
+    const uint32_t ret = mbed::Mux::dlci_establish(context.dlci_id, status, &obj);
     CHECK_EQUAL(ret, 4);
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_TIMEOUT);           
     CHECK_EQUAL(obj, NULL);    
@@ -1020,8 +1020,8 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_dlci_id_used)
    
     /* 2nd establishment with the same DLCI id - fail. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    FileHandle *obj = NULL;
-    const int ret = mbed::Mux::dlci_establish(dlci_id, status, &obj);
+    FileHandle *obj    = NULL;
+    const uint32_t ret = mbed::Mux::dlci_establish(dlci_id, status, &obj);
     CHECK_EQUAL(ret, 0);    
     CHECK_EQUAL(obj, NULL);
 }
@@ -1059,8 +1059,8 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_all_dlci_ids_used)
     
     /* All available DLCI ids consumed. Next request will fail. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    FileHandle *obj = NULL;
-    const int ret = mbed::Mux::dlci_establish(dlci_id, status, &obj);
+    FileHandle *obj    = NULL;
+    const uint32_t ret = mbed::Mux::dlci_establish(dlci_id, status, &obj);
     CHECK_EQUAL(ret, 0);    
     CHECK_EQUAL(obj, NULL);    
 }
@@ -1145,7 +1145,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_write_failure)
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
     FileHandle *obj         = NULL;
     const uint8_t dlci_id   = 1u;    
-    int ret                 = mbed::Mux::dlci_establish(dlci_id, status, &obj);
+    uint32_t ret            = mbed::Mux::dlci_establish(dlci_id, status, &obj);
     CHECK_EQUAL(4, ret);
     CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_WRITE_ERROR, status);
     CHECK(!MuxClient::is_dlci_establish_triggered());    
@@ -1258,8 +1258,8 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_rejected_by_peer)
 
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX); 
-    FileHandle *obj = NULL;    
-    const int ret = mbed::Mux::dlci_establish(context.dlci_id, status, &obj);
+    FileHandle *obj    = NULL;    
+    const uint32_t ret = mbed::Mux::dlci_establish(context.dlci_id, status, &obj);
     CHECK_EQUAL(ret, 4);
     CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_REJECT, status);
     CHECK_EQUAL(obj, NULL);    
@@ -1346,7 +1346,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_allready_open)
    
     /* Issue new start. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    const int ret = mbed::Mux::mux_start(status);
+    const uint32_t ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(ret, 0);    
     
     CHECK(!MuxClient::is_mux_start_triggered());                    
@@ -1415,7 +1415,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_rejected_by_peer)
 
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    const int ret = mbed::Mux::mux_start(status);
+    const uint32_t ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(2, ret);
     CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_REJECT, status);       
     CHECK(!MuxClient::is_mux_start_triggered());            
@@ -1587,7 +1587,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_timeout)
 
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    const int ret = mbed::Mux::mux_start(status);
+    const uint32_t ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(ret, 2);
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_TIMEOUT);
     
@@ -1633,7 +1633,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_success_after_timeout)
 
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    const int ret = mbed::Mux::mux_start(status);
+    const uint32_t ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(ret, 2);
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_TIMEOUT);
     
@@ -2077,7 +2077,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_id_oob)
    
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
     FileHandle *obj = NULL;    
-    int ret = mbed::Mux::dlci_establish((DLCI_ID_LOWER_BOUND - 1), status, &obj);
+    uint32_t ret    = mbed::Mux::dlci_establish((DLCI_ID_LOWER_BOUND - 1), status, &obj);
     CHECK_EQUAL(2, ret);
     CHECK_EQUAL(obj, NULL);
     ret = mbed::Mux::dlci_establish((DLCI_ID_UPPER_BOUND + 1), status, &obj);
@@ -2219,7 +2219,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_simultaneous_self_iniated)
 
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    const int ret = mbed::Mux::mux_start(status);
+    const uint32_t ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(ret, 2);
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_SUCCESS);
 }
@@ -2302,7 +2302,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_simultaneous_self_iniated_full_frame)
 
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    const int ret = mbed::Mux::mux_start(status);
+    const uint32_t ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(ret, 2);
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_SUCCESS);        
 }
@@ -2349,7 +2349,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_simultaneous_peer_iniated)
     
     /* Start while peer iniated is in progress. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    const int ret = mbed::Mux::mux_start(status);
+    const uint32_t ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(ret, 1);
     
     /* Complete the existing peer iniated establishent cycle. */
@@ -2378,7 +2378,7 @@ void mux_open_self_iniated_dm_tx_in_progress_sem_wait(const void *context)
     peer_iniated_response_tx(&write_byte[0], sizeof(write_byte), &new_write_byte, false, NULL);    
 
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    int ret = mbed::Mux::mux_start(status);
+    uint32_t ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(1, ret);
     CHECK(!MuxClient::is_mux_start_triggered()); 
    
@@ -2458,7 +2458,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_iniated_dm_tx_in_progress)
     mock_wait->func_context = dlci_id;
     
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    int ret = mbed::Mux::mux_start(status);
+    uint32_t ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(2, ret);
     CHECK_EQUAL(Mux::MUX_ESTABLISH_SUCCESS, status);
     CHECK(!MuxClient::is_mux_start_triggered());
@@ -2488,7 +2488,7 @@ void dlci_establish_self_initated_dm_tx_in_progress_sem_wait(const void *context
 
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
     FileHandle *obj = NULL;
-    int ret         = mbed::Mux::dlci_establish(cntx->dlci_id, status, &obj);
+    uint32_t ret    = mbed::Mux::dlci_establish(cntx->dlci_id, status, &obj);
     CHECK_EQUAL(3, ret);
     CHECK_EQUAL(NULL, obj);
     CHECK(!MuxClient::is_dlci_establish_triggered());        
@@ -2656,7 +2656,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_iniated_dm_tx_in_progress_write_fai
     mock_wait->func_context = dlci_id;
     
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    int ret = mbed::Mux::mux_start(status);
+    uint32_t ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(2, ret);
     CHECK_EQUAL(Mux::MUX_ESTABLISH_WRITE_ERROR, status);
     CHECK(!MuxClient::is_mux_start_triggered());
