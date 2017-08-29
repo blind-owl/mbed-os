@@ -528,6 +528,7 @@ void mux_self_iniated_open()
     const uint32_t ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(2, ret);
     CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_SUCCESS, status);    
+    CHECK(!MuxClient::is_mux_start_triggered());                        
 }
 
 
@@ -549,7 +550,6 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_succes)
     mbed::Mux::serial_attach(&fh_mock);
     
     mux_self_iniated_open();
-    CHECK(!MuxClient::is_mux_start_triggered());                    
 }
 
 
@@ -1421,9 +1421,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_rejected_by_peer)
     CHECK(!MuxClient::is_mux_start_triggered());            
     
     /* 2nd establishment: success. */
-
     mux_self_iniated_open();
-    CHECK(!MuxClient::is_mux_start_triggered());
 }
 
 
@@ -1554,6 +1552,7 @@ void mux_start_self_initated_sem_wait_timeout(const void *)
  * - send START request
  * - request timeout timer expires 
  * - generate timeout event to the user
+ * - 2nd iteration will succeed
  */
 TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_timeout)
 {
@@ -1561,9 +1560,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_timeout)
     mbed::EventQueueMock eq_mock;
     
     mbed::Mux::eventqueue_attach(&eq_mock);
-    
-    /* --- begin verify TX sequence --- */
-    
+       
     /* Set and test mock. */
     mock_t * mock_sigio = mock_free_get("sigio");    
     CHECK(mock_sigio != NULL);      
@@ -1585,13 +1582,15 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_timeout)
     mock_wait->return_value = 1;
     mock_wait->func         = mux_start_self_initated_sem_wait_timeout;
 
-    /* Start test sequence. Test set mocks. */
+    /* Start test sequence: fails with timeout. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
     const uint32_t ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(ret, 2);
-    CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_TIMEOUT);
+    CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_TIMEOUT);    
+    CHECK(!MuxClient::is_mux_start_triggered());  
     
-    CHECK(!MuxClient::is_mux_start_triggered());                
+    /* Start test sequence: successfull. */
+    mux_self_iniated_open();
 }
 
 
@@ -1641,7 +1640,6 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_success_after_timeout)
     
     // 2nd try - success.
     mux_self_iniated_open();
-    CHECK(!MuxClient::is_mux_start_triggered());                        
 }
 
 
@@ -2549,7 +2547,6 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_dm_tx_in_progress)
     mbed::Mux::serial_attach(&fh_mock);
     
     mux_self_iniated_open();
-    CHECK(!MuxClient::is_mux_start_triggered());                        
   
     const uint8_t dlci_id      = 1u;
     const uint8_t read_byte[5] = 
@@ -2663,7 +2660,6 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_iniated_dm_tx_in_progress_write_fai
     
     /* Successful open. */
     mux_self_iniated_open();
-    CHECK(!MuxClient::is_mux_start_triggered());
 }
 
 
@@ -2709,7 +2705,6 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_dm_tx_in_progress_wri
     mbed::Mux::serial_attach(&fh_mock);
     
     mux_self_iniated_open();
-    CHECK(!MuxClient::is_mux_start_triggered());                        
   
     const uint8_t dlci_id      = 1u;
     const uint8_t read_byte[5] = 
