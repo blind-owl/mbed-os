@@ -41,6 +41,7 @@ typedef struct
 } frame_hdr_t;    
 
 volatile uint8_t Mux::_establish_status = 0;
+volatile uint8_t Mux::_dlci_id          = 0;
 FileHandle *Mux::_serial                = NULL;
 EventQueueMock *Mux::_event_q           = NULL;
 MuxCallback *Mux::_mux_obj_cb           = NULL;
@@ -309,30 +310,48 @@ void Mux::on_rx_frame_dm()
 
 void Mux::on_rx_frame_disc()
 {
+    ssize_t return_code;    
+    
     if (!_state.is_mux_open) {
-        switch (_tx_context.tx_state) {
-            ssize_t return_code;
+        switch (_tx_context.tx_state) {            
             case TX_IDLE:
                 dm_response_construct();
                 
                 return_code = write_do();    
                 MBED_ASSERT(return_code != 0);
-                if (return_code > 0) {
+                if (return_code > 0) { // @todo: FIX ME! also when 0 make sm transit
                     tx_state_change(TX_INTERNAL_RESP, NULL);
                 } else {
-                    // @todo: propagate write error to user.
+                    // @todo: propagate write error to user  or just discard.
                     MBED_ASSERT(false);
                 }                
                 break;
             default:
-                /* @todo: implement missing functionality. we might get a new trigger while DM response is in progress*/
+                /* @todo: implement missing functionality. we might get a new trigger while DM response is in 
+                 *progress - NOT?*/
                 trace("_tx_context.tx_state: ", _tx_context.tx_state);                
                 MBED_ASSERT(false);        
                 break;
         }
     } else {
-        /* @todo: implement missing functionality. */
-        MBED_ASSERT(false);        
+        switch (_tx_context.tx_state) {
+            case TX_IDLE:
+                dm_response_construct(/*(_rx_context.buffer[1] >> 2)*/);
+                
+                return_code = write_do();   
+                if (return_code >= 0) {
+                    tx_state_change(TX_INTERNAL_RESP, NULL);
+                } else {
+                    // @todo: propagate write error to user or just discard.
+                    MBED_ASSERT(false);
+                }                                
+                break;
+            default:
+                /* @todo: implement missing functionality. */
+                trace("_tx_context.tx_state: ", _tx_context.tx_state);                                
+                MBED_ASSERT(false);        
+                break;
+        }          
     }
 }
 
@@ -536,6 +555,7 @@ void Mux::tx_idle_entry_run()
         /* Construct the frame, start the tx sequence 1-byte at time, set and reset relevant state contexts. */
         _state.is_mux_open_self_iniated_running = 1u;       
         _state.is_mux_open_self_iniated_pending = 0;
+        
         sabm_request_construct(0);
         const ssize_t return_code = write_do();  
         if (return_code >= 0) {        
@@ -546,6 +566,21 @@ void Mux::tx_idle_entry_run()
             const osStatus os_status = _semaphore.release();
             MBED_ASSERT(os_status == osOK);
         }
+    } else if (_state.is_dlci_open_self_iniated_pending) {
+        /* Construct the frame, start the tx sequence 1-byte at time, set and reset relevant state contexts. */        
+        _state.is_dlci_open_self_iniated_running = 1u;
+        _state.is_dlci_open_self_iniated_pending = 0;
+        
+        sabm_request_construct(_dlci_id);
+        const ssize_t return_code = write_do();  
+        if (return_code >= 0) {        
+            tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
+            _tx_context.retransmit_counter = RETRANSMIT_COUNT;                
+        } else {
+            _establish_status        = MUX_ESTABLISH_WRITE_ERROR;
+            const osStatus os_status = _semaphore.release();
+            MBED_ASSERT(os_status == osOK);
+        }        
     }
 }
  
@@ -831,12 +866,12 @@ ssize_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHan
 uint32_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHandle **obj)
 {       
     if ((dlci_id < DLCI_ID_LOWER_BOUND) || (dlci_id > DLCI_ID_UPPER_BOUND)) {
-        return 2;
+        return 2u;
     }
 // @todo: add mutex_lock    
     if (!_state.is_mux_open) {
 // @todo: add mutex_free                
-        return 1;
+        return 1u;
     }
     if (is_dlci_q_full()) {
 // @todo: add mutex_free                        
@@ -848,14 +883,15 @@ uint32_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHa
     }
     if (_state.is_dlci_open_self_iniated_pending) {
 // @todo: add mutex_free                        
-        return 3;        
+        return 3u;        
     }
     if (_state.is_dlci_open_self_iniated_running) {
 // @todo: add mutex_free                        
-        return 3;                
+        return 3u;                
     }
     
     switch (_tx_context.tx_state) {
+        Mux::FrameTxType tx_frame_type;        
         int              ret_wait;
         ssize_t          write_err;        
         case TX_IDLE:                
@@ -884,8 +920,23 @@ uint32_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHa
             }           
             break;
         case TX_INTERNAL_RESP:
-            // @todo: implement the pending functionality
-            MBED_ASSERT(false);
+            tx_frame_type = frame_tx_type_resolve();
+            if (tx_frame_type == FRAME_TX_TYPE_UA) {
+// @todo: correct implementation is to to DLCI matching and only in that case return with error                
+                
+// @todo: add mutex free                
+                return 3u;
+            } 
+            _state.is_dlci_open_self_iniated_pending = 1u;
+            _dlci_id                                 = dlci_id;
+// @todo: add mutex_free               
+            ret_wait = _semaphore.wait();
+            MBED_ASSERT(ret_wait == 1);        
+            status = static_cast<MuxEstablishStatus>(_establish_status);
+            if (status == MUX_ESTABLISH_SUCCESS) {
+                *obj = dlci_id_append(dlci_id);
+                MBED_ASSERT(obj != NULL);
+            }
             break;            
         default:
             MBED_ASSERT(false);
@@ -946,7 +997,7 @@ uint32_t Mux::mux_start(Mux::MuxEstablishStatus &status)
             tx_frame_type = frame_tx_type_resolve();
             if (tx_frame_type == FRAME_TX_TYPE_UA) {
 // @todo: add mutex free                
-                return 1;
+                return 1u;
             } 
             _state.is_mux_open_self_iniated_pending = 1u;
 // @todo: add mutex_free               

@@ -444,6 +444,7 @@ private:
     static const uint8_t    _crctable[MUX_CRC_TABLE_LEN];           /* CRC table used for frame FCS. */
     
     static volatile uint8_t _establish_status;
+    static volatile uint8_t _dlci_id;
 };
 
 
