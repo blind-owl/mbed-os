@@ -894,6 +894,7 @@ void dlci_establish_self_initated_sem_wait_timeout(const void * context)
  * - issue DLCI establishment request
  * - request timeout timer expires 
  * - generate timeout event to the user
+ * - 2nd iteration will succeed
  */
 TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_timeout)
 {
@@ -928,7 +929,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_timeout)
     const dlci_establish_context_t context = {1, ROLE_INITIATOR};
     mock_wait->func_context                = &context;
 
-    /* Start test sequence. Test set mocks. */
+    /* Start test sequence. fails with timeout. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
     FileHandle *obj    = NULL;        
     const uint32_t ret = mbed::Mux::dlci_establish(context.dlci_id, status, &obj);
@@ -936,6 +937,9 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_timeout)
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_TIMEOUT);           
     CHECK_EQUAL(obj, NULL);    
     CHECK(!MuxClient::is_dlci_establish_triggered());
+    
+    /* 2nd iteration will succeed. */
+    dlci_self_iniated_establish(ROLE_INITIATOR, 1);    
 }
 
 
