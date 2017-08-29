@@ -635,7 +635,7 @@ void mux_start_self_initated_existing_open_pending_2_sem_wait(const void *contex
     /* Finish the mux open establishment with success. */    
     peer_iniated_response_tx(&write_byte[0], sizeof(write_byte), &new_write_byte, false, NULL);
     
-    /* DM response completed, complete the mux start-up establishent. */
+    /* DM response completed, complete the mux start-up establishment. */
     const uint8_t read_byte[4] = 
     {
         ADDRESS_MUX_START_RESP_OCTET, 
@@ -1395,7 +1395,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_rejected_by_peer)
     CHECK(mock_sigio != NULL);      
     mbed::Mux::serial_attach(&fh_mock);
       
-    /* 1st establishent: reject by peer. */
+    /* 1st establishment: reject by peer. */
 
     /* Set mock. */
     mock_t * mock_write = mock_free_get("write");
@@ -1420,7 +1420,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_rejected_by_peer)
     CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_REJECT, status);       
     CHECK(!MuxClient::is_mux_start_triggered());            
     
-    /* 2nd establishent: success. */
+    /* 2nd establishment: success. */
 
     mux_self_iniated_open();
     CHECK(!MuxClient::is_mux_start_triggered());
@@ -2352,7 +2352,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_simultaneous_peer_iniated)
     const uint32_t ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(ret, 1);
     
-    /* Complete the existing peer iniated establishent cycle. */
+    /* Complete the existing peer iniated establishment cycle. */
     const bool expected_mux_start_event_state = true;    
     peer_iniated_response_tx(&(write_byte[1]),
                              (sizeof(write_byte) - sizeof(write_byte[0])),
@@ -2420,7 +2420,7 @@ void mux_open_self_iniated_dm_tx_in_progress_sem_wait(const void *context)
  * - issue mux open: fails
  * - TX remainder of mux start-up request
  * - issue mux open: fails
- * - receive mux start-up response: establishent success
+ * - receive mux start-up response: establishment success
  * - issue mux open: fails
  */
 TEST(MultiplexerOpenTestGroup, mux_open_self_iniated_dm_tx_in_progress)
@@ -2524,7 +2524,7 @@ void dlci_establish_self_initated_dm_tx_in_progress_sem_wait(const void *context
 
 
 /*
- * TC - DLCI establishent sequence, self initiated with delay as DM frame TX is in progress: 
+ * TC - DLCI establishment sequence, self initiated with delay as DM frame TX is in progress: 
  * - peer sends a DISC command to DLCI 1 
  * - send 1st byte of DM response 
  * - issue DLCI establish, will be put pending until ongoing DM response gets completed.
@@ -2533,7 +2533,7 @@ void dlci_establish_self_initated_dm_tx_in_progress_sem_wait(const void *context
  * - issue DLCI establish: fails
  * - TX remainder of DLCI establish request
  * - issue mux open: fails
- * - receive DLCI establish response: establishent success
+ * - receive DLCI establish response: establishment success
  * - issue DLCI establishment request with the same DLCI ID: fails as DLCI ID allready in use.
  */
 TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_dm_tx_in_progress)
@@ -2667,4 +2667,84 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_iniated_dm_tx_in_progress_write_fai
 }
 
 
+void dlci_establish_self_initated_dm_tx_in_progress_write_failure_sem_wait(const void *context)
+{
+    const dlci_establish_context_t *cntx = static_cast<const dlci_establish_context_t*>(context);    
+           
+    const uint8_t write_byte[4] = 
+    {
+        1u | (cntx->dlci_id << 2),
+        (FRAME_TYPE_DM | PF_BIT),        
+        fcs_calculate(&write_byte[0], 2),
+        FLAG_SEQUENCE_OCTET
+    };       
+    const uint8_t new_write_byte = FLAG_SEQUENCE_OCTET;
+    
+    /* Finish the DM TX sequence and TX 1st byte of the pending mux start-up request, which fails. */    
+    peer_iniated_response_tx_new_write_error(&write_byte[0], sizeof(write_byte), &new_write_byte);       
+}
+
+
+/*
+ * TC - DLCI establishment sequence, self initiated with delay as DM frame TX is in progress: write error for 1st byte 
+ * of DLCI establishment request write
+ * - peer sends a DISC command to DLCI 1 
+ * - send 1st byte of DM response 
+ * - issue DLCI establish, will be put pending until ongoing DM response gets completed.
+ * - DM response gets completed
+ * - TX 1st byte of DLCI establish request: write error
+ * - API returns
+ * - make self iniated DLCI establishment successfully
+ */
+TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_dm_tx_in_progress_write_failure)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+    CHECK(!MuxClient::is_mux_start_triggered());                        
+  
+    const uint8_t dlci_id      = 1u;
+    const uint8_t read_byte[5] = 
+    {
+        FLAG_SEQUENCE_OCTET,        
+        /* Peer assumes the role of the responder. */
+        1u | (dlci_id << 2),
+        (FRAME_TYPE_DISC | PF_BIT), 
+        fcs_calculate(&read_byte[1], 2),
+        FLAG_SEQUENCE_OCTET
+    };           
+
+    /* Generate DISC from peer and trigger TX of 1st response byte of DM. */        
+    const uint8_t write_byte = FLAG_SEQUENCE_OCTET;
+    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), &write_byte);
+    
+    /* Issue DLCI establishment while DM is in progress. */
+    mock_t * mock_wait = mock_free_get("wait");
+    CHECK(mock_wait != NULL);
+    mock_wait->return_value                = 1;    
+    mock_wait->func                        = dlci_establish_self_initated_dm_tx_in_progress_write_failure_sem_wait;
+    const dlci_establish_context_t context = {dlci_id, ROLE_INITIATOR};
+    mock_wait->func_context                = &context;
+
+    /* Start test sequence: fails to write error. */
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
+    FileHandle *obj = NULL;
+    uint32_t ret    = mbed::Mux::dlci_establish(dlci_id, status, &obj);
+    CHECK_EQUAL(4, ret);
+    CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_WRITE_ERROR, status);      
+    CHECK_EQUAL(NULL, obj);
+    CHECK(!MuxClient::is_dlci_establish_triggered());
+
+    /* Start test sequence: establishment success. */
+    dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);
+}
+ 
 } // namespace mbed
