@@ -1724,12 +1724,12 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated_role_initiator_succ
     mux_self_iniated_open();
 
     const Role role            = ROLE_INITIATOR;
-    const uint8_t dlci_id      = 1;
+    const uint8_t dlci_id      = 1u;
     const uint8_t read_byte[4] = 
     {
-        (((role == ROLE_INITIATOR) ? 1 : 3) | (dlci_id << 2)),
+        (((role == ROLE_INITIATOR) ? 1u : 3u) | (dlci_id << 2)),
         (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&read_byte[0], 2),
+        fcs_calculate(&read_byte[0], 2u),
         FLAG_SEQUENCE_OCTET
     };        
     
@@ -2545,6 +2545,69 @@ TEST(MultiplexerOpenTestGroup, mux_open_simultaneous_peer_iniated)
                              NULL,
                              expected_mux_start_event_state,
                              MuxClient::is_mux_start_triggered);      
+}
+
+
+/*
+ * TC - DLCI establishment sequence sequence, peer initiated: peer issues DLCI establishment request while self iniated 
+ * is in progress
+ * - DLCI establishment request received completely from the peer
+ * - send 1st byte of DLCI establishment response
+ * - issue DLCI establishment request
+ * - API returns dedicated error code to signal peer iniated open is allready in progress
+ * - peer iniated DLCI establishment calllback called
+ */
+TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_peer_iniated_same_dlci_id)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+
+    mux_self_iniated_open();    
+
+    const Role role            = ROLE_INITIATOR;
+    const uint8_t dlci_id      = 1u;
+    const uint8_t read_byte[4] = 
+    {
+        (((role == ROLE_INITIATOR) ? 1u : 3u) | (dlci_id << 2)),
+        (FRAME_TYPE_SABM | PF_BIT), 
+        fcs_calculate(&read_byte[0], 2u),
+        FLAG_SEQUENCE_OCTET
+    };        
+
+    const uint8_t write_byte[5] = 
+    {
+        FLAG_SEQUENCE_OCTET,        
+        (((role == ROLE_INITIATOR) ? 1u : 3u) | (dlci_id << 2)),
+        (FRAME_TYPE_UA | PF_BIT), 
+        fcs_calculate(&write_byte[1], 2),
+        FLAG_SEQUENCE_OCTET
+    };
+
+    /* Receive completely peer iniated DLCI establishment and trigger TX of 1st response byte. */
+    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), &(write_byte[0]));        
+    
+    /* DLCI establishment while peer iniated is in progress. */
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
+    FileHandle *obj    = NULL;
+    const uint32_t ret = mbed::Mux::dlci_establish(dlci_id, status, &obj);
+    CHECK_EQUAL(3, ret);
+    CHECK_EQUAL(NULL, obj);
+    CHECK(!MuxClient::is_dlci_establish_triggered());        
+    
+    /* Complete the existing peer iniated DLCI establishment cycle. */ 
+    const bool expected_establishment_event_state = true;    
+    peer_iniated_response_tx(&(write_byte[1]),
+                             (sizeof(write_byte) - sizeof(write_byte[0])),
+                             NULL,
+                             expected_establishment_event_state,
+                             MuxClient::is_dlci_establish_triggered);          
 }
 
 
