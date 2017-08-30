@@ -277,8 +277,10 @@ private:
     static void dm_response_construct();
     
     /** Construct ua response message.
+     * 
+     *  @param dlci_id  ID of the DLCI to establish
      */                
-    static void ua_response_construct();
+    static void ua_response_construct(uint8_t dlci_id);
     
     /** Do write operation if pending data available.
      * @todo: document return code
@@ -381,7 +383,9 @@ private:
     static void tx_state_change(TxState new_state, tx_state_entry_func_t entry_func);
        
     // @todo: update me!
-    static FileHandle * dlci_id_append(uint8_t dlci_id);
+//    static FileHandle * dlci_id_append(uint8_t dlci_id);
+    static void dlci_id_append(uint8_t dlci_id);
+    static FileHandle * file_handle_get(uint8_t dlci_id);
     static bool is_dlci_in_use(uint8_t dlci_id);
     static bool is_dlci_q_full();
     
@@ -423,7 +427,9 @@ private:
         uint8_t is_mux_open_self_iniated_pending : 1;
         uint8_t is_mux_open_self_iniated_running : 1;
         uint8_t is_dlci_open_self_iniated_pending : 1;
-        uint8_t is_dlci_open_self_iniated_running : 1;        
+        uint8_t is_dlci_open_self_iniated_running : 1;
+        uint8_t is_dlci_open_peer_iniated_pending : 1;
+        uint8_t is_dlci_open_peer_iniated_running : 1;                
 #if 0        
         uint8_t is_dlci_establish_pending : 1;  /* True if @ref mux_start or @ref dlci_establish is pending. */
         uint8_t is_user_tx_pending : 1;         /* True if user TX request is pending. */
@@ -445,6 +451,8 @@ private:
     
     static volatile uint8_t _establish_status;
     static volatile uint8_t _dlci_id;
+    
+    static uint8_t          _address_field;
 };
 
 
