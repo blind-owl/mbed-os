@@ -833,7 +833,7 @@ bool Mux::is_dlci_q_full()
 
 void Mux::dlci_id_append(uint8_t dlci_id)
 {
-    FileHandle *obj   = NULL;
+//    FileHandle *obj   = NULL;
     const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);
     for (uint8_t i = 0; i != end; ++i) {   
         if (_mux_objects[i].dlci == MUX_DLCI_INVALID_ID) {
