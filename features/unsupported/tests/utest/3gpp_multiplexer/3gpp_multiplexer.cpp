@@ -22,16 +22,19 @@ public:
     static void reset(); 
     static bool is_mux_start_triggered();
     static bool is_dlci_establish_triggered();
+    static bool is_dlci_match(uint8_t dlci_id);
    
     MuxClient() {};
 private:
     
-    static bool _is_mux_start_triggered;
-    static bool _is_dlci_establish_triggered;
+    static bool    _is_mux_start_triggered;
+    static bool    _is_dlci_establish_triggered;
+    static uint8_t _dlci_id;
 };
 
 bool MuxClient::_is_mux_start_triggered      = false;
 bool MuxClient::_is_dlci_establish_triggered = false;
+uint8_t MuxClient::_dlci_id                  = 0;
 
 void MuxClient::reset()
 {
@@ -55,6 +58,12 @@ void MuxClient::on_mux_start()
 }
 
 
+bool MuxClient::is_dlci_match(uint8_t dlci_id)
+{
+    return (_dlci_id == dlci_id);
+}
+    
+    
 bool MuxClient::is_dlci_establish_triggered()
 {
     const bool ret               = _is_dlci_establish_triggered;
@@ -67,6 +76,7 @@ bool MuxClient::is_dlci_establish_triggered()
 void MuxClient::on_dlci_establish(FileHandle *obj, uint8_t dlci_id)
 {
     _is_dlci_establish_triggered = true;
+    _dlci_id                     = dlci_id;
 }
 
 static MuxClient mux_client;
@@ -1711,6 +1721,7 @@ void dlci_peer_iniated_establish_accept(Role           role,
                              NULL,
                              expected_dlci_establishment_event_state,
                              MuxClient::is_dlci_establish_triggered); 
+    CHECK(MuxClient::is_dlci_match(dlci_id));
 }
 
 
@@ -2382,6 +2393,7 @@ void dlci_establish_simultaneous_self_iniated_different_dlci_id_sem_wait(const v
                              NULL,
                              expected_dlci_establishment_event_state,
                              MuxClient::is_dlci_establish_triggered);
+    CHECK(MuxClient::is_dlci_match(cntx->dlci_id + 1u));
 }
 
 
@@ -2500,6 +2512,7 @@ void dlci_establish_simultaneous_self_iniated_full_frame_different_dlci_id_sem_w
                              NULL,
                              expected_dlci_establishment_event_state,
                              MuxClient::is_dlci_establish_triggered);
+    CHECK(MuxClient::is_dlci_match(cntx->dlci_id + 1u));    
 }
 
 
@@ -2576,7 +2589,8 @@ void dlci_establish_simultaneous_peer_iniated_different_dlci_id_sem_wait(const v
                              sizeof(write_byte_0),
                              &tx_byte,
                              expected_establishment_event_state,
-                             MuxClient::is_dlci_establish_triggered);              
+                             MuxClient::is_dlci_establish_triggered); 
+    CHECK(MuxClient::is_dlci_match(cntx->dlci_id));    
     
     /* Generate the remainder of the pending DLCI establishment request. */
     const uint8_t write_byte[4] = 
@@ -2909,6 +2923,7 @@ void dlci_establish_simultaneous_peer_iniated_same_dlci_id_sem_wait(const void *
                              NULL,
                              expected_establishment_event_state,
                              MuxClient::is_dlci_establish_triggered);
+    CHECK(MuxClient::is_dlci_match(cntx->dlci_id));
 }
 
 
