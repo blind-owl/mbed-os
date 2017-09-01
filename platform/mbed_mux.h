@@ -381,6 +381,9 @@ private:
      *  @param entry_func   State entry function.
      */                
     static void tx_state_change(TxState new_state, tx_state_entry_func_t entry_func);
+    
+    /** Begin DM frame transmit sequence. */    
+    static void dm_response_send();
        
     // @todo: update me!
 //    static FileHandle * dlci_id_append(uint8_t dlci_id);

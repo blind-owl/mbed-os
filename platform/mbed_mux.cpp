@@ -247,7 +247,7 @@ void Mux::on_rx_frame_sabm()
             
             return_code = write_do();    
             MBED_ASSERT(return_code != 0);
-            if (return_code > 0) {
+            if (return_code >= 0) {
                 tx_state_change(TX_INTERNAL_RESP, NULL);
             } else {
                 // @todo: propagate write error to user.
@@ -255,12 +255,7 @@ void Mux::on_rx_frame_sabm()
             }
             break;
         case TX_RETRANSMIT_ENQUEUE:
-        case TX_RETRANSMIT_DONE:   
-            /* @todo: DEFECT on simultaneous DLCI establishment we can end to situation that we start the sequence with
-               the same ID as DLCI ID is not appended to Q until sequence finishes
-               Solution proposal:
-               - in tx_idle_entry_run check the DLCI ID Q prior starting a pending establishment */
-            
+        case TX_RETRANSMIT_DONE:              
             dlci_id = _rx_context.buffer[1] >> 2;            
             if (!is_dlci_in_use(dlci_id)) {
                 _address_field                           = _rx_context.buffer[1];
@@ -268,7 +263,8 @@ void Mux::on_rx_frame_sabm()
             }
             break;
         default:
-            trace("rx_frame_sabm_do: ", _tx_context.tx_state);    
+            /* Code that should never be reached. */
+            trace("on_rx_frame_sabm: ", _tx_context.tx_state);    
             MBED_ASSERT(false);
             break;        
     }
@@ -277,7 +273,7 @@ void Mux::on_rx_frame_sabm()
 
 void Mux::on_rx_frame_ua()
 {
-    // @todo: verify that we have issued the start request
+    // @todo: verify that we have issued the start/establishment request in the 1st place?
     // @todo: DEFECT we should do request-response DLCI ID matching
 
     switch (_tx_context.tx_state) {
@@ -298,7 +294,9 @@ void Mux::on_rx_frame_ua()
             tx_state_change(TX_IDLE, tx_idle_entry_run);          
             break;
         default:
-            trace("rx_frame_ua_do: ", _tx_context.tx_state);                
+            /* Code that should never be reached. */
+            // @todo: just silently ignore?
+            trace("on_rx_frame_ua: ", _tx_context.tx_state);                
             MBED_ASSERT(false);
             break;
     }
@@ -320,57 +318,53 @@ void Mux::on_rx_frame_dm()
             tx_state_change(TX_IDLE, tx_idle_entry_run);            
             break;
         default:
-            trace("rx_frame_ua_do: ", _tx_context.tx_state);                
+            trace("on_rx_frame_dm: ", _tx_context.tx_state);                
             MBED_ASSERT(false);
             break;
     }
 }
 
 
+void Mux::dm_response_send()
+{
+    dm_response_construct();
+                
+    const ssize_t return_code = write_do();   
+    MBED_ASSERT(return_code != 0);
+    if (return_code >= 0) {
+        tx_state_change(TX_INTERNAL_RESP, NULL);        
+    } else {
+        // @todo: propagate write error to user or just discard.
+        MBED_ASSERT(false);
+    }                   
+}
+
+
 void Mux::on_rx_frame_disc()
 {
-    ssize_t return_code;    
-    
-    if (!_state.is_mux_open) {
-        switch (_tx_context.tx_state) {            
-            case TX_IDLE:
-                dm_response_construct();
-                
-                return_code = write_do();    
-                MBED_ASSERT(return_code != 0);
-                if (return_code > 0) { // @todo: FIX ME! also when 0 make sm transit
-                    tx_state_change(TX_INTERNAL_RESP, NULL);
+    const uint8_t dlci_id = _rx_context.buffer[1] >> 2;    
+   
+    switch (_tx_context.tx_state) {
+        case TX_IDLE:                      
+            if (!_state.is_mux_open) {
+                dm_response_send();
+            } else {
+                if (dlci_id != 0) {
+                    if (!is_dlci_in_use(dlci_id)) {
+                        dm_response_send();
+                    } else {
+                        /* DLCI close not supported and silently discarded. */
+                    }
                 } else {
-                    // @todo: propagate write error to user  or just discard.
-                    MBED_ASSERT(false);
-                }                
-                break;
-            default:
-                /* @todo: implement missing functionality. we might get a new trigger while DM response is in 
-                 *progress - NOT?*/
-                trace("_tx_context.tx_state: ", _tx_context.tx_state);                
-                MBED_ASSERT(false);        
-                break;
-        }
-    } else {
-        switch (_tx_context.tx_state) {
-            case TX_IDLE:
-                dm_response_construct(/*(_rx_context.buffer[1] >> 2)*/);
-                
-                return_code = write_do();   
-                if (return_code >= 0) {
-                    tx_state_change(TX_INTERNAL_RESP, NULL);
-                } else {
-                    // @todo: propagate write error to user or just discard.
-                    MBED_ASSERT(false);
-                }                                
-                break;
-            default:
-                /* @todo: implement missing functionality. */
-                trace("_tx_context.tx_state: ", _tx_context.tx_state);                                
-                MBED_ASSERT(false);        
-                break;
-        }          
+                    /* Mux close not supported and silently discarded. */
+                }
+            }
+            break;
+        default:
+            /* @todo: DEFECT implement missing functionality. */
+            trace("on_rx_frame_disc: ", _tx_context.tx_state);              
+            MBED_ASSERT(false);       
+            break;            
     }
 }
 
@@ -567,7 +561,6 @@ void Mux::on_post_tx_frame_ua()
 }
 
 
-//  @todo: check that all tx_idle transits call this function. */
 void Mux::tx_idle_entry_run()
 {
     if (_state.is_mux_open_self_iniated_pending) {
@@ -814,8 +807,7 @@ ssize_t Mux::write_do()
         
 //trace("WRITE: ", _tx_context.offset);
         
-        write_ret = _serial->write(&encoded_byte, WRITE_LEN);   
-        MBED_ASSERT((write_ret == 1) || (write_ret < 0)); // @todo: FIX ME: can also return 0 if called from on_timeout
+        write_ret = _serial->write(&encoded_byte, WRITE_LEN);
         if (write_ret == 1) {
             --(_tx_context.bytes_remaining);
             ++(_tx_context.offset);
@@ -963,7 +955,7 @@ uint32_t Mux::mux_start(Mux::MuxEstablishStatus &status)
 {
 // @todo: add mutex_lock
        
-    if (_state.is_mux_open) { // @todo: THIS NEEDS TO BE SET IN THIS FUNCTION
+    if (_state.is_mux_open) { 
 // @todo: add mutex_free        
         return 0;
     }

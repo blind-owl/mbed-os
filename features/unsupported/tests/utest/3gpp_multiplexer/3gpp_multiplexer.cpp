@@ -3088,7 +3088,6 @@ void dlci_establish_self_initated_dm_tx_in_progress_sem_wait(const void *context
         FLAG_SEQUENCE_OCTET
     };       
     const uint8_t new_write_byte = FLAG_SEQUENCE_OCTET;
-   
     /* Finish the DM TX sequence and TX 1st byte of the pending DLCI establishment request. */    
     peer_iniated_response_tx(&write_byte[0], sizeof(write_byte), &new_write_byte, false, NULL);    
 
@@ -3107,7 +3106,6 @@ void dlci_establish_self_initated_dm_tx_in_progress_sem_wait(const void *context
         fcs_calculate(&write_byte_2[0], 2u),
         FLAG_SEQUENCE_OCTET
     };
-
     self_iniated_request_tx(&(write_byte_2[0]), sizeof(write_byte_2));
     
     obj = NULL;
@@ -3123,8 +3121,7 @@ void dlci_establish_self_initated_dm_tx_in_progress_sem_wait(const void *context
         (FRAME_TYPE_UA | PF_BIT), 
         fcs_calculate(&read_byte[0], 2u),
         FLAG_SEQUENCE_OCTET
-    };        
-
+    };       
     self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL);     
 }
 
@@ -3186,8 +3183,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_dm_tx_in_progress)
     CHECK_EQUAL(4, ret);
     CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_SUCCESS, status);      
     CHECK(obj != NULL);
-    CHECK(!MuxClient::is_dlci_establish_triggered());    
-
+    CHECK(!MuxClient::is_dlci_establish_triggered());   
     /* Fails as DLCI ID allready in use. */
     obj = NULL;
     ret = mbed::Mux::dlci_establish(dlci_id, status, &obj);
@@ -3350,4 +3346,72 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_dm_tx_in_progress_wri
     dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);
 }
  
+
+/*
+ * TC - Peer sends DISC command to DLCI 0, which is ignored by the implementation.
+ */
+TEST(MultiplexerOpenTestGroup, mux_not_open_rx_disc_dlci_0)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+  
+    const uint8_t dlci_id      = 0;
+    const uint8_t read_byte[5] = 
+    {
+        FLAG_SEQUENCE_OCTET,        
+        /* Peer assumes the role of the responder. */
+        1u | (dlci_id << 2),
+        (FRAME_TYPE_DISC | PF_BIT), 
+        fcs_calculate(&read_byte[1], 2),
+        FLAG_SEQUENCE_OCTET
+    };               
+    
+    /* Generate DISC from peer which is ignored buy the implementation. */        
+    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), NULL);
+}
+
+
+/*
+ * TC - Peer sends DISC command to established DLCI, which is ignored by the implementation.
+ */
+TEST(MultiplexerOpenTestGroup, mux_open_rx_disc_dlci_in_use)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+  
+    const uint8_t dlci_id = 1;
+    
+    dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);    
+    
+    const uint8_t read_byte[5] = 
+    {
+        FLAG_SEQUENCE_OCTET,        
+        /* Peer assumes the role of the responder. */
+        1u | (dlci_id << 2),
+        (FRAME_TYPE_DISC | PF_BIT), 
+        fcs_calculate(&read_byte[1], 2),
+        FLAG_SEQUENCE_OCTET
+    };                     
+    /* Generate DISC from peer which is ignored buy the implementation. */        
+    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), NULL);
+}
+
 } // namespace mbed
