@@ -586,20 +586,28 @@ void Mux::tx_idle_entry_run()
             MBED_ASSERT(os_status == osOK);
         }
     } else if (_state.is_dlci_open_self_iniated_pending) {
-        /* Construct the frame, start the tx sequence 1-byte at time, set and reset relevant state contexts. */        
-        _state.is_dlci_open_self_iniated_running = 1u;
-        _state.is_dlci_open_self_iniated_pending = 0;
-        
-        sabm_request_construct(_dlci_id);
-        const ssize_t return_code = write_do();  
-        if (return_code >= 0) {        
-            tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
-            _tx_context.retransmit_counter = RETRANSMIT_COUNT;                
+        if (!is_dlci_in_use(_dlci_id)) {
+            /* Construct the frame, start the tx sequence 1-byte at time, set and reset relevant state contexts. */      
+  
+            _state.is_dlci_open_self_iniated_running = 1u;
+            _state.is_dlci_open_self_iniated_pending = 0;
+            
+            sabm_request_construct(_dlci_id);
+            const ssize_t return_code = write_do();  
+            if (return_code >= 0) {        
+                tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
+                _tx_context.retransmit_counter = RETRANSMIT_COUNT;                
+            } else {
+                _establish_status        = MUX_ESTABLISH_WRITE_ERROR;
+                const osStatus os_status = _semaphore.release();
+                MBED_ASSERT(os_status == osOK);
+            }        
         } else {
-            _establish_status        = MUX_ESTABLISH_WRITE_ERROR;
-            const osStatus os_status = _semaphore.release();
-            MBED_ASSERT(os_status == osOK);
-        }        
+                _state.is_dlci_open_self_iniated_pending = 0;
+                _establish_status                        = MUX_ESTABLISH_MAX;
+                const osStatus os_status                 = _semaphore.release();
+                MBED_ASSERT(os_status == osOK);
+        }
     } else if (_state.is_dlci_open_peer_iniated_pending) {
         const uint8_t dlci_id = _address_field >> 2;           
         if (!is_dlci_in_use(dlci_id)) {       
@@ -891,7 +899,7 @@ uint32_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHa
     }
     
     switch (_tx_context.tx_state) {
-        Mux::FrameTxType tx_frame_type;        
+//        Mux::FrameTxType tx_frame_type;        
         int              ret_wait;
         ssize_t          write_err;        
         case TX_IDLE:                
@@ -920,22 +928,24 @@ uint32_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHa
             }           
             break;
         case TX_INTERNAL_RESP:
-            tx_frame_type = frame_tx_type_resolve();
-            if (tx_frame_type == FRAME_TX_TYPE_UA) {
-// @todo: correct implementation is to to DLCI matching and only in that case return with error                
-                
-// @todo: add mutex free                
-                return 3u;
-            } 
             _state.is_dlci_open_self_iniated_pending = 1u;
             _dlci_id                                 = dlci_id;
 // @todo: add mutex_free               
             ret_wait = _semaphore.wait();
             MBED_ASSERT(ret_wait == 1);        
             status = static_cast<MuxEstablishStatus>(_establish_status);
-            if (status == MUX_ESTABLISH_SUCCESS) {
-                *obj = file_handle_get(dlci_id);
-                MBED_ASSERT(*obj != NULL);
+            switch (status) {
+                case MUX_ESTABLISH_SUCCESS:
+                    *obj = file_handle_get(dlci_id);
+                    MBED_ASSERT(*obj != NULL);                    
+                    break;
+                case MUX_ESTABLISH_MAX:
+                    /* DLCI ID is allready in use so self iniated DLCI establishment was not started, it is ok to 
+                       exit directly from here with appropriate error code.*/
+                    return 0;
+                default:
+                    /* No implementation required. */
+                    break;
             }
             break;            
         default:
