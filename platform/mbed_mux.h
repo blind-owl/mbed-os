@@ -375,12 +375,16 @@ private:
     static void tx_retransmit_done_entry_run();  
     static void tx_idle_entry_run();   
     typedef void (*tx_state_entry_func_t)();       
+    
+    static void tx_idle_exit_run();
+    typedef void (*tx_state_exit_func_t)();       
+    
     /** Change frame decoder state machine state. 
      * 
      *  @param new_state    State to transit.
      *  @param entry_func   State entry function.
      */                
-    static void tx_state_change(TxState new_state, tx_state_entry_func_t entry_func);
+    static void tx_state_change(TxState new_state, tx_state_entry_func_t entry_func, tx_state_exit_func_t exit_func);
     
     /** Begin DM frame transmit sequence. */    
     static void dm_response_send();

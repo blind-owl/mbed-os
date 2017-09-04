@@ -2403,6 +2403,9 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_self_iniated_same_dlc
     CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_SUCCESS, status);      
     CHECK(obj != NULL);
     CHECK(!MuxClient::is_dlci_establish_triggered());
+    
+    /* New cycle with uniqueue ID: success. */
+    dlci_self_iniated_establish(ROLE_INITIATOR, (dlci_id + 1u));        
 }
 
 
