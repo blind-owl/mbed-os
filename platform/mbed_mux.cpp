@@ -624,7 +624,7 @@ void Mux::tx_idle_entry_run()
         if (!is_dlci_in_use(_dlci_id) && !is_dlci_q_full()) {
             pending_self_iniated_dlci_open_start();
         } else {
-            _state.is_dlci_open_self_iniated_pending = 0;   // @todo: not tested
+            _state.is_dlci_open_self_iniated_pending = 0;
             _establish_status                        = MUX_ESTABLISH_MAX;
             const osStatus os_status                 = _semaphore.release();
             MBED_ASSERT(os_status == osOK);

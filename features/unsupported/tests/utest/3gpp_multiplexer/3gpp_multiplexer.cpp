@@ -2866,7 +2866,6 @@ void dlci_establish_simultaneous_self_iniated_different_dlci_id_race_for_last_re
  * TC - DLCI establishment sequence, simultaneous start, both peers are competing for the last DLCI ID resource
  * - self started DLCI establishment: establish all but the last resource (only 1 available)
  * - self iniated DLCI establishment started for the last remaining DLCI resource
- * 
  * - DLCI establishment request received from the peer > put pending as unused DLCI and DLCI resources available
  * - complete the self iniated DLCI establishment sequence
  * - peer iniated pending DLCI establishment is not started as all DLCI ID resources are consumed
@@ -3233,6 +3232,9 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_peer_iniated_same_dlc
     CHECK_EQUAL(0, ret);
     CHECK_EQUAL(NULL, obj);
     CHECK(!MuxClient::is_dlci_establish_triggered());
+    
+    /* New cycle with uniqueue ID: success. */
+    dlci_self_iniated_establish(ROLE_INITIATOR, (dlci_id + 1u));    
 }
 
 
