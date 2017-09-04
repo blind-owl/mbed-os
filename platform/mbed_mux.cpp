@@ -615,6 +615,7 @@ void Mux::pending_peer_iniated_dlci_open_start(uint8_t dlci_id)
     }
 }
 
+
 void Mux::tx_idle_entry_run()
 {
     if (_state.is_mux_open_self_iniated_pending) {
@@ -623,17 +624,17 @@ void Mux::tx_idle_entry_run()
         if (!is_dlci_in_use(_dlci_id) && !is_dlci_q_full()) {
             pending_self_iniated_dlci_open_start();
         } else {
-            _state.is_dlci_open_self_iniated_pending = 0;
+            _state.is_dlci_open_self_iniated_pending = 0;   // @todo: not tested
             _establish_status                        = MUX_ESTABLISH_MAX;
             const osStatus os_status                 = _semaphore.release();
             MBED_ASSERT(os_status == osOK);
         }
     } else if (_state.is_dlci_open_peer_iniated_pending) {        
         const uint8_t dlci_id = _address_field >> 2;           
-        if (!is_dlci_in_use(dlci_id)) {
+        if (!is_dlci_in_use(dlci_id) && !is_dlci_q_full()) {
             pending_peer_iniated_dlci_open_start(dlci_id);
         } else {
-            /* No implementation required as DLCI allready established for the given ID. */
+            _state.is_dlci_open_peer_iniated_pending = 0;  // @todo: not tested
         }
     } else {
         /* No implementation required. */
