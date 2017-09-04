@@ -500,6 +500,72 @@ void peer_iniated_response_tx(const uint8_t *buf,
     } while (tx_count != buf_len);
 }
 
+/*
+ * LOOP UNTIL COMPLETE RESPONSE FRAME WRITE DONE
+ * - trigger sigio callback from FileHandleMock
+ * - enqueue deferred call to EventQueue
+ * - CALL RETURN 
+ * - trigger deferred call from EventQueueMock
+ * - call poll
+ * - call write
+ * - release the pending call thread
+ * - verify completion callback state in the last iteration, if supplied
+ * - CALL RETURN 
+ */
+void peer_iniated_response_tx_no_pending_tx(const uint8_t *buf,
+                                            uint8_t        buf_len,
+                                            bool           expected_state,
+                                            compare_func_t func)
+{
+    const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
+    const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};    
+    uint8_t                                  tx_count      = 0;          
+   
+    /* Write the complete response frame in do...while. */
+    do {   
+        /* Enqueue deferred call to EventQueue. 
+         * Trigger sigio callback with POLLOUT event from the Filehandle used by the Mux (component under test). */
+        mock_t * mock = mock_free_get("call");
+        CHECK(mock != NULL);           
+        mock->return_value = 1;
+        
+        mbed::FileHandleMock::io_control(io_control);
+
+        /* Trigger deferred call from EventQueue.
+         * Continue with the frame write sequence. */
+        mock_t * mock_poll      = mock_free_get("poll");    
+        CHECK(mock_poll != NULL);         
+        mock_poll->return_value = POLLOUT;
+        mock_t * mock_write     = mock_free_get("write");
+        CHECK(mock_write != NULL); 
+        
+        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->input_param[0].param        = (uint32_t)&(buf[tx_count]);        
+        
+        mock_write->input_param[1].param        = WRITE_LEN;
+        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->return_value                = 1;        
+
+        if (tx_count == (buf_len - 1)) {      
+            /* Release the pending call thread. */
+            mock_t * mock_release = mock_free_get("release");
+            CHECK(mock_release != NULL);
+            mock_release->return_value = osOK;                        
+        }
+
+        mbed::EventQueueMock::io_control(eq_io_control);  
+
+        if (tx_count == (buf_len - 1)) {
+            if (func != NULL) {
+                /* Last byte of the response frame written, verify correct completion callback state. */    
+                CHECK_EQUAL(func(), expected_state);
+            }
+        }
+        
+        ++tx_count;        
+    } while (tx_count != buf_len);
+}
+
 
 /* Multiplexer semaphore wait call from self initiated multiplexer open TC(s). */
 void mux_start_self_initated_sem_wait(const void *context)
@@ -2668,6 +2734,95 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_peer_iniated_differen
     CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_SUCCESS, status);      
     CHECK(obj != NULL);
     CHECK(!MuxClient::is_dlci_establish_triggered());       
+}
+
+
+/* Multiplexer semaphore wait call from 
+   dlci_establish_simultaneous_peer_iniated_different_dlci_id_race_for_last_resource TC. */
+void dlci_establish_simultaneous_peer_iniated_different_dlci_id_race_for_last_resource_sem_wait(const void *context)
+{
+    const dlci_establish_context_t *cntx = static_cast<const dlci_establish_context_t*>(context);    
+    
+    const uint8_t write_byte_0[4] = 
+    {
+        (((cntx->role == ROLE_INITIATOR) ? 1u : 3u) | (cntx->dlci_id << 2)),
+        (FRAME_TYPE_UA | PF_BIT), 
+        fcs_calculate(&write_byte_0[0], 2),
+        FLAG_SEQUENCE_OCTET
+    };
+
+    /* Complete the existing peer iniated DLCI establishment cycle */ 
+    const bool expected_establishment_event_state = true;
+    peer_iniated_response_tx_no_pending_tx(&(write_byte_0[0]),
+                                           sizeof(write_byte_0),
+                                           expected_establishment_event_state,
+                                           MuxClient::is_dlci_establish_triggered); 
+    CHECK(MuxClient::is_dlci_match(cntx->dlci_id));
+}
+
+
+/*
+ * TC - DLCI establishment sequence, simultaneous start, both peers are competing for the last DLCI ID resource
+ * - self started DLCI establishment: establish all but the last resource (only 1 available) 
+ * - DLCI establishment request received completely from the peer
+ * - TX 1st byte of the DLCI establishment response
+ * 
+ * - issue DLCI establishment request with differerent unused DLCI -> put pending as unused DLCI and DLCI 
+ *   resources available
+ * 
+ * - Complete the peer iniated DLCI establishment establishment response remainder send for the peer request
+ * - pending self iniated DLCI establishment returns with proper error code as all DLCI resources are consumed
+ */
+TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_peer_iniated_different_dlci_id_race_for_last_resource)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+   
+    uint8_t dlci_id = 0u;
+    uint8_t i       = (MAX_DLCI_COUNT - 1u);
+    
+    /* Self started DLCI establishment: establish all but the last resource (only 1 available). */
+    do {
+        dlci_self_iniated_establish(ROLE_INITIATOR, ++dlci_id);
+        
+        --i;
+    } while (i != 0);
+    
+    const Role role            = ROLE_INITIATOR;
+    const uint8_t read_byte[4] = 
+    {
+        (((role == ROLE_INITIATOR) ? 1u : 3u) | (++dlci_id << 2)),
+        (FRAME_TYPE_SABM | PF_BIT), 
+        fcs_calculate(&read_byte[0], 2u),
+        FLAG_SEQUENCE_OCTET
+    };       
+    /* Receive completely peer iniated DLCI establishment and trigger TX of 1st response byte. */
+    const uint8_t write_byte = FLAG_SEQUENCE_OCTET;
+    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), &write_byte);   
+    
+    /* Last available DLCI resource will be consumed by the running peer iniated establishment. This request will be 
+       put pending but will fail to start as no resources available after peer iniated finishes. */
+    mock_t * mock_wait = mock_free_get("wait");
+    CHECK(mock_wait != NULL);
+    mock_wait->return_value                = 1;
+    mock_wait->func = dlci_establish_simultaneous_peer_iniated_different_dlci_id_race_for_last_resource_sem_wait;
+    const dlci_establish_context_t context = {dlci_id, ROLE_INITIATOR};
+    mock_wait->func_context                = &context;    
+    
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
+    FileHandle *obj    = NULL;
+    const uint32_t ret = mbed::Mux::dlci_establish(++dlci_id, status, &obj);
+    CHECK_EQUAL(ret, 0);    
+    CHECK_EQUAL(obj, NULL);        
 }
 
 

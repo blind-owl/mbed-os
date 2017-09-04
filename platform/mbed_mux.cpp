@@ -579,7 +579,7 @@ void Mux::tx_idle_entry_run()
             MBED_ASSERT(os_status == osOK);
         }
     } else if (_state.is_dlci_open_self_iniated_pending) {
-        if (!is_dlci_in_use(_dlci_id)) {
+        if (!is_dlci_in_use(_dlci_id) && !is_dlci_q_full()) {
             /* Construct the frame, start the tx sequence 1-byte at time, set and reset relevant state contexts. */      
   
             _state.is_dlci_open_self_iniated_running = 1u;
@@ -618,6 +618,8 @@ void Mux::tx_idle_entry_run()
                 MBED_ASSERT(false);
             }
         }
+    } else {
+        /* No implementation required. */
     }
 }
  
