@@ -561,62 +561,79 @@ void Mux::on_post_tx_frame_ua()
 }
 
 
+void Mux::pending_self_iniated_mux_open_start()
+{
+    /* Construct the frame, start the tx sequence 1-byte at time, set and reset relevant state contexts. */
+    _state.is_mux_open_self_iniated_running = 1u;       
+    _state.is_mux_open_self_iniated_pending = 0;
+        
+    sabm_request_construct(0);
+    const ssize_t return_code = write_do();  
+    if (return_code >= 0) {       
+        tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
+        _tx_context.retransmit_counter = RETRANSMIT_COUNT;                      
+    } else {
+        _establish_status        = MUX_ESTABLISH_WRITE_ERROR;
+        const osStatus os_status = _semaphore.release();
+        MBED_ASSERT(os_status == osOK);
+    }    
+}
+
+
+void Mux::pending_self_iniated_dlci_open_start()
+{
+    /* Construct the frame, start the tx sequence 1-byte at time, set and reset relevant state contexts. */    
+    _state.is_dlci_open_self_iniated_running = 1u;
+    _state.is_dlci_open_self_iniated_pending = 0;
+
+    sabm_request_construct(_dlci_id);
+    const ssize_t return_code = write_do(); 
+    if (return_code >= 0) {       
+        tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
+        _tx_context.retransmit_counter = RETRANSMIT_COUNT;        
+    } else {
+        _establish_status        = MUX_ESTABLISH_WRITE_ERROR;
+        const osStatus os_status = _semaphore.release();
+        MBED_ASSERT(os_status == osOK);
+    }        
+}
+
+
+void Mux::pending_peer_iniated_dlci_open_start(uint8_t dlci_id)
+{
+    /* Construct the frame, start the tx sequence 1-byte at time, set and reset relevant state contexts. */  
+    _state.is_dlci_open_peer_iniated_running = 1u;
+    _state.is_dlci_open_peer_iniated_pending = 0;
+                
+    ua_response_construct(dlci_id);
+    const ssize_t return_code = write_do();
+    if (return_code >= 0) {       
+        tx_state_change(TX_INTERNAL_RESP, NULL);                      
+    } else {
+        // @todo: propagate error to the user.
+        MBED_ASSERT(false);
+    }
+}
+
 void Mux::tx_idle_entry_run()
 {
     if (_state.is_mux_open_self_iniated_pending) {
-        /* Construct the frame, start the tx sequence 1-byte at time, set and reset relevant state contexts. */
-        _state.is_mux_open_self_iniated_running = 1u;       
-        _state.is_mux_open_self_iniated_pending = 0;
-        
-        sabm_request_construct(0);
-        const ssize_t return_code = write_do();  
-        if (return_code >= 0) {        
-            tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
-            _tx_context.retransmit_counter = RETRANSMIT_COUNT;                
-        } else {
-            _establish_status        = MUX_ESTABLISH_WRITE_ERROR;
-            const osStatus os_status = _semaphore.release();
-            MBED_ASSERT(os_status == osOK);
-        }
+        pending_self_iniated_mux_open_start();
     } else if (_state.is_dlci_open_self_iniated_pending) {
         if (!is_dlci_in_use(_dlci_id) && !is_dlci_q_full()) {
-            /* Construct the frame, start the tx sequence 1-byte at time, set and reset relevant state contexts. */      
-  
-            _state.is_dlci_open_self_iniated_running = 1u;
-            _state.is_dlci_open_self_iniated_pending = 0;
-            
-            sabm_request_construct(_dlci_id);
-            const ssize_t return_code = write_do();  
-            if (return_code >= 0) {        
-                tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL);
-                _tx_context.retransmit_counter = RETRANSMIT_COUNT;                
-            } else {
-                _establish_status        = MUX_ESTABLISH_WRITE_ERROR;
-                const osStatus os_status = _semaphore.release();
-                MBED_ASSERT(os_status == osOK);
-            }        
+            pending_self_iniated_dlci_open_start();
         } else {
-                _state.is_dlci_open_self_iniated_pending = 0;
-                _establish_status                        = MUX_ESTABLISH_MAX;
-                const osStatus os_status                 = _semaphore.release();
-                MBED_ASSERT(os_status == osOK);
+            _state.is_dlci_open_self_iniated_pending = 0;
+            _establish_status                        = MUX_ESTABLISH_MAX;
+            const osStatus os_status                 = _semaphore.release();
+            MBED_ASSERT(os_status == osOK);
         }
-    } else if (_state.is_dlci_open_peer_iniated_pending) {
+    } else if (_state.is_dlci_open_peer_iniated_pending) {        
         const uint8_t dlci_id = _address_field >> 2;           
-        if (!is_dlci_in_use(dlci_id)) {       
-            /* Construct the frame, start the tx sequence 1-byte at time, set and reset relevant state contexts. */      
-    
-            _state.is_dlci_open_peer_iniated_running = 1u;
-            _state.is_dlci_open_peer_iniated_pending = 0;
-                
-            ua_response_construct(dlci_id);
-            const ssize_t return_code = write_do(); 
-            if (return_code >= 0) {       
-                tx_state_change(TX_INTERNAL_RESP, NULL);                
-            } else {
-                // @todo: propagate error to the user.
-                MBED_ASSERT(false);
-            }
+        if (!is_dlci_in_use(dlci_id)) {
+            pending_peer_iniated_dlci_open_start(dlci_id);
+        } else {
+            /* No implementation required as DLCI allready established for the given ID. */
         }
     } else {
         /* No implementation required. */

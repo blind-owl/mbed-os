@@ -384,13 +384,46 @@ private:
     
     /** Begin DM frame transmit sequence. */    
     static void dm_response_send();
-       
-    // @todo: update me!
-//    static FileHandle * dlci_id_append(uint8_t dlci_id);
+      
+    /** Append DLCI ID to storage. 
+     * 
+     *  @param dlci_id  ID of the DLCI to append.
+     */                    
     static void dlci_id_append(uint8_t dlci_id);
+    
+    /** Get file handle based on DLCI ID. 
+     * 
+     *  @param dlci_id  ID of the DLCI used as the key
+     * 
+     *  @return Valid File handle or NULL if not found.
+     */                        
     static FileHandle * file_handle_get(uint8_t dlci_id);
+    
+    /** Evaluate is DLCI ID in use. 
+     * 
+     *  @param dlci_id  ID of the DLCI yo evaluate
+     * 
+     *  @return True if in use, false otherwise.
+     */                            
     static bool is_dlci_in_use(uint8_t dlci_id);
+    
+    /** Evaluate is DLCI ID queue full.
+     * 
+     *  @return True if full, false otherwise.
+     */                                
     static bool is_dlci_q_full();
+    
+    /** Begin pending self iniated multiplexer open sequence. */        
+    static void pending_self_iniated_mux_open_start();
+    
+    /** Begin pending self iniated DLCI establishment sequence. */            
+    static void pending_self_iniated_dlci_open_start();
+    
+    /** Begin pending peer iniated DLCI establishment sequence. 
+     * 
+     *  @param dlci_id  ID of the DLCI to establish.
+     */                
+    static void pending_peer_iniated_dlci_open_start(uint8_t dlci_id);
     
     /* Deny object creation. */    
     Mux();
