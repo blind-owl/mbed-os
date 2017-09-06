@@ -974,6 +974,14 @@ void dlci_establish_self_initated_sem_wait_timeout(const void * context)
         mock_write->input_param[1].param        = WRITE_LEN;
         mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_write->return_value                = 1;    
+        
+        mock_write = mock_free_get("write");
+        CHECK(mock_write != NULL); 
+        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->input_param[0].param        = (uint32_t)&write_buf[0];        
+        mock_write->input_param[1].param        = WRITE_LEN;
+        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->return_value                = 0;                
 
         /* Trigger timer timeout. */
         mbed::EventQueueMock::io_control(eq_io_control);
@@ -1655,6 +1663,15 @@ void mux_start_self_initated_sem_wait_timeout(const void *)
         mock_write->input_param[1].param        = WRITE_LEN;
         mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_write->return_value                = 1;    
+        
+        mock_write = mock_free_get("write");
+        CHECK(mock_write != NULL); 
+        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        const uint32_t write_byte_2             = ADDRESS_MUX_START_REQ_OCTET;        
+        mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
+        mock_write->input_param[1].param        = WRITE_LEN;
+        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->return_value = 0;                
 
         /* Trigger timer timeout. */
         mbed::EventQueueMock::io_control(eq_io_control);

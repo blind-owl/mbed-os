@@ -109,11 +109,6 @@ void Mux::frame_retransmit_begin()
 //trace("Mux::frame_retransmit ", 0);    
     _tx_context.bytes_remaining = _tx_context.offset;
     _tx_context.offset          = 0;
-   
-    const ssize_t ret_write = write_do();   
-    if (ret_write < 0) {
-        MBED_ASSERT(false); // @todo propagate error to user.
-    }       
 }
 
 
@@ -127,7 +122,10 @@ void Mux::on_timeout()
             if (_tx_context.retransmit_counter != 0) {
                 --(_tx_context.retransmit_counter);
                 frame_retransmit_begin();
-                tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL, NULL);
+                tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, NULL);
+                if (_state.is_write_error) {
+                    tx_state_change(TX_IDLE, tx_idle_entry_run, NULL); // @todo: untested code
+                }
             } else {
                 /* Retransmission limit reached, change state and release the suspended call thread with appropriate 
                    status code. */
