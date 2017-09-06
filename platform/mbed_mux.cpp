@@ -87,7 +87,8 @@ void Mux::module_init()
     _state.is_dlci_open_self_iniated_pending = 0;
     _state.is_dlci_open_self_iniated_running = 0;           
     _state.is_dlci_open_peer_iniated_pending = 0;
-    _state.is_dlci_open_peer_iniated_running = 0;                    
+    _state.is_dlci_open_peer_iniated_running = 0;  
+    _state.is_write_error                    = 0;
    
     _rx_context.offset        = 0;
     _rx_context.decoder_state = DECODER_STATE_SYNC;    
@@ -623,7 +624,8 @@ void Mux::pending_peer_iniated_dlci_open_start(uint8_t dlci_id)
 void Mux::tx_idle_exit_run()
 {
     _address_field                           = (DLCI_ID_UPPER_BOUND << 2);
-    _state.is_dlci_open_peer_iniated_pending = 0;  
+    _state.is_dlci_open_peer_iniated_pending = 0; 
+    _state.is_write_error                    = 0;
 }
 
 
@@ -982,6 +984,25 @@ uint32_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHa
 }
 
 
+void Mux::tx_retransmit_enqueu_entry_run()
+{
+    ssize_t write_err;    
+    
+    do {
+        write_err = write_do();
+    } while (write_err > 0);   
+    
+    if (_tx_context.bytes_remaining == 0) {
+        /* Complete frame write done, we can directly transit to next state. */
+        tx_state_change(TX_RETRANSMIT_DONE, tx_retransmit_done_entry_run, NULL);        
+    } else if (write_err < 0) {
+        _state.is_write_error = 1u;
+    } else {
+        /* No implementation required, we remain in the current state. */
+    }   
+}
+
+    
 uint32_t Mux::mux_start(Mux::MuxEstablishStatus &status)
 {
 // @todo: add mutex_lock
@@ -1002,21 +1023,18 @@ uint32_t Mux::mux_start(Mux::MuxEstablishStatus &status)
     switch (_tx_context.tx_state) {
         Mux::FrameTxType tx_frame_type;
         int              ret_wait;
-        ssize_t          write_err;
         case TX_IDLE:
-            /* Construct the frame, start the tx sequence 1-byte at time, reset relevant state contexts and suspend 
-               the call thread. */           
             sabm_request_construct(0);
-            write_err = write_do();   
-            if (write_err < 0) {
+            _tx_context.retransmit_counter = RETRANSMIT_COUNT;            
+            tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
+            if (_state.is_write_error) {
+                tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);
                 status = MUX_ESTABLISH_WRITE_ERROR;
 // @todo: add mutex_free                                
                 return 2u;
-            }
-            
+            }               
+
             _state.is_mux_open_self_iniated_running = 1u;
-            tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL, tx_idle_exit_run);
-            _tx_context.retransmit_counter = RETRANSMIT_COUNT;
               
 // @todo: add mutex_free here               
             ret_wait = _semaphore.wait();
@@ -1024,7 +1042,7 @@ uint32_t Mux::mux_start(Mux::MuxEstablishStatus &status)
             status = static_cast<MuxEstablishStatus>(_establish_status);
             if (status == MUX_ESTABLISH_SUCCESS) {
                 _state.is_mux_open = 1u;                
-            }                  
+            }                                         
             break;
         case TX_INTERNAL_RESP:
             tx_frame_type = frame_tx_type_resolve();

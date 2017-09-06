@@ -602,7 +602,16 @@ void mux_self_iniated_open()
     mock_write->input_param[0].param        = (uint32_t)&write_byte;        
     mock_write->input_param[1].param        = WRITE_LEN;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->return_value                = 1;    
+    mock_write->return_value                = 1;
+
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    const uint32_t write_byte_2             = ADDRESS_MUX_START_REQ_OCTET;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;        
 
     /* Set mock. */    
     mock_t * mock_wait = mock_free_get("wait");
@@ -681,6 +690,15 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_existing_open_pending)
     mock_write->input_param[1].param        = WRITE_LEN;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 1;    
+    
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    const uint32_t write_byte_2             = ADDRESS_MUX_START_REQ_OCTET;        
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;            
 
     /* Set mock. */    
     mock_t * mock_wait = mock_free_get("wait");
@@ -1497,6 +1515,15 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_rejected_by_peer)
     mock_write->input_param[1].param        = WRITE_LEN;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value = 1;    
+    
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    const uint32_t write_byte_2             = ADDRESS_MUX_START_REQ_OCTET;        
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value = 0;        
 
     /* Set mock. */    
     mock_t * mock_wait = mock_free_get("wait");
@@ -1569,6 +1596,15 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_write_failure)
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 1;
     
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    const uint32_t write_byte_2             = ADDRESS_MUX_START_REQ_OCTET;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;            
+    
     /* Set mock. */    
     mock_t * mock_wait = mock_free_get("wait");
     CHECK(mock_wait != NULL);
@@ -1582,7 +1618,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_write_failure)
     CHECK_EQUAL(2, ret);
     CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_WRITE_ERROR, status);       
     CHECK(!MuxClient::is_mux_start_triggered());
-    
+
     /* 3rd test sequence start: establishment success. */
     mux_self_iniated_open();
    
@@ -1590,7 +1626,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_write_failure)
     status = mbed::Mux::MUX_ESTABLISH_MAX;    
     ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(ret, 0);   
-    CHECK(!MuxClient::is_mux_start_triggered());                        
+    CHECK(!MuxClient::is_mux_start_triggered());
 }
 
 
@@ -1666,6 +1702,15 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_timeout)
     mock_write->input_param[1].param        = WRITE_LEN;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 1;    
+    
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    const uint32_t write_byte_2             = ADDRESS_MUX_START_REQ_OCTET;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;                
 
     /* Set mock. */    
     mock_t * mock_wait = mock_free_get("wait");
@@ -1714,6 +1759,15 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_success_after_timeout)
     mock_write->input_param[1].param        = WRITE_LEN;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 1;    
+    
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    const uint32_t write_byte_2             = ADDRESS_MUX_START_REQ_OCTET;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;            
 
     /* Set mock. */    
     mock_t * mock_wait = mock_free_get("wait");
@@ -2298,6 +2352,15 @@ TEST(MultiplexerOpenTestGroup, mux_open_simultaneous_self_iniated)
     mock_write->input_param[1].param        = WRITE_LEN;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 1;    
+    
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    const uint32_t write_byte_2             = ADDRESS_MUX_START_REQ_OCTET;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;
 
     /* Set mock. */    
     mock_t * mock_wait = mock_free_get("wait");
@@ -2977,9 +3040,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_simultaneous_self_iniated_full_frame)
     mbed::EventQueueMock eq_mock;
     
     mbed::Mux::eventqueue_attach(&eq_mock);
-    
-    /* --- begin verify TX sequence --- */
-    
+       
     /* Set and test mock. */
     mock_t * mock_sigio = mock_free_get("sigio");    
     CHECK(mock_sigio != NULL);      
@@ -2994,6 +3055,15 @@ TEST(MultiplexerOpenTestGroup, mux_open_simultaneous_self_iniated_full_frame)
     mock_write->input_param[1].param        = WRITE_LEN;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 1;    
+    
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    const uint32_t write_byte_2             = ADDRESS_MUX_START_REQ_OCTET;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;            
 
     /* Set mock. */    
     mock_t * mock_wait = mock_free_get("wait");
@@ -3654,7 +3724,7 @@ TEST(MultiplexerOpenTestGroup, mux_not_open_rx_disc_dlci_0)
 
 
 /*
- * TC - Peer sends DISC command to established DLCI, which is ignored by the implementation.
+ * TC - Peer sends DISC command to established(used) DLCI, which is ignored by the implementation.
  */
 TEST(MultiplexerOpenTestGroup, mux_open_rx_disc_dlci_in_use)
 {
@@ -3685,6 +3755,84 @@ TEST(MultiplexerOpenTestGroup, mux_open_rx_disc_dlci_in_use)
     };                     
     /* Generate DISC from peer which is ignored buy the implementation. */        
     peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), NULL);
+}
+
+
+/* Semaphore wait call from mux_open_self_initiated_full_frame_write_in_loop_succes TC. */
+void mux_open_self_initiated_full_frame_write_in_loop_succes_sem_wait(const void *context)
+{
+    /* Program read cycle. */
+    const uint8_t read_byte[5] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_RESP_OCTET, 
+        (FRAME_TYPE_UA | PF_BIT), 
+        fcs_calculate(&read_byte[1], 2),
+        FLAG_SEQUENCE_OCTET
+    };    
+    
+    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL);
+}
+
+
+/*
+ * TC - multiplexer successfull open: request frame is written completely in 1 loop in the call context.
+ */
+TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_full_frame_write_in_loop_succes)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    /* Program write cycle. */
+    const uint8_t write_byte[5] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET, 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        fcs_calculate(&write_byte[1], 2),
+        FLAG_SEQUENCE_OCTET
+    };    
+    
+    mock_t * mock_write;
+    uint8_t i = 0;
+    do {
+        mock_write = mock_free_get("write");
+        CHECK(mock_write != NULL); 
+        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->input_param[0].param        = (uint32_t)&(write_byte[i]);        
+        mock_write->input_param[1].param        = WRITE_LEN;
+        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->return_value                = 1;    
+    
+        ++i;
+    } while (i != sizeof(write_byte));
+
+    /* Start frame write sequence gets completed, now start T1 timer. */              
+    mock_t * mock_call_in = mock_free_get("call_in");    
+    CHECK(mock_call_in != NULL);     
+    mock_call_in->return_value                = T1_TIMER_EVENT_ID;        
+    mock_call_in->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_call_in->input_param[0].param        = T1_TIMER_VALUE;         
+            
+    /* Set wait. */    
+    mock_t * mock_wait = mock_free_get("wait");
+    CHECK(mock_wait != NULL);
+    mock_wait->return_value = 1;
+    mock_wait->func = mux_open_self_initiated_full_frame_write_in_loop_succes_sem_wait;
+    
+    /* Start test sequence. Test set mocks. */
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
+    const uint32_t ret = mbed::Mux::mux_start(status);
+    CHECK_EQUAL(2, ret);
+    CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_SUCCESS, status);    
+    CHECK(!MuxClient::is_mux_start_triggered());
 }
 
 } // namespace mbed

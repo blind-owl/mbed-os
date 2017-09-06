@@ -372,6 +372,7 @@ private:
     static void frame_retransmit_begin();
     
     /** State entry function. */
+    static void tx_retransmit_enqueu_entry_run();  
     static void tx_retransmit_done_entry_run();  
     static void tx_idle_entry_run();   
     typedef void (*tx_state_entry_func_t)();       
@@ -462,14 +463,15 @@ private:
     /* Definition for state type. */
     typedef struct
     {
-        uint8_t is_mux_open        : 1;         /* True when multiplexer is open. */       
-        uint8_t is_initiator : 1;               /* True when role is initiator. */
-        uint8_t is_mux_open_self_iniated_pending : 1;
-        uint8_t is_mux_open_self_iniated_running : 1;
-        uint8_t is_dlci_open_self_iniated_pending : 1;
-        uint8_t is_dlci_open_self_iniated_running : 1;
-        uint8_t is_dlci_open_peer_iniated_pending : 1;
-        uint8_t is_dlci_open_peer_iniated_running : 1;                
+        uint16_t is_mux_open :                       1;         /* True when multiplexer is open. */       
+        uint16_t is_initiator :                      1;         /* True when role is initiator. */
+        uint16_t is_mux_open_self_iniated_pending :  1;
+        uint16_t is_mux_open_self_iniated_running :  1;
+        uint16_t is_dlci_open_self_iniated_pending : 1;
+        uint16_t is_dlci_open_self_iniated_running : 1;
+        uint16_t is_dlci_open_peer_iniated_pending : 1;
+        uint16_t is_dlci_open_peer_iniated_running : 1;                
+        uint16_t is_write_error                    : 1;
 #if 0        
         uint8_t is_dlci_establish_pending : 1;  /* True if @ref mux_start or @ref dlci_establish is pending. */
         uint8_t is_user_tx_pending : 1;         /* True if user TX request is pending. */
