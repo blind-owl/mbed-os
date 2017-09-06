@@ -480,10 +480,18 @@ void peer_iniated_response_tx(const uint8_t *buf,
                 mock_write = mock_free_get("write");
                 CHECK(mock_write != NULL);                
                 mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-                mock_write->input_param[0].param        = (uint32_t)new_tx_byte;                       
+                mock_write->input_param[0].param        = (uint32_t)&(new_tx_byte[0]);                       
                 mock_write->input_param[1].param        = WRITE_LEN;
                 mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-                mock_write->return_value                = 1;                           
+                mock_write->return_value                = 1;
+                
+                mock_write = mock_free_get("write");
+                CHECK(mock_write != NULL);                
+                mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+                mock_write->input_param[0].param        = (uint32_t)&(new_tx_byte[1]);                       
+                mock_write->input_param[1].param        = WRITE_LEN;
+                mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+                mock_write->return_value                = 0;                                           
             }
         }
 
@@ -734,11 +742,18 @@ void mux_start_self_initated_existing_open_pending_2_sem_wait(const void *contex
         (FRAME_TYPE_DM | PF_BIT),        
         fcs_calculate(&write_byte[0], 2),
         FLAG_SEQUENCE_OCTET
-    };       
-    const uint8_t new_write_byte = FLAG_SEQUENCE_OCTET;
+    };      
+    const uint8_t write_byte_2[5] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET, 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        fcs_calculate(&write_byte_2[1], 2),
+        FLAG_SEQUENCE_OCTET
+    };    
     
     /* Finish the mux open establishment with success. */    
-    peer_iniated_response_tx(&write_byte[0], sizeof(write_byte), &new_write_byte, false, NULL);
+    peer_iniated_response_tx(&write_byte[0], sizeof(write_byte), &(write_byte_2[0]), false, NULL);
     
     /* DM response completed, complete the mux start-up establishment. */
     const uint8_t read_byte[4] = 
@@ -748,15 +763,8 @@ void mux_start_self_initated_existing_open_pending_2_sem_wait(const void *contex
         fcs_calculate(&read_byte[0], 2),
         FLAG_SEQUENCE_OCTET
     };    
-    const uint8_t write_byte_2[4] = 
-    {
-        ADDRESS_MUX_START_REQ_OCTET, 
-        (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&write_byte_2[0], 2),
-        FLAG_SEQUENCE_OCTET
-    };
-    
-    self_iniated_request_tx(&(write_byte_2[0]), sizeof(write_byte_2));
+   
+    self_iniated_request_tx(&(write_byte_2[1]), (sizeof(write_byte_2) - sizeof(write_byte_2[0])));    
     self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL);    
 }
 
@@ -2729,27 +2737,26 @@ void dlci_establish_simultaneous_peer_iniated_different_dlci_id_sem_wait(const v
         fcs_calculate(&write_byte_0[0], 2),
         FLAG_SEQUENCE_OCTET
     };
-
+    const uint8_t write_byte[5] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        ((cntx->role == ROLE_INITIATOR) ? 3u : 1u) | ((cntx->dlci_id + 1u) << 2), 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        fcs_calculate(&write_byte[1], 2),
+        FLAG_SEQUENCE_OCTET
+    };   
     /* Complete the existing peer iniated DLCI establishment cycle and TX the 1st byte of the pending self iniated 
        DLCI establishment request. */ 
-    const bool expected_establishment_event_state = true;    
-    const uint8_t tx_byte                         = FLAG_SEQUENCE_OCTET;
+    const bool expected_establishment_event_state = true;   
     peer_iniated_response_tx(&(write_byte_0[0]),
                              sizeof(write_byte_0),
-                             &tx_byte,
+                             &write_byte[0],
                              expected_establishment_event_state,
                              MuxClient::is_dlci_establish_triggered); 
     CHECK(MuxClient::is_dlci_match(cntx->dlci_id));    
     
     /* Generate the remainder of the pending DLCI establishment request. */
-    const uint8_t write_byte[4] = 
-    {
-        ((cntx->role == ROLE_INITIATOR) ? 3u : 1u) | ((cntx->dlci_id + 1u) << 2), 
-        (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&write_byte[0], 2),
-        FLAG_SEQUENCE_OCTET
-    };   
-    self_iniated_request_tx(&(write_byte[0]), sizeof(write_byte));    
+    self_iniated_request_tx(&(write_byte[1]), (sizeof(write_byte) - sizeof(write_byte[0])));    
     
     /* Generate peer DLCI establishment response, which is accepted by the implementation */
     const uint8_t read_byte[4] = 
@@ -3338,26 +3345,25 @@ void mux_open_self_iniated_dm_tx_in_progress_sem_wait(const void *context)
         fcs_calculate(&write_byte[0], 2),
         FLAG_SEQUENCE_OCTET
     };       
-    const uint8_t new_write_byte = FLAG_SEQUENCE_OCTET;
+    const uint8_t write_byte_2[5] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET, 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        fcs_calculate(&write_byte_2[1], 2),
+        FLAG_SEQUENCE_OCTET
+    };   
     
-    /* Finish the DM TX sequence and TX 1st byte of the pending mux start-up request. */    
-    peer_iniated_response_tx(&write_byte[0], sizeof(write_byte), &new_write_byte, false, NULL);    
+    /* Finish the DM TX sequence and TX 1st byte of the pending mux start-up request. */   
+    peer_iniated_response_tx(&write_byte[0], sizeof(write_byte), &write_byte_2[0], false, NULL);    
 
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
     uint32_t ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(1, ret);
     CHECK(!MuxClient::is_mux_start_triggered()); 
    
-    /* TX remainder of the mux start-up request. */
-    const uint8_t write_byte_2[4] = 
-    {
-        ADDRESS_MUX_START_REQ_OCTET, 
-        (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&write_byte_2[0], 2),
-        FLAG_SEQUENCE_OCTET
-    };
-    
-    self_iniated_request_tx(&(write_byte_2[0]), sizeof(write_byte_2));
+    /* TX remainder of the mux start-up request. */    
+    self_iniated_request_tx(&(write_byte_2[1]), (sizeof(write_byte_2) - sizeof(write_byte_2[0])));
     
     status = mbed::Mux::MUX_ESTABLISH_MAX;    
     ret    = mbed::Mux::mux_start(status);
@@ -3447,9 +3453,16 @@ void dlci_establish_self_initated_dm_tx_in_progress_sem_wait(const void *context
         fcs_calculate(&write_byte[0], 2),
         FLAG_SEQUENCE_OCTET
     };       
-    const uint8_t new_write_byte = FLAG_SEQUENCE_OCTET;
-    /* Finish the DM TX sequence and TX 1st byte of the pending DLCI establishment request. */    
-    peer_iniated_response_tx(&write_byte[0], sizeof(write_byte), &new_write_byte, false, NULL);    
+    const uint8_t write_byte_2[5] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        ((cntx->role == ROLE_INITIATOR) ? 3u : 1u) | (cntx->dlci_id << 2), 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        fcs_calculate(&write_byte_2[1], 2u),
+        FLAG_SEQUENCE_OCTET
+    };   
+    /* Finish the DM TX sequence and TX 1st byte of the pending DLCI establishment request. */   
+    peer_iniated_response_tx(&write_byte[0], sizeof(write_byte), &write_byte_2[0], false, NULL);    
 
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
     FileHandle *obj = NULL;
@@ -3459,14 +3472,7 @@ void dlci_establish_self_initated_dm_tx_in_progress_sem_wait(const void *context
     CHECK(!MuxClient::is_dlci_establish_triggered());        
 
     /* TX remainder of the pending DLCI establishment request. */
-    const uint8_t write_byte_2[4] = 
-    {
-        ((cntx->role == ROLE_INITIATOR) ? 3u : 1u) | (cntx->dlci_id << 2), 
-        (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&write_byte_2[0], 2u),
-        FLAG_SEQUENCE_OCTET
-    };
-    self_iniated_request_tx(&(write_byte_2[0]), sizeof(write_byte_2));
+    self_iniated_request_tx(&(write_byte_2[1]), (sizeof(write_byte_2) - sizeof(write_byte_2[0])));
     
     obj = NULL;
     ret = mbed::Mux::dlci_establish(cntx->dlci_id, status, &obj);

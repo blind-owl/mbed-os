@@ -569,17 +569,17 @@ void Mux::pending_self_iniated_mux_open_start()
     /* Construct the frame, start the tx sequence 1-byte at time, set and reset relevant state contexts. */
     _state.is_mux_open_self_iniated_running = 1u;       
     _state.is_mux_open_self_iniated_pending = 0;
-        
+
     sabm_request_construct(0);
-    const ssize_t return_code = write_do();  
-    if (return_code >= 0) {       
-        tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL, tx_idle_exit_run);
-        _tx_context.retransmit_counter = RETRANSMIT_COUNT;                      
+    tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
+    if (!_state.is_write_error) {
+        _tx_context.retransmit_counter = RETRANSMIT_COUNT;           
     } else {
         _establish_status        = MUX_ESTABLISH_WRITE_ERROR;
         const osStatus os_status = _semaphore.release();
-        MBED_ASSERT(os_status == osOK);
-    }    
+        MBED_ASSERT(os_status == osOK);        
+        tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);        
+    }
 }
 
 
@@ -590,15 +590,15 @@ void Mux::pending_self_iniated_dlci_open_start()
     _state.is_dlci_open_self_iniated_pending = 0;
 
     sabm_request_construct(_dlci_id);
-    const ssize_t return_code = write_do(); 
-    if (return_code >= 0) {       
-        tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL, tx_idle_exit_run);
-        _tx_context.retransmit_counter = RETRANSMIT_COUNT;        
+    tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
+    if (!_state.is_write_error) {
+        _tx_context.retransmit_counter = RETRANSMIT_COUNT;           
     } else {
         _establish_status        = MUX_ESTABLISH_WRITE_ERROR;
         const osStatus os_status = _semaphore.release();
-        MBED_ASSERT(os_status == osOK);
-    }        
+        MBED_ASSERT(os_status == osOK);        
+        tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);        
+    }   
 }
 
 
