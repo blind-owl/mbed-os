@@ -922,33 +922,29 @@ uint32_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHa
     }
     
     switch (_tx_context.tx_state) {
-//        Mux::FrameTxType tx_frame_type;        
         int              ret_wait;
-        ssize_t          write_err;        
-        case TX_IDLE:                
-            /* Construct the frame, start the tx sequence 1-byte at time, reset relevant state contexts and suspend 
-               the call thread. */                        
-            status = MUX_ESTABLISH_SUCCESS;           
+        case TX_IDLE:
+            /* Construct the frame, start the tx sequence, and suspend the call thread upon write sequence success. */  
             sabm_request_construct(dlci_id);
-            write_err = write_do();   
-            if (write_err < 0) {
+            _tx_context.retransmit_counter = RETRANSMIT_COUNT; // @todo: set to tx_idle_exit           
+            tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
+            if (_state.is_write_error) {
+                tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);
                 status = MUX_ESTABLISH_WRITE_ERROR;
 // @todo: add mutex_free                                
                 return 4u;
-            }
+            }               
 
-            _state.is_dlci_open_self_iniated_running = 1u;            
-            tx_state_change(TX_RETRANSMIT_ENQUEUE, NULL, tx_idle_exit_run);
-            _tx_context.retransmit_counter = RETRANSMIT_COUNT; // SET TO TX_IDLE EXIT
+            _state.is_dlci_open_self_iniated_running = 1u;
               
 // @todo: add mutex_free here               
             ret_wait = _semaphore.wait();
-            MBED_ASSERT(ret_wait == 1); 
+            MBED_ASSERT(ret_wait == 1);
             status = static_cast<MuxEstablishStatus>(_establish_status);
             if (status == MUX_ESTABLISH_SUCCESS) {
                 *obj = file_handle_get(dlci_id);
                 MBED_ASSERT(*obj != NULL);
-            }           
+            }
             break;
         case TX_INTERNAL_RESP:
             _state.is_dlci_open_self_iniated_pending = 1u;
@@ -1022,6 +1018,7 @@ uint32_t Mux::mux_start(Mux::MuxEstablishStatus &status)
         Mux::FrameTxType tx_frame_type;
         int              ret_wait;
         case TX_IDLE:
+            /* Construct the frame, start the tx sequence, and suspend the call thread upon write sequence success. */
             sabm_request_construct(0);
             _tx_context.retransmit_counter = RETRANSMIT_COUNT;            
             tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);

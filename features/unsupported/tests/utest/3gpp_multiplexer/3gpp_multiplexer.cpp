@@ -883,7 +883,16 @@ void dlci_self_iniated_establish(Role role, uint8_t dlci_id)
     mock_write->input_param[0].param        = (uint32_t)&write_byte;        
     mock_write->input_param[1].param        = WRITE_LEN;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->return_value                = 1;    
+    mock_write->return_value                = 1;
+
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    const uint32_t write_byte_2             = ((role == ROLE_INITIATOR) ? 3u : 1u) | (dlci_id << 2);    
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;        
 
     /* Set mock. */    
     mock_t * mock_wait = mock_free_get("wait");
@@ -1049,6 +1058,15 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_timeout)
     
     const dlci_establish_context_t context = {1, ROLE_INITIATOR};
     mock_wait->func_context                = &context;
+    
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    const uint32_t write_byte_2             = ((context.role == ROLE_INITIATOR) ? 3u : 1u) | (context.dlci_id << 2);    
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;                            
 
     /* Start test sequence. fails with timeout. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
@@ -1106,6 +1124,15 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_success_after_timeo
     const dlci_establish_context_t context = {1, ROLE_INITIATOR};
     mock_wait->func_context                = &context;
 
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    const uint32_t write_byte_2             = ((context.role == ROLE_INITIATOR) ? 3u : 1u) | (context.dlci_id << 2);    
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;                            
+    
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
     FileHandle *obj    = NULL;        
@@ -1291,6 +1318,17 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_write_failure)
     mock_wait->return_value = 1;
     mock_wait->func         = dlci_establish_self_initated_write_fail_sem_wait;
     mock_wait->func_context = &dlci_id;
+    
+    const Role role = ROLE_INITIATOR;
+    
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    const uint32_t write_byte_2             = ((role == ROLE_INITIATOR) ? 3u : 1u) | (dlci_id << 2);    
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;                                
 
     obj    = NULL;
     status = mbed::Mux::MUX_ESTABLISH_MAX;  
@@ -1301,7 +1339,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_write_failure)
     CHECK_EQUAL(obj, NULL);
     
     /* 3rd test sequence start: establishment success. */
-    dlci_self_iniated_establish(ROLE_INITIATOR, 1);
+    dlci_self_iniated_establish(role, 1);
     
     /* 4th test sequence start: establishment with the same DLCI id - fail. */
     status = mbed::Mux::MUX_ESTABLISH_MAX;    
@@ -1370,7 +1408,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_rejected_by_peer)
     mock_write->input_param[0].param        = (uint32_t)&write_byte;        
     mock_write->input_param[1].param        = WRITE_LEN;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->return_value = 1;    
+    mock_write->return_value                = 1;    
 
     /* Set mock. */    
     mock_t * mock_wait = mock_free_get("wait");
@@ -1380,6 +1418,15 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_rejected_by_peer)
     
     const dlci_establish_context_t context = {1, ROLE_INITIATOR};
     mock_wait->func_context                = &context;
+    
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    const uint32_t write_byte_2             = ((context.role == ROLE_INITIATOR) ? 3u : 1u) | (context.dlci_id << 2);    
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;                    
 
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX); 
@@ -2482,6 +2529,15 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_self_iniated_same_dlc
     const uint8_t dlci_id                  = 1u;
     const dlci_establish_context_t context = {dlci_id, ROLE_INITIATOR};
     mock_wait->func_context                = &context;    
+    
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    const uint32_t write_byte_2             = ((context.role == ROLE_INITIATOR) ? 3u : 1u) | (context.dlci_id << 2);    
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;                                
 
     /* Start test sequence. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
@@ -2595,6 +2651,15 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_self_iniated_differen
     const uint8_t dlci_id                  = 1u;
     const dlci_establish_context_t context = {dlci_id, ROLE_INITIATOR};
     mock_wait->func_context                = &context;    
+    
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    const uint32_t write_byte_2             = ((context.role == ROLE_INITIATOR) ? 3u : 1u) | (context.dlci_id << 2);    
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;                        
 
     /* Start test sequence. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
@@ -2713,6 +2778,15 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_self_iniated_full_fra
     const uint8_t dlci_id                  = 1u;
     const dlci_establish_context_t context = {dlci_id, ROLE_INITIATOR};
     mock_wait->func_context                = &context;    
+    
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    const uint32_t write_byte_2             = ((context.role == ROLE_INITIATOR) ? 3u : 1u) | (context.dlci_id << 2);    
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;                        
 
     /* Start test sequence. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
@@ -2973,13 +3047,14 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_self_iniated_differen
     mbed::Mux::serial_attach(&fh_mock);
     
     mux_self_iniated_open();
-   
+
+    const Role role = ROLE_INITIATOR;
     uint8_t dlci_id = 0u;
     uint8_t i       = (MAX_DLCI_COUNT - 1u);
     
     /* Self started DLCI establishment: establish all but the last resource (only 1 available). */
     do {
-        dlci_self_iniated_establish(ROLE_INITIATOR, ++dlci_id);
+        dlci_self_iniated_establish(role, ++dlci_id);
         
         --i;
     } while (i != 0);
@@ -2993,14 +3068,23 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_self_iniated_differen
     mock_write->input_param[1].param        = WRITE_LEN;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 1;    
-
+   
     /* Set mock. */    
     mock_t * mock_wait = mock_free_get("wait");
     CHECK(mock_wait != NULL);
     mock_wait->return_value                = 1;
     mock_wait->func = dlci_establish_simultaneous_self_iniated_different_dlci_id_race_for_last_resource_sem_wait;
-    const dlci_establish_context_t context = {++dlci_id, ROLE_INITIATOR};
+    const dlci_establish_context_t context = {++dlci_id, role};
     mock_wait->func_context                = &context;    
+    
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    const uint32_t write_byte_2             = ((role == ROLE_INITIATOR) ? 3u : 1u) | (context.dlci_id << 2);    
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;                
 
     /* Start test sequence. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
@@ -3174,14 +3258,25 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_self_iniated_full_fra
     mock_write->input_param[1].param        = WRITE_LEN;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 1;    
+    
+    const uint8_t dlci_id = 1u;
+    const Role role       = ROLE_INITIATOR;
+    
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    const uint32_t write_byte_2             = ((role == ROLE_INITIATOR) ? 3u : 1u) | (dlci_id << 2);    
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;            
 
     /* Set mock. */    
     mock_t * mock_wait = mock_free_get("wait");
     CHECK(mock_wait != NULL);
     mock_wait->return_value                = 1;
     mock_wait->func                        = dlci_establish_simultaneous_self_iniated_full_frame_sem_wait;
-    const uint8_t dlci_id                  = 1u;
-    const dlci_establish_context_t context = {dlci_id, ROLE_INITIATOR};
+    const dlci_establish_context_t context = {dlci_id, role};
     mock_wait->func_context                = &context;    
 
     /* Start test sequence. */
@@ -3821,8 +3916,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_full_frame_write_in_loop_
         (FRAME_TYPE_SABM | PF_BIT), 
         fcs_calculate(&write_byte[1], 2),
         FLAG_SEQUENCE_OCTET
-    };    
-    
+    };       
     mock_t * mock_write;
     uint8_t i = 0;
     do {
@@ -3856,6 +3950,91 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_full_frame_write_in_loop_
     CHECK_EQUAL(2, ret);
     CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_SUCCESS, status);    
     CHECK(!MuxClient::is_mux_start_triggered());
+}
+
+
+/* Semaphore wait call from dlci_establish_self_initiated_full_frame_write_in_loop_succes TC. */
+void dlci_establish_self_initiated_full_frame_write_in_loop_succes_sem_wait(const void *context)
+{
+    /* Program read cycle. */
+    
+    const dlci_establish_context_t *cntx = static_cast<const dlci_establish_context_t *>(context);    
+    const uint8_t read_byte[4]           = 
+    {
+        (((cntx->role == ROLE_INITIATOR) ? 1u : 3u) | (cntx->dlci_id << 2)),
+        (FRAME_TYPE_UA | PF_BIT), 
+        fcs_calculate(&read_byte[0], 2),
+        FLAG_SEQUENCE_OCTET
+    };    
+
+    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL);
+}
+
+
+/*
+ * TC - DLCI establishment successfull open: DLCI establishment request frame is written completely in 1 loop in the 
+ * call context.
+ */
+TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_full_frame_write_in_loop_succes)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();    
+    
+    /* Program write cycle. */
+    const dlci_establish_context_t cntx = {1u, ROLE_INITIATOR};
+    const uint8_t write_byte[5]         = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        ((cntx.role == ROLE_INITIATOR) ? 3u : 1u) | (cntx.dlci_id << 2),        
+        (FRAME_TYPE_SABM | PF_BIT), 
+        fcs_calculate(&write_byte[1], 2),
+        FLAG_SEQUENCE_OCTET
+    };           
+    mock_t * mock_write;
+    uint8_t i = 0;
+    do {
+        mock_write = mock_free_get("write");
+        CHECK(mock_write != NULL); 
+        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->input_param[0].param        = (uint32_t)&(write_byte[i]);        
+        mock_write->input_param[1].param        = WRITE_LEN;
+        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->return_value                = 1;    
+    
+        ++i;
+    } while (i != sizeof(write_byte));    
+    
+    /* Start frame write sequence gets completed, now start T1 timer. */              
+    mock_t * mock_call_in = mock_free_get("call_in");    
+    CHECK(mock_call_in != NULL);     
+    mock_call_in->return_value                = T1_TIMER_EVENT_ID;        
+    mock_call_in->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_call_in->input_param[0].param        = T1_TIMER_VALUE;         
+            
+    /* Set wait. */    
+    mock_t * mock_wait = mock_free_get("wait");
+    CHECK(mock_wait != NULL);
+    mock_wait->return_value = 1;
+    mock_wait->func         = dlci_establish_self_initiated_full_frame_write_in_loop_succes_sem_wait;    
+    mock_wait->func_context = &cntx;        
+    
+    /* Start test sequence. Test set mocks. */
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
+    FileHandle *obj    = NULL;
+    const uint32_t ret = mbed::Mux::dlci_establish(cntx.dlci_id, status, &obj);
+    CHECK_EQUAL(ret, 4);
+    CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_SUCCESS);      
+    CHECK(obj != NULL);
+    CHECK(!MuxClient::is_dlci_establish_triggered());
 }
 
 } // namespace mbed
