@@ -375,6 +375,7 @@ private:
     static void tx_retransmit_enqueu_entry_run();  
     static void tx_retransmit_done_entry_run();  
     static void tx_idle_entry_run();   
+    static void tx_internal_resp_entry_run();
     typedef void (*tx_state_entry_func_t)();       
     
     static void tx_idle_exit_run();

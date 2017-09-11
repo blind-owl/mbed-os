@@ -345,10 +345,86 @@ void peer_iniated_request_rx(const uint8_t *rx_buf, uint8_t rx_buf_len, const ui
                 mock_t * mock_write = mock_free_get("write");
                 CHECK(mock_write != NULL);                
                 mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-                mock_write->input_param[0].param        = (uint32_t)write_byte;                      
+                mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);
                 mock_write->input_param[1].param        = WRITE_LEN;
                 mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
                 mock_write->return_value                = 1;
+                
+                mock_write = mock_free_get("write");
+                CHECK(mock_write != NULL);                
+                mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+                mock_write->input_param[0].param        = (uint32_t)&(write_byte[1]);                       
+                mock_write->input_param[1].param        = WRITE_LEN;
+                mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+                mock_write->return_value                = 0;                                                           
+            }
+        }
+        
+        mbed::EventQueueMock::io_control(eq_io_control);   
+
+        ++rx_count;        
+    } while (rx_count != rx_buf_len);    
+}
+
+
+/*
+ * LOOP UNTIL COMPLETE REQUEST FRAME READ DONE
+ * - trigger sigio callback from FileHandleMock
+ * - enqueue deferred call to EventQueue
+ * - CALL RETURN 
+ * - trigger deferred call from EventQueueMock
+ * - call poll
+ * - call read
+ * - complete response frame TX in the last iteration if parameter supplied
+ * - CALL RETURN 
+ */
+void peer_iniated_request_rx_full_frame_tx(const uint8_t *rx_buf, 
+                                           uint8_t        rx_buf_len, 
+                                           const uint8_t *write_byte,
+                                           uint8_t        tx_buf_len)
+{
+    /* Read the complete request frame in do...while. */
+    uint8_t                                  rx_count      = 0;      
+    const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
+    const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};    
+    do {
+        /* Enqueue deferred call to EventQueue. 
+         * Trigger sigio callback with POLLIN event from the Filehandle used by the Mux (component under test). */
+        mock_t * mock = mock_free_get("call");
+        CHECK(mock != NULL);           
+        mock->return_value = 1;
+
+        mbed::FileHandleMock::io_control(io_control);
+
+        /* Trigger deferred call from EventQueue.
+         * Continue with the frame read sequence. */
+        mock_t * mock_poll = mock_free_get("poll");    
+        CHECK(mock_poll != NULL);         
+        mock_poll->return_value = POLLIN;
+        mock_t * mock_read      = mock_free_get("read");
+        CHECK(mock_read != NULL); 
+        mock_read->output_param[0].param       = &(rx_buf[rx_count]);
+        mock_read->output_param[0].len         = sizeof(rx_buf[0]);
+        mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_read->input_param[0].param        = READ_LEN;
+        mock_read->return_value                = 1; 
+
+        if (tx_buf_len != 0) {
+            if (rx_count == (rx_buf_len - 1)) {                            
+                /* RX frame gets completed do the response frame TX sequence. */
+                uint8_t tx_idx = 0;
+                while (tx_buf_len != 0) {
+                    mock_t * mock_write = mock_free_get("write");
+                    CHECK(mock_write != NULL);                
+                    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+                    mock_write->input_param[0].param        = (uint32_t)&(write_byte[tx_idx]);
+                    mock_write->input_param[1].param        = WRITE_LEN;
+                    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+                    mock_write->return_value                = 1;
+                    
+                    --tx_buf_len;
+                    ++tx_idx;
+                }
             }
         }
         
@@ -802,9 +878,13 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_existing_open_pending_2)
         FLAG_SEQUENCE_OCTET
     };           
 
-    /* Generate DISC from peer and trigger TX of 1st response byte of DM. */        
-    const uint8_t write_byte = FLAG_SEQUENCE_OCTET;
-    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), &write_byte);    
+    /* Generate DISC from peer and trigger TX of DM response. */
+    const uint8_t write_byte[2] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (dlci_id << 2)
+    };
+    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), &(write_byte[0]));    
     
     /* Issue multiplexer start while DM is in progress. */
     mock_t * mock_wait = mock_free_get("wait");
@@ -2878,16 +2958,21 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_peer_iniated_differen
         FLAG_SEQUENCE_OCTET
     };        
 
-    /* Receive completely peer iniated DLCI establishment and trigger TX of 1st response byte. */
-    const uint8_t write_byte = FLAG_SEQUENCE_OCTET;
-    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), &write_byte);        
+    /* Receive completely peer iniated DLCI establishment and trigger TX of response. */
+//    const uint8_t write_byte = FLAG_SEQUENCE_OCTET;
+    const dlci_establish_context_t context = {dlci_id, ROLE_INITIATOR};
+    const uint8_t write_byte[2]            = 
+    {
+        FLAG_SEQUENCE_OCTET,        
+        (((context.role == ROLE_INITIATOR) ? 1u : 3u) | (context.dlci_id << 2))
+    };
+    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), &(write_byte[0]));        
     
     /* Set mock. */    
     mock_t * mock_wait = mock_free_get("wait");
     CHECK(mock_wait != NULL);
     mock_wait->return_value                = 1;
     mock_wait->func                        = dlci_establish_simultaneous_peer_iniated_different_dlci_id_sem_wait;
-    const dlci_establish_context_t context = {dlci_id, ROLE_INITIATOR};
     mock_wait->func_context                = &context;    
 
     /* Start test sequence. */
@@ -2967,9 +3052,14 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_peer_iniated_differen
         fcs_calculate(&read_byte[0], 2u),
         FLAG_SEQUENCE_OCTET
     };       
-    /* Receive completely peer iniated DLCI establishment and trigger TX of 1st response byte. */
-    const uint8_t write_byte = FLAG_SEQUENCE_OCTET;
-    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), &write_byte);   
+    /* Receive completely peer iniated DLCI establishment and trigger TX of response. */
+    const dlci_establish_context_t context = {dlci_id, ROLE_INITIATOR};
+    const uint8_t write_byte[2]            = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        (((context.role == ROLE_INITIATOR) ? 1u : 3u) | (context.dlci_id << 2))
+    };
+    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), &(write_byte[0]));   
     
     /* Last available DLCI resource will be consumed by the running peer iniated establishment. This request will be 
        put pending but will fail to start as no resources available after peer iniated finishes. */
@@ -2977,7 +3067,6 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_peer_iniated_differen
     CHECK(mock_wait != NULL);
     mock_wait->return_value                = 1;
     mock_wait->func = dlci_establish_simultaneous_peer_iniated_different_dlci_id_race_for_last_resource_sem_wait;
-    const dlci_establish_context_t context = {dlci_id, ROLE_INITIATOR};
     mock_wait->func_context                = &context;    
     
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
@@ -3405,16 +3494,20 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_peer_iniated_same_dlc
         FLAG_SEQUENCE_OCTET
     };        
 
-    /* Receive completely peer iniated DLCI establishment and trigger TX of 1st response byte. */
-    const uint8_t write_byte = FLAG_SEQUENCE_OCTET;
-    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), &write_byte);        
+    /* Receive completely peer iniated DLCI establishment and trigger TX of response. */
+    const dlci_establish_context_t context = {dlci_id, ROLE_INITIATOR};
+    const uint8_t write_byte[2]            = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        (((context.role == ROLE_INITIATOR) ? 1u : 3u) | (context.dlci_id << 2))
+    };
+    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), &(write_byte[0]));        
     
     /* Set mock. */    
     mock_t * mock_wait = mock_free_get("wait");
     CHECK(mock_wait != NULL);
     mock_wait->return_value                = 1;
     mock_wait->func                        = dlci_establish_simultaneous_peer_iniated_same_dlci_id_sem_wait;
-    const dlci_establish_context_t context = {dlci_id, ROLE_INITIATOR};
     mock_wait->func_context                = &context;        
     
     /* DLCI establishment while peer iniated is in progress. */
@@ -3513,9 +3606,13 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_iniated_dm_tx_in_progress)
         FLAG_SEQUENCE_OCTET
     };           
 
-    /* Generate DISC from peer and trigger TX of 1st response byte of DM. */        
-    const uint8_t write_byte = FLAG_SEQUENCE_OCTET;
-    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), &write_byte);
+    /* Generate DISC from peer and trigger TX of response DM. */
+    const uint8_t write_byte[4] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (dlci_id << 2)
+    };
+    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), &(write_byte[0]));
 
     /* Issue multiplexer start while DM is in progress. */
     mock_t * mock_wait = mock_free_get("wait");
@@ -3617,7 +3714,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_dm_tx_in_progress)
     const uint8_t dlci_id      = 1u;
     const uint8_t read_byte[5] = 
     {
-        FLAG_SEQUENCE_OCTET,        
+        FLAG_SEQUENCE_OCTET,
         /* Peer assumes the role of the responder. */
         1u | (dlci_id << 2),
         (FRAME_TYPE_DISC | PF_BIT), 
@@ -3625,9 +3722,13 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_dm_tx_in_progress)
         FLAG_SEQUENCE_OCTET
     };           
 
-    /* Generate DISC from peer and trigger TX of 1st response byte of DM. */        
-    const uint8_t write_byte = FLAG_SEQUENCE_OCTET;
-    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), &write_byte);
+    /* Generate DISC from peer and trigger TX of DM response. */       
+    const uint8_t write_byte[2] = 
+    {
+        FLAG_SEQUENCE_OCTET,        
+        1u | (dlci_id << 2)
+    };
+    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), &(write_byte[0]));
     
     /* Issue DLCI establishment while DM is in progress. */
     mock_t * mock_wait = mock_free_get("wait");
@@ -3706,9 +3807,13 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_iniated_dm_tx_in_progress_write_fai
         FLAG_SEQUENCE_OCTET
     };           
 
-    /* Generate DISC from peer and trigger TX of 1st response byte of DM. */        
-    const uint8_t write_byte = FLAG_SEQUENCE_OCTET;
-    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), &write_byte);
+    /* Generate DISC from peer and trigger TX of 1st response byte of DM. */
+    const uint8_t write_byte[2] = 
+    {
+        FLAG_SEQUENCE_OCTET,                
+        3u | (dlci_id << 2)
+    };
+    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), &(write_byte[0]));
 
     /* Issue multiplexer start while DM is in progress. */
     mock_t * mock_wait = mock_free_get("wait");
@@ -3782,16 +3887,20 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_dm_tx_in_progress_wri
         FLAG_SEQUENCE_OCTET
     };           
 
-    /* Generate DISC from peer and trigger TX of 1st response byte of DM. */        
-    const uint8_t write_byte = FLAG_SEQUENCE_OCTET;
-    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), &write_byte);
+    /* Generate DISC from peer and trigger TX of 1st response byte of DM. */
+    const dlci_establish_context_t context = {dlci_id, ROLE_INITIATOR};
+    const uint8_t write_byte[2]            = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        1u | (context.dlci_id << 2)
+    };
+    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), &(write_byte[0]));
     
     /* Issue DLCI establishment while DM is in progress. */
     mock_t * mock_wait = mock_free_get("wait");
     CHECK(mock_wait != NULL);
     mock_wait->return_value                = 1;    
     mock_wait->func                        = dlci_establish_self_initated_dm_tx_in_progress_write_failure_sem_wait;
-    const dlci_establish_context_t context = {dlci_id, ROLE_INITIATOR};
     mock_wait->func_context                = &context;
 
     /* Start test sequence: fails to write error. */
@@ -4035,6 +4144,50 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_full_frame_write_in
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_SUCCESS);      
     CHECK(obj != NULL);
     CHECK(!MuxClient::is_dlci_establish_triggered());
+}
+
+
+/*
+ * TC - mux start-up sequence, self initiated with delay as DM frame TX is in progress: 
+ * - peer sends a DISC command to DLCI 0 
+ * - send DM response completely in a single loop
+ */
+TEST(MultiplexerOpenTestGroup, mux_not_open_dm_tx_full_frame_write_in_loop)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+  
+    const uint8_t dlci_id = 0;
+    
+    /* Program read cycle. */
+    const uint8_t read_byte[5] = 
+    {
+        FLAG_SEQUENCE_OCTET,        
+        /* Peer assumes the role of initiator. */
+        3u | (dlci_id << 2),
+        (FRAME_TYPE_DISC | PF_BIT), 
+        fcs_calculate(&read_byte[1], 2),
+        FLAG_SEQUENCE_OCTET
+    };               
+    
+    /* Program write cycle. */
+    const uint8_t write_byte[5] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (dlci_id << 2),        
+        (FRAME_TYPE_DM | PF_BIT),         
+        fcs_calculate(&write_byte[1], 2),
+        FLAG_SEQUENCE_OCTET
+    };           
+    
+    peer_iniated_request_rx_full_frame_tx(&(read_byte[0]), sizeof(read_byte), &(write_byte[0]), sizeof(write_byte));
 }
 
 } // namespace mbed

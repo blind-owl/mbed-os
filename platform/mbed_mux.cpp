@@ -221,7 +221,6 @@ void Mux::on_rx_frame_sabm()
     // @todo: DEFECT q checking functionality must be tx state agnostic in this function.
     
     switch (_tx_context.tx_state) {
-        ssize_t return_code;
         uint8_t dlci_id;
         case TX_IDLE:
             /* Construct the frame, start the tx sequence 1-byte at time, reset relevant state contexts. */             
@@ -244,14 +243,9 @@ void Mux::on_rx_frame_sabm()
                 dm_response_construct();
             }
             
-            return_code = write_do();    
-            MBED_ASSERT(return_code != 0);
-            if (return_code >= 0) {
-                tx_state_change(TX_INTERNAL_RESP, NULL, tx_idle_exit_run);
-            } else {
-                // @todo: propagate write error to user.
-                MBED_ASSERT(false);
-            }
+            tx_state_change(TX_INTERNAL_RESP, tx_internal_resp_entry_run, tx_idle_exit_run);                    
+            
+            // @todo DEFECT we should check write error bit and transit back to TX_IDLE           
             break;
         case TX_RETRANSMIT_ENQUEUE:
         case TX_RETRANSMIT_DONE:              
@@ -324,18 +318,32 @@ void Mux::on_rx_frame_dm()
 }
 
 
+void Mux::tx_internal_resp_entry_run()
+{
+    ssize_t write_err;    
+    
+    do {
+        write_err = write_do();
+    } while (write_err > 0);   
+    
+    if (_tx_context.bytes_remaining == 0) {
+        /* Complete frame write done, we can directly transit back to idle state. */
+        tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);        
+    } else if (write_err < 0) {
+        _state.is_write_error = 1u; // @todo implmentaation missing: propagate to event to user.
+    } else {
+        /* No implementation required, we remain in the current state until transmission is completed. */
+    }       
+}
+
+
 void Mux::dm_response_send()
 {
     dm_response_construct();
-                
-    const ssize_t return_code = write_do();   
-    MBED_ASSERT(return_code != 0);
-    if (return_code >= 0) {
-        tx_state_change(TX_INTERNAL_RESP, NULL, tx_idle_exit_run);        
-    } else {
-        // @todo: propagate write error to user or just discard.
-        MBED_ASSERT(false);
-    }                   
+    
+    tx_state_change(TX_INTERNAL_RESP, tx_internal_resp_entry_run, tx_idle_exit_run);   
+    
+    // @todo DEFECT we should check write error bit and transit back to TX_IDLE
 }
 
 
