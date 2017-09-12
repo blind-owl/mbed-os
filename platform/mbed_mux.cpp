@@ -728,8 +728,7 @@ void Mux::on_deferred_call()
                     _establish_status = MUX_ESTABLISH_WRITE_ERROR;
                     os_status         = _semaphore.release();
                     MBED_ASSERT(os_status == osOK);    
-                    tx_state_change(TX_IDLE, NULL, NULL);     // DEFECT @todo: tx_idle_entry_run missing ADD FAILING TC 
-              
+                    tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);              
                     break;
                 default:
                     // @todo DEFECT write failure for non user orgined TX: propagate error event to the user and reset

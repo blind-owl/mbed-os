@@ -1335,7 +1335,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_all_dlci_ids_used)
 }
 
 
-void single_write_cycle_fail(uint8_t address_field)
+void single_write_cycle_fail(uint8_t address_field, const uint8_t *write_byte)
 {
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};    
     const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};
@@ -1360,7 +1360,26 @@ void single_write_cycle_fail(uint8_t address_field)
     mock_write->input_param[0].param        = (uint32_t)&address_field;               
     mock_write->input_param[1].param        = WRITE_LEN;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->return_value                = (uint32_t)-1;    
+    mock_write->return_value                = (uint32_t)-1;  
+    
+    if (write_byte != NULL)  {
+        /* Start the pending frame TX sequence. */                 
+        mock_write = mock_free_get("write");
+        CHECK(mock_write != NULL);                
+        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);
+        mock_write->input_param[1].param        = WRITE_LEN;
+        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->return_value                = 1;
+                
+        mock_write = mock_free_get("write");
+        CHECK(mock_write != NULL);                
+        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->input_param[0].param        = (uint32_t)&(write_byte[1]);
+        mock_write->input_param[1].param        = WRITE_LEN;
+        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->return_value                = 0;
+    }    
     
     /* Release the call thread after write error. */
     mock_t * mock_release = mock_free_get("release");
@@ -1375,7 +1394,7 @@ void single_write_cycle_fail(uint8_t address_field)
 void dlci_establish_self_initated_write_fail_sem_wait(const void *context)
 {
     const uint8_t *dlci_id = static_cast<const uint8_t *>(context);
-    single_write_cycle_fail(3u | (*dlci_id << 2));
+    single_write_cycle_fail(3u | (*dlci_id << 2), NULL);
 }
 
 
@@ -1727,7 +1746,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_rejected_by_peer)
 void mux_start_self_initated_write_fail_sem_wait(const void *context)
 {
     const uint8_t *dlci_id = static_cast<const uint8_t *>(context);
-    single_write_cycle_fail(3u | (*dlci_id << 2));
+    single_write_cycle_fail(3u | (*dlci_id << 2), NULL);
 }
 
 
@@ -2784,6 +2803,104 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_self_iniated_differen
     CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_SUCCESS, status);      
     CHECK(obj != NULL);
     CHECK(!MuxClient::is_dlci_establish_triggered());
+}
+
+
+/* Multiplexer semaphore wait call from dlci_establish_simultaneous_self_iniated_different_dlci_id_write_failure TC. */
+void dlci_establish_simultaneous_self_iniated_different_dlci_id_write_failure_sem_wait(const void *context)
+{
+    const dlci_establish_context_t *cntx = static_cast<const dlci_establish_context_t*>(context); 
+       
+    /* Generate peer DLCI establishment request, which response is put pending by the implementation. */
+    const uint8_t read_byte[5] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        (1u | ((cntx->dlci_id + 1u) << 2)), 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        fcs_calculate(&read_byte[1], 2),
+        FLAG_SEQUENCE_OCTET
+    };    
+    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), NULL);        
+    
+    /* Terminate the self iniated DLCI establishment request with write error and start the pending TX sequence. */
+    const uint8_t write_byte_2[5] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        (1u | ((cntx->dlci_id + 1u) << 2)), 
+        (FRAME_TYPE_UA | PF_BIT),        
+        fcs_calculate(&write_byte_2[1], 2),
+        FLAG_SEQUENCE_OCTET
+    };               
+    single_write_cycle_fail(3u | (cntx->dlci_id << 2), &(write_byte_2[0]));    
+    
+    /* Finish the TX sequence of the pending DLCI establishment response. */   
+    const bool expected_dlci_establishment_event_state = true;
+    peer_iniated_response_tx(&(write_byte_2[1]), 
+                             sizeof(write_byte_2) - sizeof(write_byte_2[0]),
+                             NULL,
+                             expected_dlci_establishment_event_state,
+                             MuxClient::is_dlci_establish_triggered);
+    CHECK(MuxClient::is_dlci_match(cntx->dlci_id + 1u));
+}
+
+
+/*
+ * TC - DLCI establishment sequence, self initiated: peer issues DLCI establishment request with different DLCI ID 
+ * while self iniated is in progress, self iniated request ends to write failure prior completion
+ * - send 1st byte of DLCI establishment request
+ * - DLCI establishment request received completely from the peer > set as pending
+ * - self iniated DLCI establishment request is terminated by write failure prior completion
+ * - send pending DLCI establishment response to peer request
+ */
+TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_self_iniated_different_dlci_id_write_failure)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+
+    mux_self_iniated_open();
+    
+    /* Set mock. */
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;        
+    mock_write->input_param[0].param        = (uint32_t)&write_byte;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 1;    
+
+    /* Set mock. */    
+    mock_t * mock_wait = mock_free_get("wait");
+    CHECK(mock_wait != NULL);
+    mock_wait->return_value                = 1;
+    mock_wait->func = dlci_establish_simultaneous_self_iniated_different_dlci_id_write_failure_sem_wait;
+    const uint8_t dlci_id                  = 1u;
+    const dlci_establish_context_t context = {dlci_id, ROLE_INITIATOR};
+    mock_wait->func_context                = &context;    
+    
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    const uint32_t write_byte_2             = ((context.role == ROLE_INITIATOR) ? 3u : 1u) | (context.dlci_id << 2);    
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
+    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;                        
+
+    /* Start test sequence. */
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
+    FileHandle *obj    = NULL;
+    const uint32_t ret = mbed::Mux::dlci_establish(dlci_id, status, &obj);
+    CHECK_EQUAL(4, ret);
+    CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_WRITE_ERROR, status);     
+    CHECK(!MuxClient::is_dlci_establish_triggered());    
 }
 
 
