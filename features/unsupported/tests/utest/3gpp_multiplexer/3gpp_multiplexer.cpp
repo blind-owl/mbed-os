@@ -200,18 +200,16 @@ void self_iniated_request_tx(const uint8_t *tx_buf, uint8_t tx_buf_len)
         mock_t * mock_poll      = mock_free_get("poll");    
         CHECK(mock_poll != NULL);         
         mock_poll->return_value = POLLOUT;
+        
         mock_t * mock_write     = mock_free_get("write");
-        CHECK(mock_write != NULL); 
-        
+        CHECK(mock_write != NULL);        
         mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->input_param[0].param        = (uint32_t)&(tx_buf[tx_count]);        
-        
+        mock_write->input_param[0].param        = (uint32_t)&(tx_buf[tx_count]);               
         mock_write->input_param[1].param        = WRITE_LEN;
         mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_write->return_value                = 1;        
-
-        if (tx_count == tx_buf_len - 1) {
-            
+       
+        if (tx_count == tx_buf_len - 1) {            
             /* Start frame write sequence gets completed, now start T1 timer. */   
             
             mock_t * mock_call_in = mock_free_get("call_in");    
@@ -219,6 +217,14 @@ void self_iniated_request_tx(const uint8_t *tx_buf, uint8_t tx_buf_len)
             mock_call_in->return_value = T1_TIMER_EVENT_ID;        
             mock_call_in->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
             mock_call_in->input_param[0].param        = T1_TIMER_VALUE;                  
+        } else {
+            mock_write = mock_free_get("write");
+            CHECK(mock_write != NULL);               
+            mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+            mock_write->input_param[0].param        = (uint32_t)&(tx_buf[tx_count + 1u]);               
+            mock_write->input_param[1].param        = WRITE_LEN;
+            mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+            mock_write->return_value                = 0;        
         }
         
         mbed::EventQueueMock::io_control(eq_io_control);   
@@ -501,6 +507,14 @@ void peer_iniated_response_tx_new_write_error(const uint8_t *buf, uint8_t buf_le
                 CHECK(mock_release != NULL);
                 mock_release->return_value = osOK;                        
             }
+        } else {
+            mock_write = mock_free_get("write");
+            CHECK(mock_write != NULL);               
+            mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+            mock_write->input_param[0].param        = (uint32_t)&(buf[tx_count + 1u]);               
+            mock_write->input_param[1].param        = WRITE_LEN;
+            mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+            mock_write->return_value                = 0;        
         }
 
         mbed::EventQueueMock::io_control(eq_io_control);  
@@ -577,7 +591,15 @@ void peer_iniated_response_tx(const uint8_t *buf,
                 mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
                 mock_write->return_value                = 0;                                           
             }
-        }
+        } else {
+            mock_write = mock_free_get("write");
+            CHECK(mock_write != NULL);               
+            mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+            mock_write->input_param[0].param        = (uint32_t)&(buf[tx_count + 1u]);               
+            mock_write->input_param[1].param        = WRITE_LEN;
+            mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+            mock_write->return_value                = 0;        
+        }            
 
         mbed::EventQueueMock::io_control(eq_io_control);  
 
@@ -632,8 +654,7 @@ void peer_iniated_response_tx_no_pending_tx(const uint8_t *buf,
         CHECK(mock_write != NULL); 
         
         mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->input_param[0].param        = (uint32_t)&(buf[tx_count]);        
-        
+        mock_write->input_param[0].param        = (uint32_t)&(buf[tx_count]);
         mock_write->input_param[1].param        = WRITE_LEN;
         mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_write->return_value                = 1;        
@@ -643,6 +664,14 @@ void peer_iniated_response_tx_no_pending_tx(const uint8_t *buf,
             mock_t * mock_release = mock_free_get("release");
             CHECK(mock_release != NULL);
             mock_release->return_value = osOK;                        
+        } else {
+            mock_write = mock_free_get("write");
+            CHECK(mock_write != NULL);               
+            mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+            mock_write->input_param[0].param        = (uint32_t)&(buf[tx_count + 1u]);               
+            mock_write->input_param[1].param        = WRITE_LEN;
+            mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+            mock_write->return_value                = 0;        
         }
 
         mbed::EventQueueMock::io_control(eq_io_control);  
@@ -3070,9 +3099,9 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_peer_iniated_differen
        put pending but will fail to start as no resources available after peer iniated finishes. */
     mock_t * mock_wait = mock_free_get("wait");
     CHECK(mock_wait != NULL);
-    mock_wait->return_value                = 1;
+    mock_wait->return_value = 1;
     mock_wait->func = dlci_establish_simultaneous_peer_iniated_different_dlci_id_race_for_last_resource_sem_wait;
-    mock_wait->func_context                = &context;    
+    mock_wait->func_context = &context;    
     
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
     FileHandle *obj    = NULL;

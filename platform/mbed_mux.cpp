@@ -699,50 +699,47 @@ Mux::FrameTxType Mux::frame_tx_type_resolve()
 
 void Mux::on_deferred_call()
 {
-//trace("Mux::on_deferred_call ", 0);        
-
-    const short events = _serial->poll(POLLIN | POLLOUT);
-    if (events & POLLOUT) {
-        /* Continue the write sequence if feasible. */
-        const ssize_t write_ret = write_do();
-//trace("write_ret", write_ret);
-//trace("bytes_remaining", _tx_context.bytes_remaining);        
-        if (write_ret >= 0) {
-            if (_tx_context.bytes_remaining == 0) {
-                typedef void (*post_tx_frame_func_t)();   
-                static const post_tx_frame_func_t post_tx_func[FRAME_TX_TYPE_MAX] = {
-                    on_post_tx_frame_sabm,
-                    on_post_tx_frame_ua,
-                    on_post_tx_frame_dm,
-                    on_post_tx_frame_uih                    
-                };
+    const short events = _serial->poll(POLLIN | POLLOUT);    
+    if (events & POLLIN) {   
+        read_do();        
+    } else {
+        ssize_t write_err;           
+        do {
+            write_err = write_do();
+        } while (write_err > 0);       
+        
+        if (_tx_context.bytes_remaining == 0) {
+            /* Frame write complete, exucute correct post processing function for clean-up. */
+            typedef void (*post_tx_frame_func_t)();  
+            static const post_tx_frame_func_t post_tx_func[FRAME_TX_TYPE_MAX] = {
+                on_post_tx_frame_sabm,
+                on_post_tx_frame_ua,
+                on_post_tx_frame_dm,
+                on_post_tx_frame_uih                    
+            };
                 
-                const Mux::FrameTxType frame_type = frame_tx_type_resolve();
-                post_tx_frame_func_t func         = post_tx_func[frame_type];
-                func();                
-                
-                // @todo: DEFECT WE MIGTH DO EXTRA TIMER SCHEDULING SHOULD USE DEDICATED FLAG FOR THIS
-            }
-        } else {
+            const Mux::FrameTxType frame_type = frame_tx_type_resolve();
+            post_tx_frame_func_t func         = post_tx_func[frame_type];
+            func();                        
+        } else if (write_err < 0) {
             switch (_tx_context.tx_state) {
                 osStatus os_status;
                 case TX_RETRANSMIT_ENQUEUE:
                     _establish_status = MUX_ESTABLISH_WRITE_ERROR;
                     os_status         = _semaphore.release();
                     MBED_ASSERT(os_status == osOK);    
-                    tx_state_change(TX_IDLE, NULL, NULL);                    
+                    tx_state_change(TX_IDLE, NULL, NULL);     // DEFECT @todo: tx_idle_entry_run missing ADD FAILING TC 
+              
                     break;
                 default:
-                    MBED_ASSERT(false); // @todo write returned < 0 for failure propagate error to the user
+                    // @todo DEFECT write failure for non user orgined TX: propagate error event to the user and reset
+                    MBED_ASSERT(false); 
                     break;
-            }
-        }
-    } else if (events & POLLIN) {
-        read_do();
-    } else {
-        MBED_ASSERT(false);
+            }            
+        } else {
+            /* No implementation required. */
+        }       
     }
-        
 }
 
 
