@@ -286,10 +286,18 @@ void self_iniated_response_rx(const uint8_t *rx_buf, uint8_t rx_buf_len, const u
                 mock_t * mock_write = mock_free_get("write");
                 CHECK(mock_write != NULL);                
                 mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-                mock_write->input_param[0].param        = (uint32_t)write_byte;                      
+                mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);
                 mock_write->input_param[1].param        = WRITE_LEN;
                 mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
                 mock_write->return_value                = 1;
+                
+                mock_write = mock_free_get("write");
+                CHECK(mock_write != NULL);                
+                mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+                mock_write->input_param[0].param        = (uint32_t)&(write_byte[1]);
+                mock_write->input_param[1].param        = WRITE_LEN;
+                mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+                mock_write->return_value                = 0;
             }
         }
 
@@ -2659,30 +2667,28 @@ void dlci_establish_simultaneous_self_iniated_different_dlci_id_sem_wait(const v
     };    
     self_iniated_request_tx(&(write_byte[0]), sizeof(write_byte));
        
-    /* Generate peer DLCI establishment response, which is accepted by the implementation and TX 1st byte of the 
-       pending DLCI establishment response. */
+    /* Generate peer DLCI establishment response, which is accepted by the implementation and start TX of the pending 
+       DLCI establishment response. */
     const uint8_t read_byte_2[4] = 
     {
         ((cntx->role == ROLE_INITIATOR) ? 3u : 1u) | (cntx->dlci_id << 2), 
         (FRAME_TYPE_UA | PF_BIT), 
         fcs_calculate(&read_byte[0], 2),
         FLAG_SEQUENCE_OCTET
-    };    
-    const uint8_t new_write_byte = FLAG_SEQUENCE_OCTET;
-    self_iniated_response_rx(&(read_byte_2[0]), sizeof(read_byte_2), &new_write_byte);
-    
-    /* Generate the remainder of DLCI establishment response to pending peer iniated DLCI establishment request. */
-    const uint8_t write_byte_2[4] = 
+    };  
+    const uint8_t write_byte_2[5] = 
     {
+        FLAG_SEQUENCE_OCTET,
         (1u | ((cntx->dlci_id + 1u) << 2)), 
         (FRAME_TYPE_UA | PF_BIT),        
-        fcs_calculate(&write_byte_2[0], 2),
+        fcs_calculate(&write_byte_2[1], 2),
         FLAG_SEQUENCE_OCTET
-    };
-
+    };    
+    self_iniated_response_rx(&(read_byte_2[0]), sizeof(read_byte_2), &(write_byte_2[0]));
+  
     const bool expected_dlci_establishment_event_state = true;
-    peer_iniated_response_tx(&(write_byte_2[0]), 
-                             sizeof(write_byte_2),
+    peer_iniated_response_tx(&(write_byte_2[1]), 
+                             sizeof(write_byte_2) - sizeof(write_byte_2[0]),
                              NULL,
                              expected_dlci_establishment_event_state,
                              MuxClient::is_dlci_establish_triggered);
@@ -2787,30 +2793,29 @@ void dlci_establish_simultaneous_self_iniated_full_frame_different_dlci_id_sem_w
     };    
     self_iniated_request_tx(&(write_byte[0]), sizeof(write_byte));
        
-    /* Generate peer DLCI establishment response, which is accepted by the implementation and TX 1st byte of the 
-       pending DLCI establishment response. */
+    /* Generate peer DLCI establishment response, which is accepted by the implementation and start TX of the pending 
+       DLCI establishment response. */
     const uint8_t read_byte_2[4] = 
     {
         ((cntx->role == ROLE_INITIATOR) ? 3u : 1u) | (cntx->dlci_id << 2), 
         (FRAME_TYPE_UA | PF_BIT), 
         fcs_calculate(&read_byte[0], 2),
         FLAG_SEQUENCE_OCTET
-    };    
-    const uint8_t new_write_byte = FLAG_SEQUENCE_OCTET;
-    self_iniated_response_rx(&(read_byte_2[0]), sizeof(read_byte_2), &new_write_byte);
-    
+    };   
     /* Generate the remainder of DLCI establishment response to pending peer iniated DLCI establishment request. */
-    const uint8_t write_byte_2[4] = 
+    const uint8_t write_byte_2[5] = 
     {
+        FLAG_SEQUENCE_OCTET,
         (1u | ((cntx->dlci_id + 1u) << 2)), 
         (FRAME_TYPE_UA | PF_BIT),        
-        fcs_calculate(&write_byte_2[0], 2),
+        fcs_calculate(&write_byte_2[1], 2),
         FLAG_SEQUENCE_OCTET
-    };
-
+    };    
+    self_iniated_response_rx(&(read_byte_2[0]), sizeof(read_byte_2), &(write_byte_2[0]));
+   
     const bool expected_dlci_establishment_event_state = true;
-    peer_iniated_response_tx(&(write_byte_2[0]), 
-                             sizeof(write_byte_2),
+    peer_iniated_response_tx(&(write_byte_2[1]), 
+                             sizeof(write_byte_2) - sizeof(write_byte_2[0]),
                              NULL,
                              expected_dlci_establishment_event_state,
                              MuxClient::is_dlci_establish_triggered);

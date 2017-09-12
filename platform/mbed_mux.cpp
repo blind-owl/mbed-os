@@ -330,7 +330,7 @@ void Mux::tx_internal_resp_entry_run()
         /* Complete frame write done, we can directly transit back to idle state. */
         tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);        
     } else if (write_err < 0) {
-        _state.is_write_error = 1u; // @todo implmentaation missing: propagate to event to user.
+        _state.is_write_error = 1u; // @todo implementation missing: propagate to event to user.
     } else {
         /* No implementation required, we remain in the current state until transmission is completed. */
     }       
@@ -341,9 +341,8 @@ void Mux::dm_response_send()
 {
     dm_response_construct();
     
-    tx_state_change(TX_INTERNAL_RESP, tx_internal_resp_entry_run, tx_idle_exit_run);   
-    
-    // @todo DEFECT we should check write error bit and transit back to TX_IDLE
+    tx_state_change(TX_INTERNAL_RESP, tx_internal_resp_entry_run, tx_idle_exit_run);      
+    // @todo DEFECT we should check write error bit and transit back to TX_IDLE - NOT? DO IT IN THE ERR DETECT PLACE
 }
 
 
@@ -617,13 +616,9 @@ void Mux::pending_peer_iniated_dlci_open_start(uint8_t dlci_id)
     _state.is_dlci_open_peer_iniated_pending = 0;
                 
     ua_response_construct(dlci_id);
-    const ssize_t return_code = write_do();
-    if (return_code >= 0) {       
-        tx_state_change(TX_INTERNAL_RESP, NULL, tx_idle_exit_run);                      
-    } else {
-        // @todo: propagate error to the user.
-        MBED_ASSERT(false);
-    }
+
+    tx_state_change(TX_INTERNAL_RESP, tx_internal_resp_entry_run, tx_idle_exit_run);      
+    // @todo DEFECT we should check write error bit and transit back to TX_IDLE - NOT? DO IT IN THE ERR DETECT PLACE
 }
 
 
