@@ -495,7 +495,7 @@ private:
     static volatile uint8_t _establish_status;
     static volatile uint8_t _dlci_id;
     
-    static uint8_t          _address_field;
+//    static uint8_t          _address_field;
 };
 
 

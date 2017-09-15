@@ -42,7 +42,6 @@ typedef struct
 
 volatile uint8_t Mux::_establish_status = 0;
 volatile uint8_t Mux::_dlci_id          = 0;
-uint8_t          Mux::_address_field    = 0;
 FileHandle *Mux::_serial                = NULL;
 EventQueueMock *Mux::_event_q           = NULL;
 MuxCallback *Mux::_mux_obj_cb           = NULL;
@@ -143,23 +142,6 @@ void Mux::on_timeout()
 }
 
 
-void Mux::decoder_state_change(DecoderState new_state)
-{
-    _rx_context.decoder_state = new_state;
-}
-
-
-void Mux::decoder_state_sync_run()
-{
-//trace("decoder_state_sync_run: ", _rx_context.buffer[_rx_context.offset]);    
-
-    if (_rx_context.buffer[_rx_context.offset] == FLAG_SEQUENCE_OCTET) {
-        ++_rx_context.offset;
-        decoder_state_change(DECODER_STATE_DECODE);
-    }
-}
-
-
 bool Mux::is_rx_frame_valid()
 {
 //    trace("is_rx_frame_valid::_rx_context.offset: ", _rx_context.offset);    
@@ -251,7 +233,10 @@ void Mux::on_rx_frame_sabm()
         case TX_RETRANSMIT_DONE:              
             dlci_id = _rx_context.buffer[1] >> 2;            
             if (!is_dlci_in_use(dlci_id)) {
+#if 0                
                 _address_field                           = _rx_context.buffer[1];
+trace("SET peer iniated pending: ", 0);
+#endif // 0                
                 _state.is_dlci_open_peer_iniated_pending = 1u;
             }
             break;
@@ -317,11 +302,11 @@ void Mux::on_rx_frame_dm()
     }
 }
 
-
+// @todo: DEFECT FRAME POST TX NEEDS TO BE CALLED ALLWAYS WHEN TX FRAME DONE NOW JUST IN on_deferredd_call
 void Mux::tx_internal_resp_entry_run()
 {
     ssize_t write_err;    
-    
+//@todo: WRITE NOT REQUIRED? IMPLEMENTTAION GUARANTEE THAT THIS FUNCTION ORIGINATES FROM on_deferredd_call() RX PATH
     do {
         write_err = write_do();
     } while (write_err > 0);   
@@ -438,6 +423,12 @@ void Mux::valid_rx_frame_decode()
 }
 
 
+void Mux::decoder_state_change(DecoderState new_state)
+{
+    _rx_context.decoder_state = new_state;
+}
+
+
 void Mux::decoder_state_decode_run()
 {
 //trace("decoder_state_decode_run: ", _rx_context.buffer[_rx_context.offset]);
@@ -471,6 +462,17 @@ void Mux::decoder_state_decode_run()
 }
 
 
+void Mux::decoder_state_sync_run()
+{
+//trace("decoder_state_sync_run: ", _rx_context.buffer[_rx_context.offset]);    
+
+    if (_rx_context.buffer[_rx_context.offset] == FLAG_SEQUENCE_OCTET) {
+        ++_rx_context.offset;
+        decoder_state_change(DECODER_STATE_DECODE);
+    }
+}
+
+
 void Mux::decode_do()
 {
     typedef void (*decoder_func_t)();    
@@ -486,11 +488,14 @@ void Mux::decode_do()
 
 void Mux::read_do()
 {
-//trace("read_do::_rx_context.offset: ", _rx_context.offset);    
+    ssize_t read_ret;    
     
-    const ssize_t ret = _serial->read(&(_rx_context.buffer[_rx_context.offset]), READ_LEN);       
-    MBED_ASSERT((ret == 1) || (ret < 0));
-    decode_do();
+    do {
+        read_ret = _serial->read(&(_rx_context.buffer[_rx_context.offset]), READ_LEN);
+        if (read_ret > 0) {
+            decode_do();
+        }
+    } while (read_ret > 0);
 }
 
 
@@ -611,6 +616,10 @@ void Mux::pending_self_iniated_dlci_open_start()
 
 void Mux::pending_peer_iniated_dlci_open_start(uint8_t dlci_id)
 {
+#if 0    
+trace("START peer iniated pending: ", 0);
+#endif // 0
+
     /* Construct the frame, start the tx sequence 1-byte at time, set and reset relevant state contexts. */  
     _state.is_dlci_open_peer_iniated_running = 1u;
     _state.is_dlci_open_peer_iniated_pending = 0;
@@ -624,7 +633,9 @@ void Mux::pending_peer_iniated_dlci_open_start(uint8_t dlci_id)
 
 void Mux::tx_idle_exit_run()
 {
+#if 0    
     _address_field                           = (DLCI_ID_UPPER_BOUND << 2);
+#endif // 0    
     _state.is_dlci_open_peer_iniated_pending = 0; 
     _state.is_write_error                    = 0;
 }
@@ -632,6 +643,10 @@ void Mux::tx_idle_exit_run()
 
 void Mux::tx_idle_entry_run()
 {
+#if 0    
+trace("tx_idle_entry_run: ", _state.is_dlci_open_peer_iniated_pending);
+#endif // 0
+
     if (_state.is_mux_open_self_iniated_pending) {
         pending_self_iniated_mux_open_start();
     } else if (_state.is_dlci_open_self_iniated_pending) {
@@ -643,16 +658,26 @@ void Mux::tx_idle_entry_run()
             const osStatus os_status                 = _semaphore.release();
             MBED_ASSERT(os_status == osOK);
         }
-    } else if (_state.is_dlci_open_peer_iniated_pending) {        
+    } else if (_state.is_dlci_open_peer_iniated_pending) {    
+#if 0        
         const uint8_t dlci_id = _address_field >> 2;          
+#endif // 0        
+        const uint8_t dlci_id = _rx_context.buffer[1] >> 2;                  
+        
         if (!is_dlci_in_use(dlci_id) && !is_dlci_q_full()) {
             pending_peer_iniated_dlci_open_start(dlci_id);
         } else {
             /* No implementation required. */
+#if 0            
+trace("NO TX PEND", 0);
+#endif // 0
         }
     } else {
         /* No implementation required. */
     }
+#if 0    
+trace("tx_idle_entry_run: EXIT", 0);    
+#endif // 0
 }
  
  
@@ -699,45 +724,46 @@ Mux::FrameTxType Mux::frame_tx_type_resolve()
 
 void Mux::on_deferred_call()
 {
-    const short events = _serial->poll(POLLIN | POLLOUT);    
-    if (events & POLLIN) {   
-        read_do();        
-    } else {
-        ssize_t write_err;           
+    read_do(); 
+
+// @todo: replace with while (_tx_context.bytes_remaining != 0) as post_tx_xxx generate new frame and
+// tx_internal_resp_entry_run() can remove write sequence?? => NOT AS GETS MESSY
+    if (_tx_context.bytes_remaining != 0) {
+        ssize_t write_err;          
         do {
-            write_err = write_do();
+            write_err = write_do();        
         } while (write_err > 0);       
         
         if (_tx_context.bytes_remaining == 0) {
             /* Frame write complete, exucute correct post processing function for clean-up. */
-            typedef void (*post_tx_frame_func_t)();  
+            typedef void (*post_tx_frame_func_t)(); 
             static const post_tx_frame_func_t post_tx_func[FRAME_TX_TYPE_MAX] = {
                 on_post_tx_frame_sabm,
                 on_post_tx_frame_ua,
                 on_post_tx_frame_dm,
-                on_post_tx_frame_uih                    
+                on_post_tx_frame_uih
             };
-                
+            
             const Mux::FrameTxType frame_type = frame_tx_type_resolve();
             post_tx_frame_func_t func         = post_tx_func[frame_type];
-            func();                        
+            func();                              
         } else if (write_err < 0) {
             switch (_tx_context.tx_state) {
                 osStatus os_status;
                 case TX_RETRANSMIT_ENQUEUE:
                     _establish_status = MUX_ESTABLISH_WRITE_ERROR;
                     os_status         = _semaphore.release();
-                    MBED_ASSERT(os_status == osOK);    
-                    tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);              
+                    MBED_ASSERT(os_status == osOK);   
+                    tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);             
                     break;
                 default:
                     // @todo DEFECT write failure for non user orgined TX: propagate error event to the user and reset
                     MBED_ASSERT(false); 
                     break;
-            }            
+            }                  
         } else {
-            /* No implementation required. */
-        }       
+                /* No implementation required. */
+        }          
     }
 }
 
