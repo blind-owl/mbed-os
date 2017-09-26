@@ -5,7 +5,7 @@
 
 namespace mbed {
 
-#define FLAG_SEQUENCE_OCTET                 0x7Eu         /* Flag field used in the advanced option mode. */
+#define FLAG_SEQUENCE_OCTET                 0xF9u         /* Flag field used in the basic option mode. */    
 #define ADDRESS_MUX_START_REQ_OCTET         0x03u         /* Address field of the start multiplexer request frame. */   
 /* Address field value of the start multiplexer response frame. */        
 #define ADDRESS_MUX_START_RESP_OCTET        ADDRESS_MUX_START_REQ_OCTET

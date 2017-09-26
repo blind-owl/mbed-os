@@ -111,7 +111,7 @@ TEST(MultiplexerOpenTestGroup, FirstTest)
                                                                     bytes. */
 #define WRITE_LEN                    1u                          /* Length of single write call in number of bytes. */  
 #define READ_LEN                     1u                          /* Length of single read call in number of bytes. */
-#define FLAG_SEQUENCE_OCTET          0x7Eu                       /* Flag field used in the advanced option mode. */
+#define FLAG_SEQUENCE_OCTET          0xF9u                       /* Flag field used in the basic option mode. */
 #define ADDRESS_MUX_START_REQ_OCTET  0x03u                       /* Address field value of the start multiplexer 
                                                                     request frame. */
 #define ADDRESS_MUX_START_RESP_OCTET ADDRESS_MUX_START_REQ_OCTET /* Address field value of the start multiplexer 
