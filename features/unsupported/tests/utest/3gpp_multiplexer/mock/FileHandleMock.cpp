@@ -31,7 +31,7 @@ ssize_t FileHandleMock::read(void *buffer, size_t size)
     }
     
     if (mock->input_param[0].compare_type == MOCK_COMPARE_TYPE_VALUE) {
-        CHECK_EQUAL(size, mock->input_param[0].param);
+        CHECK_EQUAL(mock->input_param[0].param, size);
     }   
     
     if (mock->output_param[0].param != NULL) {
@@ -51,7 +51,7 @@ ssize_t FileHandleMock::write(const void *buffer, size_t size)
     }
 
     if (mock->input_param[1].compare_type == MOCK_COMPARE_TYPE_VALUE) {
-        CHECK_EQUAL(size, mock->input_param[1].param);
+        CHECK_EQUAL(mock->input_param[1].param, size);
     }       
     if (mock->input_param[0].compare_type == MOCK_COMPARE_TYPE_VALUE) {
         if (memcmp((void *)(mock->input_param[0].param), buffer, size) != 0) {        
@@ -63,6 +63,7 @@ ssize_t FileHandleMock::write(const void *buffer, size_t size)
                 
                 trace("expected: ", expected);                
                 trace("actual: ", actual);
+                trace("index: ", i);
             }
             FAIL("FAILURE:");        
         }

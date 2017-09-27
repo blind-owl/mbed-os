@@ -216,14 +216,14 @@ typedef enum
     static void on_sigio();
 
 private:
-   
-    /* Definition for decoder state machine. */
+  
+    /* Definition for Rx event type. */
     typedef enum 
     {
-        DECODER_STATE_SYNC = 0,
-        DECODER_STATE_DECODE,
-        DECODER_STATE_MAX
-    } DecoderState;
+        RX_READ = 0,
+        RX_RESUME,
+        RX_EVENT_MAX
+    } RxEvent;    
     
     /* Definition for Tx state machine. */
     typedef enum 
@@ -283,10 +283,16 @@ private:
     static void ua_response_construct(uint8_t dlci_id);
     
     /** Do write operation if pending data available.
-     * @todo: document return code
      */
-    static ssize_t write_do();
+    static void write_do();
+    static void rx_event_do(RxEvent event);
     
+    static ssize_t on_rx_read_state_frame_start();
+    static ssize_t on_rx_read_state_header_read();
+    static ssize_t on_rx_read_state_trailer_read();
+    static ssize_t on_rx_read_state_suspend();
+    
+#if 0    
     /** Do read operation. */
     static void read_do();
 
@@ -322,7 +328,7 @@ private:
      *  @return true when suspending is required, false otherwise.
      */                
     static bool is_rx_suspend_requited();
-       
+#endif // 0       
     /** Process received SABM frame. */    
     static void on_rx_frame_sabm();
     
@@ -452,12 +458,24 @@ private:
        
     } tx_context_t;
        
+    /* Definition for Rx state machine. */
+    typedef enum 
+    {
+        RX_FRAME_START = 0,
+        RX_HEADER_READ,
+        RX_TRAILER_READ,        
+        RX_SUSPEND,
+        RX_STATE_MAX
+    } RxState;
+    
     /* Definition for Rx context type. */
     typedef struct 
     {        
-        DecoderState decoder_state;                  /* Decoder state machine current state. */
-        uint8_t      offset;                         /* Offset in the buffer where to read to. */
-        uint8_t      buffer[MBED_CONF_BUFFER_SIZE];  /* Rx buffer. */
+        RxState rx_state;                       /* Rx state machine current state. */
+//        DecoderState decoder_state;                  /* Decoder state machine current state. */
+        uint8_t offset;                         /* Offset in the buffer where to read to. */
+        uint8_t frame_trailer_length;           /* Length of the frame trailer to read in number of bytes. */        
+        uint8_t buffer[MBED_CONF_BUFFER_SIZE];  /* Rx buffer. */
        
     } rx_context_t;    
     
