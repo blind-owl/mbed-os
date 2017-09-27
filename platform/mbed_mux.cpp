@@ -739,9 +739,10 @@ ssize_t Mux::on_rx_read_state_frame_start()
 trace("!RX-FRAME_START", 0);
 
     ssize_t read_err;
+    _rx_context.buffer[_rx_context.offset] = ~FLAG_SEQUENCE_OCTET;
     do {
         read_err = _serial->read(&(_rx_context.buffer[_rx_context.offset]), FRAME_START_READ_LEN);
-trace("!READ", _rx_context.buffer[_rx_context.offset]);        
+trace("!READ_VALUE", _rx_context.buffer[_rx_context.offset]);        
     } while ((_rx_context.buffer[_rx_context.offset] != FLAG_SEQUENCE_OCTET) && (read_err > 0));
     
     if (_rx_context.buffer[_rx_context.offset] == FLAG_SEQUENCE_OCTET) {        
@@ -749,6 +750,7 @@ trace("!READ", _rx_context.buffer[_rx_context.offset]);
         _rx_context.rx_state = RX_HEADER_READ;
     }
 
+trace("!read_err", read_err);    
     return read_err;
 }
 
@@ -844,6 +846,7 @@ void Mux::rx_event_do(RxEvent event)
         case RX_READ:            
             do {
                 func     = rx_read_func[_rx_context.rx_state];
+trace("!RUN-READ", 0);                
                 read_err = func();
             } while (read_err > 0);
             

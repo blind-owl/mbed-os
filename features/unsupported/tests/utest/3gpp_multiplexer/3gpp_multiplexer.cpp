@@ -214,7 +214,7 @@ void self_iniated_request_tx(const uint8_t *tx_buf, uint8_t tx_buf_len)
         CHECK(mock_write != NULL);        
         mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_write->input_param[0].param        = (uint32_t)&(tx_buf[tx_count]);               
-        mock_write->input_param[1].param        = /*WRITE_LEN*/ tx_buf_len - tx_count;
+        mock_write->input_param[1].param        = tx_buf_len - tx_count;
         mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_write->return_value                = 1;        
        
@@ -233,7 +233,7 @@ void self_iniated_request_tx(const uint8_t *tx_buf, uint8_t tx_buf_len)
             CHECK(mock_write != NULL);               
             mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
             mock_write->input_param[0].param        = (uint32_t)&(tx_buf[tx_count + 1u]);               
-            mock_write->input_param[1].param        = /*WRITE_LEN*/ tx_buf_len - (tx_count + 1u);
+            mock_write->input_param[1].param        = tx_buf_len - (tx_count + 1u);
             mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
             mock_write->return_value                = 0;        
         }
@@ -904,7 +904,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_succes)
     mux_self_iniated_open();
 }
 
-#if 0
+
 /* Multiplexer semaphore wait call from mux_open_self_initiated_existing_open_pending TC. */
 void mux_start_self_initated_existing_open_pending_sem_wait(const void *context)
 {
@@ -914,7 +914,7 @@ void mux_start_self_initated_existing_open_pending_sem_wait(const void *context)
     CHECK_EQUAL(ret, 1);
     
     /* Finish the mux open establishment with success. */
-    mux_start_self_initated_sem_wait(NULL);
+    mux_start_self_initated_sem_wait(context);
 }
 
 
@@ -927,6 +927,16 @@ void mux_start_self_initated_existing_open_pending_sem_wait(const void *context)
  */
 TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_existing_open_pending)
 {
+    const uint8_t write_byte[6] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET, 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    
     mbed::FileHandleMock fh_mock;   
     mbed::EventQueueMock eq_mock;
     
@@ -941,18 +951,16 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_existing_open_pending)
     mock_t * mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;
-    mock_write->input_param[0].param        = (uint32_t)&write_byte;        
-    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte[0];        
+    mock_write->input_param[1].param        = SABM_FRAME_LEN;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 1;    
     
     mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    const uint32_t write_byte_2             = ADDRESS_MUX_START_REQ_OCTET;        
-    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
-    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte[1];        
+    mock_write->input_param[1].param        = SABM_FRAME_LEN - 1u;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 0;            
 
@@ -961,6 +969,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_existing_open_pending)
     CHECK(mock_wait != NULL);
     mock_wait->return_value = 1;
     mock_wait->func = mux_start_self_initated_existing_open_pending_sem_wait;
+    mock_wait->func_context = &(write_byte[1]);
 
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
@@ -974,7 +983,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_existing_open_pending)
     CHECK_EQUAL(0, ret);    
 }
 
-
+#if 0
 /* Multiplexer semaphore wait call from mux_open_self_initiated_existing_open_pending_2 TC. */
 void mux_start_self_initated_existing_open_pending_2_sem_wait(const void *context)
 {
