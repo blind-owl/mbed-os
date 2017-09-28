@@ -1234,7 +1234,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_existing_open_pending_2)
     CHECK_EQUAL(0, ret);    
 }
 
-#if 0
+
 /* Definition for the multiplexer role type. */
 typedef enum
 {
@@ -1276,8 +1276,8 @@ void dlci_establish_self_initated_sem_wait(const void *context)
     };    
 
     /* Complete the request frame write and read the response frame. */
-    self_iniated_request_tx(&(write_byte[0]), sizeof(write_byte));
-    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL);
+    self_iniated_request_tx(&(write_byte[0]), sizeof(write_byte), FRAME_HEADER_READ_LEN);
+    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL, SKIP_FLAG_SEQUENCE_OCTET);
 }
 
 
@@ -1347,7 +1347,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_mux_not_open)
     CHECK_EQUAL(obj, NULL);    
 }
 
-
+#if 0
 /*
  * TC - dlci establishment sequence, self initiated, role initiator: successfull establishment
  * - self iniated open multiplexer
