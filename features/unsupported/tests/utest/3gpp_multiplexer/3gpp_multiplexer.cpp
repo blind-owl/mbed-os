@@ -1259,19 +1259,21 @@ void dlci_establish_self_initated_sem_wait(const void *context)
 {
     const dlci_establish_context_t *cntx = static_cast<const dlci_establish_context_t *>(context);
     
-    const uint8_t read_byte[4]  = 
+    const uint8_t read_byte[5]  = 
     {
         (((cntx->role == ROLE_INITIATOR) ? 1 : 3) | (cntx->dlci_id << 2)),
         (FRAME_TYPE_UA | PF_BIT), 
-        fcs_calculate(&read_byte[0], 2),
+        LENGTH_INDICATOR_OCTET,        
+        fcs_calculate(&read_byte[0], 3),
         FLAG_SEQUENCE_OCTET
     };    
     const uint8_t address       = ((cntx->role == ROLE_INITIATOR) ? 3 : 1) | (cntx->dlci_id << 2);    
-    const uint8_t write_byte[4] = 
+    const uint8_t write_byte[5] = 
     {
         address, 
         (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&write_byte[0], 2),
+        LENGTH_INDICATOR_OCTET,        
+        fcs_calculate(&write_byte[0], 3),
         FLAG_SEQUENCE_OCTET
     };    
 
@@ -1284,22 +1286,31 @@ void dlci_establish_self_initated_sem_wait(const void *context)
 /* Do successfull self iniated dlci establishment.*/
 void dlci_self_iniated_establish(Role role, uint8_t dlci_id)
 {
+    const uint32_t address      = ((role == ROLE_INITIATOR) ? 3u : 1u) | (dlci_id << 2);        
+    const uint8_t write_byte[6] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        address, 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,        
+        fcs_calculate(&write_byte[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };    
+    
     /* Set mock. */
     mock_t * mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;
-    mock_write->input_param[0].param        = (uint32_t)&write_byte;        
-    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);        
+    mock_write->input_param[1].param        = sizeof(write_byte);
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 1;
 
     mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    const uint32_t write_byte_2             = ((role == ROLE_INITIATOR) ? 3u : 1u) | (dlci_id << 2);    
-    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
-    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[1]);        
+    mock_write->input_param[1].param        = sizeof(write_byte) - sizeof(write_byte[0]);
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 0;        
 
@@ -1347,7 +1358,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_mux_not_open)
     CHECK_EQUAL(obj, NULL);    
 }
 
-#if 0
+
 /*
  * TC - dlci establishment sequence, self initiated, role initiator: successfull establishment
  * - self iniated open multiplexer
@@ -1371,7 +1382,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_role_initiator_succ
     dlci_self_iniated_establish(ROLE_INITIATOR, 1);
 }
 
-
+#if 0
 void dlci_establish_self_initated_sem_wait_timeout(const void * context)
 {
     const dlci_establish_context_t *cntx = static_cast<const dlci_establish_context_t *>(context);
