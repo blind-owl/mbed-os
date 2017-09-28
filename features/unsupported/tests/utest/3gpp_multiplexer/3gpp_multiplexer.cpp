@@ -112,9 +112,13 @@ TEST(MultiplexerOpenTestGroup, FirstTest)
                                                                     bytes. */
 #endif // 0  
 
+#define FRAME_HEADER_READ_LEN 3u
+#define FRAME_TRAILER_LEN     2u
+
 #define FLAG_SEQUENCE_OCTET_LEN      1u                          /* Length of the flag sequence field in number of 
                                                                     bytes. */
 #define SABM_FRAME_LEN               6u                          /* Length of the SABM frame in number of bytes. */
+#define DM_FRAME_LEN                 6u                          /* Length of the DM frame in number of bytes. */
 #define WRITE_LEN                    1u                          /* Length of single write call in number of bytes. */  
 #define READ_LEN                     1u                          /* Length of single read call in number of bytes. */
 #define FLAG_SEQUENCE_OCTET          0xF9u                       /* Flag field used in the basic option mode. */
@@ -187,7 +191,7 @@ uint8_t fcs_calculate(const uint8_t *buffer,  uint8_t input_len)
  * - call call_in in the last iteration for T1 timer
  * - CALL RETURN 
  */
-void self_iniated_request_tx(const uint8_t *tx_buf, uint8_t tx_buf_len)
+void self_iniated_request_tx(const uint8_t *tx_buf, uint8_t tx_buf_len, uint8_t read_len)
 {
     /* Write the complete request frame in the do...while. */
     uint8_t                                  tx_count      = 0;           
@@ -207,7 +211,7 @@ void self_iniated_request_tx(const uint8_t *tx_buf, uint8_t tx_buf_len)
         CHECK(mock_read != NULL);
         mock_read->output_param[0].param       = NULL;
         mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_read->input_param[0].param        = READ_LEN;
+        mock_read->input_param[0].param        = read_len;
         mock_read->return_value                = 0;                         
         
         mock_t * mock_write = mock_free_get("write");
@@ -245,13 +249,20 @@ void self_iniated_request_tx(const uint8_t *tx_buf, uint8_t tx_buf_len)
 }
 
 
+typedef enum
+{
+    READ_FLAG_SEQUENCE_OCTET = 0, 
+    SKIP_FLAG_SEQUENCE_OCTET
+} FlagSequenceOctetReadType;
+
 /* Read complete response frame from the peer
  */
-#define FRAME_HEADER_READ_LEN 3u
-#define FRAME_TRAILER_LEN     2u
-void self_iniated_response_rx(const uint8_t *rx_buf, uint8_t rx_buf_len, const uint8_t *write_byte)
+void self_iniated_response_rx(const uint8_t            *rx_buf, 
+                              uint8_t                   rx_buf_len, 
+                              const uint8_t            *write_byte,
+                              FlagSequenceOctetReadType read_type)
 {
-    /* Phase 1: read frame start flag. */
+    
     uint8_t                                  rx_count      = 0;       
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
     const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};    
@@ -263,18 +274,23 @@ void self_iniated_response_rx(const uint8_t *rx_buf, uint8_t rx_buf_len, const u
     mock->return_value = 1;
 
     mbed::FileHandleMock::io_control(io_control);
+           
+    mock_t * mock_read;
+    if (read_type == READ_FLAG_SEQUENCE_OCTET) {
+        /* Phase 1: read frame start flag. */    
+    
+        mock_read = mock_free_get("read");
+        CHECK(mock_read != NULL); 
+        mock_read->output_param[0].param       = &(rx_buf[rx_count]);
+        mock_read->output_param[0].len         = sizeof(rx_buf[0]);
+        mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_read->input_param[0].param        = FLAG_SEQUENCE_OCTET_LEN;
+        mock_read->return_value                = 1;   
         
-    /* Issue read within deferred call context. */        
-    mock_t * mock_read = mock_free_get("read");
-    CHECK(mock_read != NULL); 
-    mock_read->output_param[0].param       = &(rx_buf[rx_count]);
-    mock_read->output_param[0].len         = sizeof(rx_buf[0]);
-    mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_read->input_param[0].param        = FLAG_SEQUENCE_OCTET_LEN;
-    mock_read->return_value                = 1;      
+        ++rx_count;
+    }
            
     /* Phase 2: read next 3 bytes 1-byte at a time. */
-    ++rx_count;
     uint8_t read_len = FRAME_HEADER_READ_LEN;
     do {    
         /* Continue read cycle within current context. */            
@@ -414,6 +430,136 @@ void peer_iniated_request_rx(const uint8_t *rx_buf,
 {
     /* Internal logic error if both supplied params are != NULL. */
     CHECK(!((resp_write_byte != NULL) && (current_tx_write_byte != NULL)));
+    
+    /* Phase 1: read frame start flag. */
+    uint8_t                                  rx_count      = 0;       
+    const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
+    const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};    
+
+    /* Enqueue deferred call to EventQueue.
+     * Trigger sigio callback from the Filehandle used by the Mux (component under test). */
+    mock_t * mock = mock_free_get("call");
+    CHECK(mock != NULL);           
+    mock->return_value = 1;
+
+    mbed::FileHandleMock::io_control(io_control);
+        
+    /* Issue read within deferred call context. */        
+    mock_t * mock_read = mock_free_get("read");
+    CHECK(mock_read != NULL); 
+    mock_read->output_param[0].param       = &(rx_buf[rx_count]);
+    mock_read->output_param[0].len         = sizeof(rx_buf[0]);
+    mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_read->input_param[0].param        = FLAG_SEQUENCE_OCTET_LEN;
+    mock_read->return_value                = 1;      
+           
+    /* Phase 2: read next 3 bytes 1-byte at a time. */
+    ++rx_count;
+    uint8_t read_len = FRAME_HEADER_READ_LEN;
+    do {    
+        /* Continue read cycle within current context. */            
+
+        mock_read = mock_free_get("read");
+        CHECK(mock_read != NULL); 
+        mock_read->output_param[0].param       = &(rx_buf[rx_count]);
+        mock_read->output_param[0].len         = sizeof(rx_buf[0]);
+        mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_read->input_param[0].param        = read_len;
+        mock_read->return_value                = 1;          
+        
+        ++rx_count;    
+        --read_len;
+    } while (read_len != 0); 
+    
+    /* Phase 3: read trailing bytes after decoding length field 1-byte at a time. */
+    read_len = FRAME_TRAILER_LEN;
+    do {    
+        /* Continue read cycle within current context. */            
+
+        mock_read = mock_free_get("read");
+        CHECK(mock_read != NULL); 
+        mock_read->output_param[0].param       = &(rx_buf[rx_count]);
+        mock_read->output_param[0].len         = sizeof(rx_buf[0]);
+        mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_read->input_param[0].param        = read_len;
+        mock_read->return_value                = 1;          
+        
+        ++rx_count;    
+        --read_len;
+    } while (read_len != 0);
+    
+    if (resp_write_byte != NULL)  {
+        /* RX frame completed, start the response frame TX sequence inside the current RX cycle. */ 
+        
+        const uint8_t length_of_frame = 4u + (resp_write_byte[3] & ~1) + 2u; // @todo: FIX ME: magic numbers.
+                
+        mock_t * mock_write = mock_free_get("write");
+        CHECK(mock_write != NULL);                
+        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->input_param[0].param        = (uint32_t)&(resp_write_byte[0]);
+        mock_write->input_param[1].param        = length_of_frame;
+        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->return_value                = 1;
+                
+        /* End TX sequence: this call orginates from tx_internal_resp_entry_run(). */
+        mock_write = mock_free_get("write");
+        CHECK(mock_write != NULL);                
+        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->input_param[0].param        = (uint32_t)&(resp_write_byte[1]);                       
+        mock_write->input_param[1].param        = (length_of_frame - 1u);
+        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->return_value                = 0;
+                
+        /* End TX sequence: this call orginates from on_deferred_call(). */
+        mock_write = mock_free_get("write");
+        CHECK(mock_write != NULL);                
+        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->input_param[0].param        = (uint32_t)&(resp_write_byte[1]);                       
+        mock_write->input_param[1].param        = (length_of_frame - 1u);
+        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->return_value                = 0;
+    } else if (current_tx_write_byte != NULL) {
+        /* End TX sequence for the current byte in the TX pipeline: this call originates from on_deferred_call(). */
+        FAIL("FIX ME!");
+#if 0            
+        mock_write = mock_free_get("write");
+        CHECK(mock_write != NULL);               
+        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->input_param[0].param        = (uint32_t)&(current_tx_write_byte[0]);                       
+        mock_write->input_param[1].param        = WRITE_LEN;
+        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->return_value                = 0;                                   
+#endif // 0        
+    } else {
+        /* No implementation required. */
+    }
+    
+#if 0    
+    /* Frame read sequence gets completed, now cancel T1 timer. */              
+    mock_t * mock_cancel = mock_free_get("cancel");    
+    CHECK(mock_cancel != NULL);    
+    mock_cancel->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_cancel->input_param[0].param        = T1_TIMER_EVENT_ID;     
+            
+    /* Release the semaphore blocking the call thread. */
+    mock_t * mock_release = mock_free_get("release");
+    CHECK(mock_release != NULL);
+    mock_release->return_value = osOK;    
+#endif // 0    
+
+    /* Trigger the deferred call context to execute all mocks. */
+    mbed::EventQueueMock::io_control(eq_io_control);                   
+}
+
+
+#if 0
+void peer_iniated_request_rx(const uint8_t *rx_buf, 
+                             uint8_t        rx_buf_len, 
+                             const uint8_t *resp_write_byte,
+                             const uint8_t *current_tx_write_byte)
+{
+    /* Internal logic error if both supplied params are != NULL. */
+    CHECK(!((resp_write_byte != NULL) && (current_tx_write_byte != NULL)));
         
     /* Read the complete request frame in do...while. */
     mock_t * mock_write;
@@ -494,7 +640,7 @@ void peer_iniated_request_rx(const uint8_t *rx_buf,
         ++rx_count;        
     } while (rx_count != rx_buf_len);    
 }
-
+#endif // 0
 
 /*
  * LOOP UNTIL COMPLETE REQUEST FRAME READ DONE
@@ -683,14 +829,14 @@ void peer_iniated_response_tx(const uint8_t *buf,
         CHECK(mock_read != NULL);
         mock_read->output_param[0].param       = NULL;
         mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_read->input_param[0].param        = READ_LEN;
+        mock_read->input_param[0].param        = FRAME_HEADER_READ_LEN;
         mock_read->return_value                = 0;                                 
         
         mock_t * mock_write = mock_free_get("write");
         CHECK(mock_write != NULL);        
         mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_write->input_param[0].param        = (uint32_t)&(buf[tx_count]);               
-        mock_write->input_param[1].param        = WRITE_LEN;
+        mock_write->input_param[1].param        = (buf_len - tx_count);
         mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_write->return_value                = 1;        
 
@@ -698,11 +844,13 @@ void peer_iniated_response_tx(const uint8_t *buf,
             if (new_tx_byte != NULL) {
                 /* Last byte of the response frame written, write 1st byte of new pending frame. */    
                 
+                const uint8_t length_of_frame = 4u + (new_tx_byte[3] & ~1) + 2u; // @todo: FIX ME: magic numbers.    
+                           
                 mock_write = mock_free_get("write");
                 CHECK(mock_write != NULL);                
                 mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
                 mock_write->input_param[0].param        = (uint32_t)&(new_tx_byte[0]);                       
-                mock_write->input_param[1].param        = WRITE_LEN;
+                mock_write->input_param[1].param        = length_of_frame;
                 mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
                 mock_write->return_value                = 1;
                 
@@ -711,7 +859,7 @@ void peer_iniated_response_tx(const uint8_t *buf,
                 CHECK(mock_write != NULL);                
                 mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
                 mock_write->input_param[0].param        = (uint32_t)&(new_tx_byte[1]);                       
-                mock_write->input_param[1].param        = WRITE_LEN;
+                mock_write->input_param[1].param        = (length_of_frame - 1u);
                 mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
                 mock_write->return_value                = 0;                                           
             }
@@ -722,7 +870,7 @@ void peer_iniated_response_tx(const uint8_t *buf,
             CHECK(mock_write != NULL);               
             mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
             mock_write->input_param[0].param        = (uint32_t)&(buf[tx_count + 1u]);               
-            mock_write->input_param[1].param        = WRITE_LEN;
+            mock_write->input_param[1].param        = (buf_len - (tx_count + 1u));
             mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
             mock_write->return_value                = 0;        
         }            
@@ -833,8 +981,8 @@ void mux_start_self_initated_sem_wait(const void *context)
         FLAG_SEQUENCE_OCTET
     };
 
-    self_iniated_request_tx((const uint8_t *)context, (SABM_FRAME_LEN - 1u));
-    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL);   
+    self_iniated_request_tx((const uint8_t *)context, (SABM_FRAME_LEN - 1u), FLAG_SEQUENCE_OCTET_LEN);
+    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL, READ_FLAG_SEQUENCE_OCTET);   
 }
 
 
@@ -983,7 +1131,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_existing_open_pending)
     CHECK_EQUAL(0, ret);    
 }
 
-#if 0
+
 /* Multiplexer semaphore wait call from mux_open_self_initiated_existing_open_pending_2 TC. */
 void mux_start_self_initated_existing_open_pending_2_sem_wait(const void *context)
 {
@@ -991,38 +1139,33 @@ void mux_start_self_initated_existing_open_pending_2_sem_wait(const void *contex
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
     const uint32_t ret = mbed::Mux::mux_start(status);   
     CHECK_EQUAL(ret, 1);
-       
-    const uint8_t *dlci_id      = static_cast<const uint8_t*>(context);    
-    const uint8_t write_byte[4] = 
-    {
-        3u | (*dlci_id << 2),
-        (FRAME_TYPE_DM | PF_BIT),        
-        fcs_calculate(&write_byte[0], 2),
-        FLAG_SEQUENCE_OCTET
-    };      
-    const uint8_t write_byte_2[5] = 
+
+    const uint8_t write_byte_2[6] = 
     {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_REQ_OCTET, 
         (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&write_byte_2[1], 2),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_2[1], 3),
         FLAG_SEQUENCE_OCTET
     };    
     
-    /* Finish the mux open establishment with success. */    
-    peer_iniated_response_tx(&write_byte[0], sizeof(write_byte), &(write_byte_2[0]), false, NULL);
+    /* Finish the TX of DM response. */   
+    peer_iniated_response_tx((uint8_t *)context, (DM_FRAME_LEN -1u), &(write_byte_2[0]), false, NULL);
     
     /* DM response completed, complete the mux start-up establishment. */
-    const uint8_t read_byte[4] = 
+    const uint8_t read_byte[5] = 
     {
         ADDRESS_MUX_START_RESP_OCTET, 
         (FRAME_TYPE_UA | PF_BIT), 
-        fcs_calculate(&read_byte[0], 2),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[0], 3),
         FLAG_SEQUENCE_OCTET
-    };    
-   
-    self_iniated_request_tx(&(write_byte_2[1]), (sizeof(write_byte_2) - sizeof(write_byte_2[0])));    
-    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL);    
+    };   
+    self_iniated_request_tx(&(write_byte_2[1]), 
+                            (sizeof(write_byte_2) - sizeof(write_byte_2[0])),
+                            FRAME_HEADER_READ_LEN);
+    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL, SKIP_FLAG_SEQUENCE_OCTET);
 }
 
 
@@ -1049,30 +1192,35 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_existing_open_pending_2)
     mbed::Mux::serial_attach(&fh_mock);
   
     const uint8_t dlci_id      = 0;
-    const uint8_t read_byte[5] = 
+    const uint8_t read_byte[6] = 
     {
         FLAG_SEQUENCE_OCTET,        
         /* Peer assumes the role of initiator. */
         3u | (dlci_id << 2),
         (FRAME_TYPE_DISC | PF_BIT), 
-        fcs_calculate(&read_byte[1], 2),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[1], 3),
         FLAG_SEQUENCE_OCTET
     };           
 
     /* Generate DISC from peer and trigger TX of DM response. */
-    const uint8_t write_byte[2] = 
+    const uint8_t write_byte[6] = 
     {
         FLAG_SEQUENCE_OCTET,
-        3u | (dlci_id << 2)
+        3u | (dlci_id << 2),
+        (FRAME_TYPE_DM | PF_BIT),    
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte[1], 3),
+        FLAG_SEQUENCE_OCTET        
     };
-    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), &(write_byte[0]), NULL);    
+    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), &(write_byte[0]), NULL);   
     
     /* Issue multiplexer start while DM is in progress. */
     mock_t * mock_wait = mock_free_get("wait");
     CHECK(mock_wait != NULL);
     mock_wait->return_value = 1;
     mock_wait->func         = mux_start_self_initated_existing_open_pending_2_sem_wait;    
-    mock_wait->func_context = dlci_id;
+    mock_wait->func_context = &(write_byte[1]);
     
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
@@ -1086,7 +1234,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_existing_open_pending_2)
     CHECK_EQUAL(0, ret);    
 }
 
-
+#if 0
 /* Definition for the multiplexer role type. */
 typedef enum
 {

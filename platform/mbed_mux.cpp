@@ -813,7 +813,7 @@ trace("!RX-FRAME_TRAILER", 0);
         func();      
    
         _rx_context.offset   = 1u;            // @todo: only set when travel back to RX_TRAILER_READ
-        _rx_context.rx_state = RX_TRAILER_READ;        
+        _rx_context.rx_state = RX_HEADER_READ;        
         
         read_err = 0;
     }
