@@ -1600,7 +1600,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_dlci_id_used)
     CHECK_EQUAL(obj, NULL);
 }
 
-#if 0
+
 #define MAX_DLCI_COUNT 3u
 
 /*
@@ -1641,6 +1641,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_all_dlci_ids_used)
 }
 
 
+#if 0
 void single_write_cycle_fail(uint8_t address_field, const uint8_t *write_byte)
 {
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};    
