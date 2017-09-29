@@ -777,6 +777,7 @@ trace("!RX-FRAME_HEADER", 0);
 
         MBED_ASSERT((_rx_context.buffer[_rx_context.offset - 1u] & 1u) == 1u);
         _rx_context.frame_trailer_length = (_rx_context.buffer[_rx_context.offset - 1u] & ~1u) + FRAME_TRAILER_LEN;
+trace("_rx_context.frame_trailer_length", _rx_context.frame_trailer_length);        
         _rx_context.rx_state             = RX_TRAILER_READ;
     }
 

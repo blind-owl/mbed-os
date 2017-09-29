@@ -1807,33 +1807,25 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_write_failure)
     CHECK_EQUAL(obj, NULL);
 }
 
-#if 0
+
 /* Multiplexer semaphore wait call from dlci_establish_self_initiated_rejected_by_peer TC. 
  * Role: initiator
  */
 void dlci_establish_self_initated_sem_wait_rejected_by_peer(const void *context)
-{
-    const dlci_establish_context_t *cntx = static_cast<const dlci_establish_context_t *>(context);
-    
-    const uint8_t read_byte[4] = 
+{    
+    const uint8_t read_byte[5] = 
     {
-        (((cntx->role == ROLE_INITIATOR) ? 1 : 3) | (cntx->dlci_id << 2)),
+        1u | (1u << 2),        
         (FRAME_TYPE_DM | PF_BIT), 
-        fcs_calculate(&read_byte[0], 2),
-        FLAG_SEQUENCE_OCTET
-    };    
-    const uint8_t address       = ((cntx->role == ROLE_INITIATOR) ? 3 : 1) | (cntx->dlci_id << 2);        
-    const uint8_t write_byte[4] = 
-    {
-        address, 
-        (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&write_byte[0], 2),
+        LENGTH_INDICATOR_OCTET,        
+        fcs_calculate(&read_byte[0], 3),
         FLAG_SEQUENCE_OCTET
     };    
 
     /* Complete the request frame write and read the response frame. */
-    self_iniated_request_tx(&(write_byte[0]), sizeof(write_byte));
-    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL);
+    const uint8_t *write_byte = (const uint8_t *)context;
+    self_iniated_request_tx(&(write_byte[0]), (SABM_FRAME_LEN - 1u), FRAME_HEADER_READ_LEN);
+    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL, SKIP_FLAG_SEQUENCE_OCTET);
 }
 
 
@@ -1858,13 +1850,22 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_rejected_by_peer)
     
     mux_self_iniated_open();
     
+    const uint8_t write_byte[6] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (1u << 2), 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };    
+    
     /* Set mock. */
     mock_t * mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;
-    mock_write->input_param[0].param        = (uint32_t)&write_byte;        
-    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);        
+    mock_write->input_param[1].param        = SABM_FRAME_LEN;    
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 1;    
 
@@ -1873,23 +1874,20 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_rejected_by_peer)
     CHECK(mock_wait != NULL);
     mock_wait->return_value = 1;
     mock_wait->func         = dlci_establish_self_initated_sem_wait_rejected_by_peer;
-    
-    const dlci_establish_context_t context = {1, ROLE_INITIATOR};
-    mock_wait->func_context                = &context;
+    mock_wait->func_context                = &(write_byte[1]);
     
     mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    const uint32_t write_byte_2             = ((context.role == ROLE_INITIATOR) ? 3u : 1u) | (context.dlci_id << 2);    
-    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
-    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[1]);        
+    mock_write->input_param[1].param        = (SABM_FRAME_LEN - 1u);        
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 0;                    
 
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX); 
     FileHandle *obj    = NULL;    
-    const uint32_t ret = mbed::Mux::dlci_establish(context.dlci_id, status, &obj);
+    const uint32_t ret = mbed::Mux::dlci_establish(1u, status, &obj);
     CHECK_EQUAL(ret, 4);
     CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_REJECT, status);
     CHECK_EQUAL(obj, NULL);    
@@ -1900,6 +1898,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_rejected_by_peer)
 }
 
 
+#if 0
 /* Do successfull multiplexer peer iniated open.*/
 void mux_peer_iniated_open(const uint8_t *rx_buf, uint8_t rx_buf_len, bool expected_mux_start_event_state)
 {    
