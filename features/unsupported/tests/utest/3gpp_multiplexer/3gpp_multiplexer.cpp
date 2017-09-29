@@ -1497,7 +1497,6 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_timeout)
 }
 
 
-#if 0
 /*
  * TC - dlci establishment sequence, self initiated, role initiator: request timeout failure:
  * - self iniated open multiplexer
@@ -1521,13 +1520,22 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_success_after_timeo
     
     mux_self_iniated_open();
     
+    const uint8_t write_buf[6] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        (3u | (1u << 2)),
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,                
+        fcs_calculate(&write_buf[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };    
+    
     /* Set mock. */
     mock_t * mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;
-    mock_write->input_param[0].param        = (uint32_t)&write_byte;        
-    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[0].param        = (uint32_t)&(write_buf[0]);        
+    mock_write->input_param[1].param        = sizeof(write_buf);    
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 1;    
 
@@ -1536,23 +1544,20 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_success_after_timeo
     CHECK(mock_wait != NULL);
     mock_wait->return_value = 1;
     mock_wait->func         = dlci_establish_self_initated_sem_wait_timeout;
+    mock_wait->func_context = &(write_buf[0]);    
     
-    const dlci_establish_context_t context = {1, ROLE_INITIATOR};
-    mock_wait->func_context                = &context;
-
     mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    const uint32_t write_byte_2             = ((context.role == ROLE_INITIATOR) ? 3u : 1u) | (context.dlci_id << 2);    
-    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
-    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[0].param        = (uint32_t)&(write_buf[1]);                
+    mock_write->input_param[1].param        = sizeof(write_buf) - sizeof(write_buf[0]);    
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 0;                            
     
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
     FileHandle *obj    = NULL;        
-    const uint32_t ret = mbed::Mux::dlci_establish(context.dlci_id, status, &obj);
+    const uint32_t ret = mbed::Mux::dlci_establish(1u, status, &obj);
     CHECK_EQUAL(ret, 4);
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_TIMEOUT);           
     CHECK_EQUAL(obj, NULL);    
@@ -1563,6 +1568,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_success_after_timeo
 }
 
 
+#if 0
 /*
  * TC - dlci establishment sequence, self initiated, role initiator: DLCI id allready used
  * - self iniated open multiplexer
