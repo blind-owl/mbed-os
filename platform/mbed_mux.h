@@ -491,6 +491,7 @@ private:
         uint16_t is_dlci_open_peer_iniated_pending : 1;
         uint16_t is_dlci_open_peer_iniated_running : 1;                
         uint16_t is_write_error                    : 1;
+        uint16_t is_user_thread_context            : 1;
 #if 0        
         uint8_t is_dlci_establish_pending : 1;  /* True if @ref mux_start or @ref dlci_establish is pending. */
         uint8_t is_user_tx_pending : 1;         /* True if user TX request is pending. */

@@ -92,6 +92,7 @@ void Mux::module_init()
     _state.is_dlci_open_peer_iniated_pending = 0;
     _state.is_dlci_open_peer_iniated_running = 0;  
     _state.is_write_error                    = 0;
+    _state.is_user_thread_context            = 0;
    
     _rx_context.offset               = 0;
     _rx_context.frame_trailer_length = 0;        
@@ -906,9 +907,14 @@ trace("!E-bytes_remaining: ", _tx_context.bytes_remaining);
                 switch (_tx_context.tx_state) {
                     osStatus os_status;
                     case TX_RETRANSMIT_ENQUEUE:
-                        _establish_status = MUX_ESTABLISH_WRITE_ERROR;
-                        os_status         = _semaphore.release();
-                        MBED_ASSERT(os_status == osOK);  
+                        if (_state.is_user_thread_context) {
+                            _state.is_write_error = 1u;
+                        } else {
+                            _establish_status = MUX_ESTABLISH_WRITE_ERROR;
+                            os_status         = _semaphore.release();
+                            MBED_ASSERT(os_status == osOK);                              
+                        }
+                        
                         tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);            
                         break;
                     default:
@@ -1170,7 +1176,9 @@ uint32_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHa
             _tx_context.retransmit_counter = RETRANSMIT_COUNT; // @todo: set to tx_idle_exit           
             tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
             if (_state.is_write_error) {
+#if 0 // NOT                
                 tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);
+#endif // 0                
                 status = MUX_ESTABLISH_WRITE_ERROR;
 // @todo: add mutex_free                                
                 return 4u;
@@ -1221,7 +1229,9 @@ uint32_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHa
 
 void Mux::tx_retransmit_enqueu_entry_run()
 {
+    _state.is_user_thread_context = 1u;
     write_do();
+    _state.is_user_thread_context = 0;
     
 #if 0 // LEGACY    
     ssize_t write_err;    

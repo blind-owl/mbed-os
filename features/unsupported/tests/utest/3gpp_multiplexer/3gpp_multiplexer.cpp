@@ -1641,8 +1641,8 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_all_dlci_ids_used)
 }
 
 
-#if 0
-void single_write_cycle_fail(uint8_t address_field, const uint8_t *write_byte)
+void single_write_cycle_fail(/*uint8_t address_field*/const uint8_t *write_byte, uint8_t tx_len,
+                             const uint8_t *pending_write_byte)
 {
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};    
     const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};
@@ -1662,32 +1662,38 @@ void single_write_cycle_fail(uint8_t address_field, const uint8_t *write_byte)
     CHECK(mock_read != NULL);
     mock_read->output_param[0].param       = NULL;
     mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_read->input_param[0].param        = READ_LEN;
+    mock_read->input_param[0].param        = FRAME_HEADER_READ_LEN;    
     mock_read->return_value                = 0;                             
     
     mock_t * mock_write = mock_free_get("write");
     CHECK(mock_write != NULL);    
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->input_param[0].param        = (uint32_t)&address_field;               
-    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);
+    mock_write->input_param[1].param        = tx_len;    
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = (uint32_t)-1;  
     
-    if (write_byte != NULL)  {
+    if (pending_write_byte != NULL)  {
+// @todo:fix this block hole block
+        
         /* Start the pending frame TX sequence. */                 
         mock_write = mock_free_get("write");
         CHECK(mock_write != NULL);                
         mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);
+        mock_write->input_param[0].param        = (uint32_t)&(pending_write_byte[0]);
+#if 0        
         mock_write->input_param[1].param        = WRITE_LEN;
+#endif // 0        
         mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_write->return_value                = 1;
                 
         mock_write = mock_free_get("write");
         CHECK(mock_write != NULL);                
         mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->input_param[0].param        = (uint32_t)&(write_byte[1]);
+        mock_write->input_param[0].param        = (uint32_t)&(pending_write_byte[1]);
+#if 0        
         mock_write->input_param[1].param        = WRITE_LEN;
+#endif // 0        
         mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_write->return_value                = 0;
     }    
@@ -1704,8 +1710,7 @@ void single_write_cycle_fail(uint8_t address_field, const uint8_t *write_byte)
 /* Multiplexer semaphore wait call from dlci_establish_self_initiated_write_failure TC. */
 void dlci_establish_self_initated_write_fail_sem_wait(const void *context)
 {
-    const uint8_t *dlci_id = static_cast<const uint8_t *>(context);
-    single_write_cycle_fail(3u | (*dlci_id << 2), NULL);
+    single_write_cycle_fail((const uint8_t *)context, (SABM_FRAME_LEN - 1u), NULL);
 }
 
 
@@ -1729,22 +1734,31 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_write_failure)
     mbed::Mux::serial_attach(&fh_mock);
     
     mux_self_iniated_open();    
+   
+    const uint8_t write_byte[6] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (1u << 2), 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,        
+        fcs_calculate(&write_byte[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };        
     
     /* Set mock. */
     mock_t * mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;
-    mock_write->input_param[0].param        = (uint32_t)&write_byte;                
-    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);                
+    mock_write->input_param[1].param        = sizeof(write_byte);    
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = (uint32_t)-1;        
-    
+
     /* 1st test sequence start: fails in 1st phase. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
-    FileHandle *obj         = NULL;
-    const uint8_t dlci_id   = 1u;    
-    uint32_t ret            = mbed::Mux::dlci_establish(dlci_id, status, &obj);
+    FileHandle *obj       = NULL;
+    const uint8_t dlci_id = 1u;    
+    uint32_t ret          = mbed::Mux::dlci_establish(dlci_id, status, &obj);
     CHECK_EQUAL(4, ret);
     CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_WRITE_ERROR, status);
     CHECK(!MuxClient::is_dlci_establish_triggered());    
@@ -1754,8 +1768,8 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_write_failure)
     mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->input_param[0].param        = (uint32_t)&write_byte;        
-    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);                
+    mock_write->input_param[1].param        = sizeof(write_byte);        
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 1;
     
@@ -1764,16 +1778,13 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_write_failure)
     CHECK(mock_wait != NULL);
     mock_wait->return_value = 1;
     mock_wait->func         = dlci_establish_self_initated_write_fail_sem_wait;
-    mock_wait->func_context = &dlci_id;
-    
-    const Role role = ROLE_INITIATOR;
-    
+    mock_wait->func_context = &(write_byte[1]);
+       
     mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    const uint32_t write_byte_2             = ((role == ROLE_INITIATOR) ? 3u : 1u) | (dlci_id << 2);    
-    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
-    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[1]);                
+    mock_write->input_param[1].param        = sizeof(write_byte) - sizeof(write_byte[0]);            
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 0;                                
 
@@ -1786,7 +1797,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_write_failure)
     CHECK_EQUAL(obj, NULL);
     
     /* 3rd test sequence start: establishment success. */
-    dlci_self_iniated_establish(role, 1);
+    dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);
     
     /* 4th test sequence start: establishment with the same DLCI id - fail. */
     status = mbed::Mux::MUX_ESTABLISH_MAX;    
@@ -1796,7 +1807,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_write_failure)
     CHECK_EQUAL(obj, NULL);
 }
 
-
+#if 0
 /* Multiplexer semaphore wait call from dlci_establish_self_initiated_rejected_by_peer TC. 
  * Role: initiator
  */
