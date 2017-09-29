@@ -1568,7 +1568,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_success_after_timeo
 }
 
 
-#if 0
+
 /*
  * TC - dlci establishment sequence, self initiated, role initiator: DLCI id allready used
  * - self iniated open multiplexer
@@ -1600,6 +1600,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_dlci_id_used)
     CHECK_EQUAL(obj, NULL);
 }
 
+#if 0
 #define MAX_DLCI_COUNT 3u
 
 /*
