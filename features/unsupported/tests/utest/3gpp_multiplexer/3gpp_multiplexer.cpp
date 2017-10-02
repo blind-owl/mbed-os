@@ -112,8 +112,8 @@ TEST(MultiplexerOpenTestGroup, FirstTest)
                                                                     bytes. */
 #endif // 0  
 
-#define FRAME_HEADER_READ_LEN 3u
-#define FRAME_TRAILER_LEN     2u
+#define FRAME_HEADER_READ_LEN        3u
+#define FRAME_TRAILER_LEN            2u
 #define FLAG_SEQUENCE_OCTET_LEN      1u                          /* Length of the flag sequence field in number of 
                                                                     bytes. */
 #define SABM_FRAME_LEN               6u                          /* Length of the SABM frame in number of bytes. */
@@ -1014,12 +1014,12 @@ void mux_start_self_initated_sem_wait(const void *context)
     };
 
     const mux_self_iniated_open_context_t *cntx = (const mux_self_iniated_open_context_t *)context;
-    self_iniated_request_tx(/*(const uint8_t *)context*/cntx->write_byte, 
-                            (SABM_FRAME_LEN - 1u), 
-                            /*FLAG_SEQUENCE_OCTET_LEN*/cntx->tx_cycle_read_len);
-    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL, 
-                             /*READ_FLAG_SEQUENCE_OCTET*/cntx->rx_cycle_read_type,
-                             /*STRIP_FLAG_FIELD_NO*/cntx->strip_flag_field_type);   
+    self_iniated_request_tx(cntx->write_byte, (SABM_FRAME_LEN - 1u), cntx->tx_cycle_read_len);
+    self_iniated_response_rx(&(read_byte[0]), 
+                             sizeof(read_byte), 
+                             NULL,
+                             cntx->rx_cycle_read_type,
+                             cntx->strip_flag_field_type);   
 }
 
 
@@ -1699,7 +1699,10 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_all_dlci_ids_used)
 }
 
 
-void single_write_cycle_fail(const uint8_t *write_byte,uint8_t tx_len, const uint8_t *pending_write_byte)
+void single_write_cycle_fail(const uint8_t *write_byte,
+                             uint8_t        tx_len, 
+                             uint8_t        read_len, 
+                             const uint8_t *pending_write_byte)
 {
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};    
     const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};
@@ -1719,7 +1722,7 @@ void single_write_cycle_fail(const uint8_t *write_byte,uint8_t tx_len, const uin
     CHECK(mock_read != NULL);
     mock_read->output_param[0].param       = NULL;
     mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_read->input_param[0].param        = FRAME_HEADER_READ_LEN;    
+    mock_read->input_param[0].param        = read_len;    
     mock_read->return_value                = 0;                             
     
     mock_t * mock_write = mock_free_get("write");
@@ -1767,7 +1770,7 @@ void single_write_cycle_fail(const uint8_t *write_byte,uint8_t tx_len, const uin
 /* Multiplexer semaphore wait call from dlci_establish_self_initiated_write_failure TC. */
 void dlci_establish_self_initated_write_fail_sem_wait(const void *context)
 {
-    single_write_cycle_fail((const uint8_t *)context, (SABM_FRAME_LEN - 1u), NULL);
+    single_write_cycle_fail((const uint8_t *)context, (SABM_FRAME_LEN - 1u), FRAME_HEADER_READ_LEN, NULL);
 }
 
 
@@ -2127,12 +2130,11 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_rejected_by_peer)
     mux_self_iniated_open_rx_frame_sync_done();
 }
 
-#if 0
+
 /* Multiplexer semaphore wait call from mux_open_self_initiated_write_failure TC. */
 void mux_start_self_initated_write_fail_sem_wait(const void *context)
 {
-    const uint8_t *dlci_id = static_cast<const uint8_t *>(context);
-    single_write_cycle_fail(3u | (*dlci_id << 2), NULL);
+    single_write_cycle_fail((const uint8_t *)context, (SABM_FRAME_LEN - 1u), FLAG_SEQUENCE_OCTET_LEN, NULL);
 }
 
 
@@ -2154,14 +2156,23 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_write_failure)
     mock_t * mock_sigio = mock_free_get("sigio");    
     CHECK(mock_sigio != NULL);      
     mbed::Mux::serial_attach(&fh_mock);
-      
+
+    const uint8_t write_byte[6] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET, 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    
     /* Set mock. */
     mock_t * mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;        
-    mock_write->input_param[0].param        = (uint32_t)&write_byte;        
-    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);        
+    mock_write->input_param[1].param        = sizeof(write_byte);    
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = (uint32_t)-1;    
 
@@ -2176,17 +2187,16 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_write_failure)
     mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->input_param[0].param        = (uint32_t)&write_byte;        
-    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);        
+    mock_write->input_param[1].param        = sizeof(write_byte);
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 1;
     
     mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    const uint32_t write_byte_2             = ADDRESS_MUX_START_REQ_OCTET;
-    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
-    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[1]);        
+    mock_write->input_param[1].param        = sizeof(write_byte) - sizeof(write_byte[0]);    
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 0;            
     
@@ -2195,8 +2205,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_write_failure)
     CHECK(mock_wait != NULL);
     mock_wait->return_value = 1;
     mock_wait->func         = mux_start_self_initated_write_fail_sem_wait;
-    const uint8_t dlci_id   = 0;
-    mock_wait->func_context = &dlci_id;
+    mock_wait->func_context = &(write_byte[1]);    
 
     status = mbed::Mux::MUX_ESTABLISH_MAX;    
     ret = mbed::Mux::mux_start(status);
@@ -2206,7 +2215,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_write_failure)
 
     /* 3rd test sequence start: establishment success. */
     mux_self_iniated_open();
-   
+
     /* 4th test sequence start: fails. */
     status = mbed::Mux::MUX_ESTABLISH_MAX;    
     ret = mbed::Mux::mux_start(status);
@@ -2214,7 +2223,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_write_failure)
     CHECK(!MuxClient::is_mux_start_triggered());
 }
 
-
+#if 0
 void mux_start_self_initated_sem_wait_timeout(const void *)
 {
     /* Complete the frame write. */
