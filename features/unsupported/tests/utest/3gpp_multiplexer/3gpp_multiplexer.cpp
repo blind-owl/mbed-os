@@ -1954,7 +1954,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_role_responder_succ
     dlci_self_iniated_establish(ROLE_RESPONDER, 1);   
 }
 
-#if 0
+
 /*
  * TC - mux start-up: multiplexer allready open
  * - mux open: self initiated
@@ -1983,7 +1983,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_allready_open)
     CHECK(!MuxClient::is_mux_start_triggered());                    
 }
 
-
+#if 0
 void mux_start_self_initated_sem_wait_rejected_by_peer(const void *)
 {
     const uint8_t read_byte[5] = 
