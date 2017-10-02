@@ -114,7 +114,6 @@ TEST(MultiplexerOpenTestGroup, FirstTest)
 
 #define FRAME_HEADER_READ_LEN 3u
 #define FRAME_TRAILER_LEN     2u
-
 #define FLAG_SEQUENCE_OCTET_LEN      1u                          /* Length of the flag sequence field in number of 
                                                                     bytes. */
 #define SABM_FRAME_LEN               6u                          /* Length of the SABM frame in number of bytes. */
@@ -255,14 +254,24 @@ typedef enum
     SKIP_FLAG_SEQUENCE_OCTET
 } FlagSequenceOctetReadType;
 
+
+typedef enum
+{
+    STRIP_FLAG_FIELD_NO = 0, 
+    STRIP_FLAG_FIELD_YES
+} StripFlagFieldType;
+
 /* Read complete response frame from the peer
  */
 void self_iniated_response_rx(const uint8_t            *rx_buf, 
                               uint8_t                   rx_buf_len, 
                               const uint8_t            *write_byte,
-                              FlagSequenceOctetReadType read_type)
+                              FlagSequenceOctetReadType read_type,
+                              StripFlagFieldType        strip_flag_field_type)
 {
-    
+    /* Guard against internal logic error. */
+    CHECK(!((read_type == READ_FLAG_SEQUENCE_OCTET) && (read_type == STRIP_FLAG_FIELD_YES)));
+        
     uint8_t                                  rx_count      = 0;       
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
     const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};    
@@ -290,8 +299,22 @@ void self_iniated_response_rx(const uint8_t            *rx_buf,
         ++rx_count;
     }
            
+    uint8_t read_len = FRAME_HEADER_READ_LEN;           
+    if (strip_flag_field_type == STRIP_FLAG_FIELD_YES) {        
+        /* Flag field present, which will be discarded by the implementation. */
+        
+        mock_read = mock_free_get("read");
+        CHECK(mock_read != NULL); 
+        mock_read->output_param[0].param       = &(rx_buf[rx_count]);
+        mock_read->output_param[0].len         = sizeof(rx_buf[0]);
+        mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_read->input_param[0].param        = read_len;
+        mock_read->return_value                = 1;          
+        
+        ++rx_count;
+    }
+    
     /* Phase 2: read next 3 bytes 1-byte at a time. */
-    uint8_t read_len = FRAME_HEADER_READ_LEN;
     do {    
         /* Continue read cycle within current context. */            
 
@@ -968,6 +991,15 @@ void peer_iniated_response_tx_no_pending_tx(const uint8_t *buf,
 }
 
 
+typedef struct 
+{
+    const uint8_t            *write_byte;
+    uint8_t                   tx_cycle_read_len;
+    FlagSequenceOctetReadType rx_cycle_read_type;
+    StripFlagFieldType        strip_flag_field_type;
+} mux_self_iniated_open_context_t;
+
+
 /* Multiplexer semaphore wait call from self initiated multiplexer open TC(s). */
 void mux_start_self_initated_sem_wait(const void *context)
 {
@@ -981,13 +1013,20 @@ void mux_start_self_initated_sem_wait(const void *context)
         FLAG_SEQUENCE_OCTET
     };
 
-    self_iniated_request_tx((const uint8_t *)context, (SABM_FRAME_LEN - 1u), FLAG_SEQUENCE_OCTET_LEN);
-    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL, READ_FLAG_SEQUENCE_OCTET);   
+    const mux_self_iniated_open_context_t *cntx = (const mux_self_iniated_open_context_t *)context;
+    self_iniated_request_tx(/*(const uint8_t *)context*/cntx->write_byte, 
+                            (SABM_FRAME_LEN - 1u), 
+                            /*FLAG_SEQUENCE_OCTET_LEN*/cntx->tx_cycle_read_len);
+    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL, 
+                             /*READ_FLAG_SEQUENCE_OCTET*/cntx->rx_cycle_read_type,
+                             /*STRIP_FLAG_FIELD_NO*/cntx->strip_flag_field_type);   
 }
 
 
 /* Do successfull multiplexer self iniated open.*/
-void mux_self_iniated_open()
+void mux_self_iniated_open(uint8_t                   tx_cycle_read_len, 
+                           FlagSequenceOctetReadType rx_cycle_read_type,
+                           StripFlagFieldType        strip_flag_field_type)
 {     
     const uint8_t write_byte[6] = 
     {
@@ -1021,7 +1060,14 @@ void mux_self_iniated_open()
     CHECK(mock_wait != NULL);
     mock_wait->return_value = 1;
     mock_wait->func         = mux_start_self_initated_sem_wait;
-    mock_wait->func_context = &(write_byte[1]);
+
+    const mux_self_iniated_open_context_t context = {
+        &(write_byte[1]),
+        tx_cycle_read_len,
+        rx_cycle_read_type,
+        strip_flag_field_type
+    };
+    mock_wait->func_context = &context;    
 
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
@@ -1029,6 +1075,12 @@ void mux_self_iniated_open()
     CHECK_EQUAL(2, ret);
     CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_SUCCESS, status);    
     CHECK(!MuxClient::is_mux_start_triggered());                        
+}
+
+
+void mux_self_iniated_open()
+{
+    mux_self_iniated_open(FLAG_SEQUENCE_OCTET_LEN, READ_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);    
 }
 
 
@@ -1117,8 +1169,14 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_existing_open_pending)
     CHECK(mock_wait != NULL);
     mock_wait->return_value = 1;
     mock_wait->func = mux_start_self_initated_existing_open_pending_sem_wait;
-    mock_wait->func_context = &(write_byte[1]);
 
+    const mux_self_iniated_open_context_t context = {
+        &(write_byte[1]),
+        FLAG_SEQUENCE_OCTET_LEN,
+        READ_FLAG_SEQUENCE_OCTET
+    };
+    mock_wait->func_context = &context;   
+    
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
     uint32_t ret = mbed::Mux::mux_start(status);    
@@ -1165,7 +1223,7 @@ void mux_start_self_initated_existing_open_pending_2_sem_wait(const void *contex
     self_iniated_request_tx(&(write_byte_2[1]), 
                             (sizeof(write_byte_2) - sizeof(write_byte_2[0])),
                             FRAME_HEADER_READ_LEN);
-    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL, SKIP_FLAG_SEQUENCE_OCTET);
+    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
 }
 
 
@@ -1279,7 +1337,7 @@ void dlci_establish_self_initated_sem_wait(const void *context)
 
     /* Complete the request frame write and read the response frame. */
     self_iniated_request_tx(&(write_byte[0]), sizeof(write_byte), FRAME_HEADER_READ_LEN);
-    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL, SKIP_FLAG_SEQUENCE_OCTET);
+    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
 }
 
 
@@ -1641,8 +1699,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_all_dlci_ids_used)
 }
 
 
-void single_write_cycle_fail(/*uint8_t address_field*/const uint8_t *write_byte, uint8_t tx_len,
-                             const uint8_t *pending_write_byte)
+void single_write_cycle_fail(const uint8_t *write_byte,uint8_t tx_len, const uint8_t *pending_write_byte)
 {
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};    
     const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};
@@ -1825,7 +1882,7 @@ void dlci_establish_self_initated_sem_wait_rejected_by_peer(const void *context)
     /* Complete the request frame write and read the response frame. */
     const uint8_t *write_byte = (const uint8_t *)context;
     self_iniated_request_tx(&(write_byte[0]), (SABM_FRAME_LEN - 1u), FRAME_HEADER_READ_LEN);
-    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL, SKIP_FLAG_SEQUENCE_OCTET);
+    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
 }
 
 
@@ -1983,28 +2040,27 @@ TEST(MultiplexerOpenTestGroup, mux_open_allready_open)
     CHECK(!MuxClient::is_mux_start_triggered());                    
 }
 
-#if 0
-void mux_start_self_initated_sem_wait_rejected_by_peer(const void *)
+
+void mux_start_self_initated_sem_wait_rejected_by_peer(const void *context)
 {
-    const uint8_t read_byte[5] = 
+    const uint8_t read_byte[6] = 
     {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_RESP_OCTET, 
         (FRAME_TYPE_DM | PF_BIT), 
-        fcs_calculate(&read_byte[1], 2),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[1], 3),
         FLAG_SEQUENCE_OCTET
     };
     
-    const uint8_t write_byte[4] = 
-    {
-        ADDRESS_MUX_START_REQ_OCTET, 
-        (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&write_byte[0], 2),
-        FLAG_SEQUENCE_OCTET
-    };
-    
-    self_iniated_request_tx(&(write_byte[0]), sizeof(write_byte));
-    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL);
+    self_iniated_request_tx((const uint8_t*)(context), (SABM_FRAME_LEN - 1u), FLAG_SEQUENCE_OCTET_LEN);
+    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL, READ_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+}
+
+
+void mux_self_iniated_open_rx_frame_sync_done()
+{
+    mux_self_iniated_open(FRAME_HEADER_READ_LEN, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_YES);    
 }
 
 
@@ -2027,23 +2083,29 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_rejected_by_peer)
     mbed::Mux::serial_attach(&fh_mock);
       
     /* 1st establishment: reject by peer. */
-
+    const uint8_t write_byte[6] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET, 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
     /* Set mock. */
     mock_t * mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;        
-    mock_write->input_param[0].param        = (uint32_t)&write_byte;        
-    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);        
+    mock_write->input_param[1].param        = sizeof(write_byte);    
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value = 1;    
     
     mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    const uint32_t write_byte_2             = ADDRESS_MUX_START_REQ_OCTET;        
-    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
-    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[1]);        
+    mock_write->input_param[1].param        = sizeof(write_byte) - sizeof(write_byte[0]);        
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value = 0;        
 
@@ -2051,7 +2113,8 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_rejected_by_peer)
     mock_t * mock_wait = mock_free_get("wait");
     CHECK(mock_wait != NULL);
     mock_wait->return_value = 1;
-    mock_wait->func = mux_start_self_initated_sem_wait_rejected_by_peer;
+    mock_wait->func         = mux_start_self_initated_sem_wait_rejected_by_peer;
+    mock_wait->func_context = &(write_byte[1]);
 
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
@@ -2061,10 +2124,10 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_rejected_by_peer)
     CHECK(!MuxClient::is_mux_start_triggered());            
     
     /* 2nd establishment: success. */
-    mux_self_iniated_open();
+    mux_self_iniated_open_rx_frame_sync_done();
 }
 
-
+#if 0
 /* Multiplexer semaphore wait call from mux_open_self_initiated_write_failure TC. */
 void mux_start_self_initated_write_fail_sem_wait(const void *context)
 {

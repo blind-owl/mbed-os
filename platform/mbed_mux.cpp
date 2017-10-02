@@ -740,7 +740,7 @@ ssize_t Mux::on_rx_read_state_frame_start()
 trace("!RX-FRAME_START", 0);
 
     ssize_t read_err;
-    _rx_context.buffer[_rx_context.offset] = ~FLAG_SEQUENCE_OCTET;
+    _rx_context.buffer[_rx_context.offset] = static_cast<uint8_t>(~FLAG_SEQUENCE_OCTET);
     do {
         read_err = _serial->read(&(_rx_context.buffer[_rx_context.offset]), FRAME_START_READ_LEN);
 trace("!READ_VALUE", _rx_context.buffer[_rx_context.offset]);        
@@ -762,12 +762,27 @@ ssize_t Mux::on_rx_read_state_header_read()
 trace("!RX-FRAME_HEADER", 0);
 
     ssize_t read_err;
-    size_t  read_len = FRAME_HEADER_READ_LEN;
+    // @todo:DEFECT we need counter for this = > reuse frame_trailer_length? Set init value in state transit time.
+    size_t  read_len = FRAME_HEADER_READ_LEN; 
     do {
+//trace("read_len", read_len);
         read_err = _serial->read(&(_rx_context.buffer[_rx_context.offset]), read_len);
         if (read_err > 0) {
-            _rx_context.offset += read_err;
-            read_len           -= read_err;
+            if ((_rx_context.offset == 1u) && (_rx_context.buffer[_rx_context.offset] == FLAG_SEQUENCE_OCTET)) {
+                /* Overlapping block move 1-index possible trailing data after the flag sequence octet. */
+//trace("!!SKIP!!", 0);                
+                memmove(&(_rx_context.buffer[_rx_context.offset]), 
+                        &(_rx_context.buffer[_rx_context.offset + 1u]),
+                        (read_err - 1u));
+                
+                _rx_context.offset += (read_err - 1u);
+                read_len           -= (read_err - 1u);                
+
+                //@todo: proper TCs needed for this branch??
+            } else {
+                _rx_context.offset += read_err;
+                read_len           -= read_err;                
+            }
         }
     } while ((read_len != 0) && (read_err > 0));
     
@@ -814,7 +829,7 @@ trace("!RX-FRAME_TRAILER", 0);
         const rx_frame_decoder_func_t func       = rx_frame_decoder_func[frame_type];
         func();      
    
-        _rx_context.offset   = 1u;            // @todo: only set when travel back to RX_TRAILER_READ
+        _rx_context.offset   = 1u;            // @todo: only set when travel back to RX_HEADER_READ
         _rx_context.rx_state = RX_HEADER_READ;        
         
         read_err = 0;
@@ -879,7 +894,7 @@ void Mux::write_do()
         ssize_t write_err;
         case TX_RETRANSMIT_ENQUEUE:
         case TX_INTERNAL_RESP:    
-trace("!B-bytes_remaining: ", _tx_context.bytes_remaining);
+//trace("!B-bytes_remaining: ", _tx_context.bytes_remaining);
             write_err = 1;
 //            while ((_tx_context.bytes_remaining != 0) && (write_err > 0)) { // @todo: change to do...while
             do {
@@ -888,9 +903,9 @@ trace("!B-bytes_remaining: ", _tx_context.bytes_remaining);
                     _tx_context.bytes_remaining -= write_err;
                     _tx_context.offset          += write_err;
                 }  
-trace("!write_err: ", write_err);        
+//trace("!write_err: ", write_err);        
             } while ((_tx_context.bytes_remaining != 0) && (write_err > 0));
-trace("!E-bytes_remaining: ", _tx_context.bytes_remaining);    
+//trace("!E-bytes_remaining: ", _tx_context.bytes_remaining);    
             if (_tx_context.bytes_remaining == 0) {
                 /* Frame write complete, execute correct post processing function for clean-up. */
                 
