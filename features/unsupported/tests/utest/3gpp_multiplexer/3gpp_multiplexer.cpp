@@ -1898,16 +1898,17 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_rejected_by_peer)
 }
 
 
-#if 0
+
 /* Do successfull multiplexer peer iniated open.*/
 void mux_peer_iniated_open(const uint8_t *rx_buf, uint8_t rx_buf_len, bool expected_mux_start_event_state)
 {    
-    const uint8_t write_byte[5] = 
+    const uint8_t write_byte[6] = 
     {
         FLAG_SEQUENCE_OCTET,        
         ADDRESS_MUX_START_RESP_OCTET, 
         (FRAME_TYPE_UA | PF_BIT), 
-        fcs_calculate(&write_byte[1], 2),
+        LENGTH_INDICATOR_OCTET,                
+        fcs_calculate(&write_byte[1], 3),
         FLAG_SEQUENCE_OCTET
     };
 
@@ -1938,12 +1939,13 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_role_responder_succ
     CHECK(mock_sigio != NULL);      
     mbed::Mux::serial_attach(&fh_mock);
 
-    const uint8_t read_byte[5] = 
+    const uint8_t read_byte[6] = 
     {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_REQ_OCTET, 
         (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&read_byte[1], 2),
+        LENGTH_INDICATOR_OCTET,        
+        fcs_calculate(&read_byte[1], 3),
         FLAG_SEQUENCE_OCTET
     };        
     const bool expected_mux_start_event_state = true;
@@ -1952,7 +1954,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_role_responder_succ
     dlci_self_iniated_establish(ROLE_RESPONDER, 1);   
 }
 
-
+#if 0
 /*
  * TC - mux start-up: multiplexer allready open
  * - mux open: self initiated
