@@ -2776,7 +2776,6 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_iniated_id_lower_bound)
 }
     
 
-#if 0
 /*
  * TC - dlci establishment sequence, self initiated: dlci_id upper bound
  */
@@ -2799,6 +2798,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_id_upper_bound)
 }
 
 
+#if 0
 /*
  * TC - dlci establishment sequence, peer initiated: dlci_id lower bound
  */
