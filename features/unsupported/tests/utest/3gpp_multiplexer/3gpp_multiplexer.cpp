@@ -2551,22 +2551,22 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated_dlci_id_used)
 }
 
 
-#if 0
 /* Reject peer iniated dlci establishment request.*/
 void dlci_peer_iniated_establish_reject(uint8_t        address_field, 
                                         const uint8_t *rx_buf, 
                                         uint8_t        rx_buf_len)
 {       
-    const uint8_t write_byte[5] = 
+    const uint8_t write_byte[6] = 
     {
         FLAG_SEQUENCE_OCTET,        
         address_field,
         (FRAME_TYPE_DM | PF_BIT),        
-        fcs_calculate(&write_byte[1], 2),
+        LENGTH_INDICATOR_OCTET,        
+        fcs_calculate(&write_byte[1], 3),
         FLAG_SEQUENCE_OCTET
     };
 
-    peer_iniated_request_rx(&(rx_buf[0]), rx_buf_len, &(write_byte[0]), NULL);
+    peer_iniated_request_rx(&(rx_buf[0]), rx_buf_len, SKIP_FLAG_SEQUENCE_OCTET, &(write_byte[0]), NULL);
     const bool expected_dlci_establishment_event_state = false;
     peer_iniated_response_tx(&(write_byte[1]),
                              (sizeof(write_byte) - sizeof(write_byte[0])),
@@ -2601,17 +2601,18 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated_all_dlci_ids_used)
     uint8_t dlci_id                            = DLCI_ID_LOWER_BOUND;
     const Role role                            = ROLE_INITIATOR;
     bool expected_dlci_established_event_state = true;    
-    uint8_t read_byte[4]                       = 
+    uint8_t read_byte[5]                       = 
     {
         ~0,
         (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&read_byte[0], 2),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[0], 3),
         FLAG_SEQUENCE_OCTET
     };        
     
     /* Consume all available DLCI IDs. */
     do {   
-        read_byte[0] = 1 | (dlci_id << 2);
+        read_byte[0] = 1u | (dlci_id << 2);
         dlci_peer_iniated_establish_accept(role,
                                            &(read_byte[0]),
                                            sizeof(read_byte),
@@ -2622,11 +2623,11 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated_all_dlci_ids_used)
         ++dlci_id;
     } while (i != 0);
 
-    read_byte[0]                          = 1 | (dlci_id << 2);
+    read_byte[0] = 1u | (dlci_id << 2);
     dlci_peer_iniated_establish_reject(1u | (dlci_id << 2), &(read_byte[0]), sizeof(read_byte));  
 }
 
-
+#if 0
 /*
  * TC - dlci establishment sequence, peer initiated, multiplexer not open
  * - receive: DLCI establishment request
