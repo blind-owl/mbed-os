@@ -2499,7 +2499,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated_role_initiator_succ
                                        expected_dlci_established_event_state);
 }
 
-#if 0
+
 /*
  * TC - dlci establishment sequence, peer initiated, role initiator: DLCI id allready used
  * - self iniated open multiplexer
@@ -2523,12 +2523,13 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated_dlci_id_used)
     mux_self_iniated_open();
 
     const Role role            = ROLE_INITIATOR;
-    const uint8_t dlci_id      = 1;
-    const uint8_t read_byte[4] = 
+    const uint8_t dlci_id      = 1u;
+    const uint8_t read_byte[5] = 
     {
-        (((role == ROLE_INITIATOR) ? 1 : 3) | (dlci_id << 2)),
+        (((role == ROLE_INITIATOR) ? 1u : 3u) | (dlci_id << 2)),
         (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&read_byte[0], 2),
+        LENGTH_INDICATOR_OCTET,                
+        fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
     };      
     
@@ -2550,6 +2551,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated_dlci_id_used)
 }
 
 
+#if 0
 /* Reject peer iniated dlci establishment request.*/
 void dlci_peer_iniated_establish_reject(uint8_t        address_field, 
                                         const uint8_t *rx_buf, 
