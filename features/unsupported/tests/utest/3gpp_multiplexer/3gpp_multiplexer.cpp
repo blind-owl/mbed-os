@@ -2667,7 +2667,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_iniated_mux_not_open)
                                        READ_FLAG_SEQUENCE_OCTET);    
 }
 
-#if 0
+
 /*
  * TC - dlci establishment sequence, peer initiated, role responder: successfull establishment
  * - peer iniated open multiplexer
@@ -2686,24 +2686,26 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated_role_responder_succ
     CHECK(mock_sigio != NULL);      
     mbed::Mux::serial_attach(&fh_mock);
     
-    const uint8_t read_byte[5] = 
+    const uint8_t read_byte[6] = 
     {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_REQ_OCTET, 
         (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&read_byte[1], 2),
+        LENGTH_INDICATOR_OCTET,        
+        fcs_calculate(&read_byte[1], 3u),
         FLAG_SEQUENCE_OCTET
     };
     const bool expected_mux_start_event_state = true;
     mux_peer_iniated_open(&(read_byte[0]), sizeof(read_byte), expected_mux_start_event_state);    
 
     const Role role              = ROLE_RESPONDER;
-    const uint8_t dlci_id        = 1;
-    const uint8_t read_byte_2[4] = 
+    const uint8_t dlci_id        = 1u;
+    const uint8_t read_byte_2[5] = 
     {
-        (((role == ROLE_INITIATOR) ? 1 : 3) | (dlci_id << 2)),
+        (((role == ROLE_INITIATOR) ? 1u : 3u) | (dlci_id << 2)),
         (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&read_byte_2[0], 2),
+        LENGTH_INDICATOR_OCTET,                
+        fcs_calculate(&read_byte_2[0], 3),
         FLAG_SEQUENCE_OCTET
     };        
     
@@ -2716,6 +2718,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated_role_responder_succ
 }
 
 
+#if 0
 /*
  * TC - dlci establishment sequence, self initiated: dlci_id lower bound
  */
