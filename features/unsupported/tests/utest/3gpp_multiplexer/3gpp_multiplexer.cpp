@@ -2552,9 +2552,10 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated_dlci_id_used)
 
 
 /* Reject peer iniated dlci establishment request.*/
-void dlci_peer_iniated_establish_reject(uint8_t        address_field, 
-                                        const uint8_t *rx_buf, 
-                                        uint8_t        rx_buf_len)
+void dlci_peer_iniated_establish_reject(uint8_t                   address_field, 
+                                        const uint8_t            *rx_buf, 
+                                        uint8_t                   rx_buf_len,
+                                        FlagSequenceOctetReadType read_type)
 {       
     const uint8_t write_byte[6] = 
     {
@@ -2566,7 +2567,7 @@ void dlci_peer_iniated_establish_reject(uint8_t        address_field,
         FLAG_SEQUENCE_OCTET
     };
 
-    peer_iniated_request_rx(&(rx_buf[0]), rx_buf_len, SKIP_FLAG_SEQUENCE_OCTET, &(write_byte[0]), NULL);
+    peer_iniated_request_rx(&(rx_buf[0]), rx_buf_len,read_type, &(write_byte[0]), NULL);
     const bool expected_dlci_establishment_event_state = false;
     peer_iniated_response_tx(&(write_byte[1]),
                              (sizeof(write_byte) - sizeof(write_byte[0])),
@@ -2624,10 +2625,13 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated_all_dlci_ids_used)
     } while (i != 0);
 
     read_byte[0] = 1u | (dlci_id << 2);
-    dlci_peer_iniated_establish_reject(1u | (dlci_id << 2), &(read_byte[0]), sizeof(read_byte));  
+    dlci_peer_iniated_establish_reject(1u | (dlci_id << 2), 
+                                       &(read_byte[0]), 
+                                       sizeof(read_byte),
+                                       SKIP_FLAG_SEQUENCE_OCTET);  
 }
 
-#if 0
+
 /*
  * TC - dlci establishment sequence, peer initiated, multiplexer not open
  * - receive: DLCI establishment request
@@ -2645,21 +2649,25 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_iniated_mux_not_open)
     CHECK(mock_sigio != NULL);      
     mbed::Mux::serial_attach(&fh_mock);
   
-    const uint8_t dlci_id      = 1;
-    const uint8_t read_byte[5] = 
+    const uint8_t dlci_id      = 1u;
+    const uint8_t read_byte[6] = 
     {
         FLAG_SEQUENCE_OCTET,        
         /* Peer assumes the role of initiator. */
         3u | (dlci_id << 2),
         (FRAME_TYPE_SABM | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,        
         fcs_calculate(&read_byte[1], 2),
         FLAG_SEQUENCE_OCTET
     };        
          
-    dlci_peer_iniated_establish_reject(3u | (dlci_id << 2), &(read_byte[0]), sizeof(read_byte));    
+    dlci_peer_iniated_establish_reject(3u | (dlci_id << 2), 
+                                       &(read_byte[0]), 
+                                       sizeof(read_byte),
+                                       READ_FLAG_SEQUENCE_OCTET);    
 }
 
-
+#if 0
 /*
  * TC - dlci establishment sequence, peer initiated, role responder: successfull establishment
  * - peer iniated open multiplexer
