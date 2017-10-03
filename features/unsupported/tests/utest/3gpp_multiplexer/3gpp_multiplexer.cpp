@@ -2334,7 +2334,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_timeout)
 }
 
 
-#if 0
+
 /*
  * TC - mux start-up sequence, 1st try:request timeout failure, 2nd try: success
  * - send 1st START request
@@ -2343,6 +2343,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_timeout)
  * - send 2nd START request
  * - success
  */
+#if 0 // IDENTICAL TO mux_open_self_initiated_timeout => CAN BE DEPRICATED
 TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_success_after_timeout)
 {
     mbed::FileHandleMock fh_mock;   
@@ -2391,6 +2392,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_success_after_timeout)
     // 2nd try - success.
     mux_self_iniated_open();
 }
+#endif // 0
 
 
 /*
@@ -2411,19 +2413,20 @@ TEST(MultiplexerOpenTestGroup, mux_open_peer_initiated)
     CHECK(mock_sigio != NULL);      
     mbed::Mux::serial_attach(&fh_mock);    
  
-    const uint8_t read_byte[5] = 
+    const uint8_t read_byte[6] = 
     {
         FLAG_SEQUENCE_OCTET,
-        ADDRESS_MUX_START_REQ_OCTET, 
+        ADDRESS_MUX_START_REQ_OCTET,
         (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&read_byte[1], 2),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[1], 3),
         FLAG_SEQUENCE_OCTET
     };    
     const bool expected_mux_start_event_state = true;
     mux_peer_iniated_open(&(read_byte[0]), sizeof(read_byte), expected_mux_start_event_state);
 }
 
-
+#if 0
 /* Do successfull peer iniated dlci establishment.*/
 void dlci_peer_iniated_establish_accept(Role           role, 
                                         const uint8_t *rx_buf, 
