@@ -270,7 +270,7 @@ void self_iniated_response_rx(const uint8_t            *rx_buf,
                               StripFlagFieldType        strip_flag_field_type)
 {
     /* Guard against internal logic error. */
-    CHECK(!((read_type == READ_FLAG_SEQUENCE_OCTET) && (read_type == STRIP_FLAG_FIELD_YES)));
+    CHECK(!((read_type == READ_FLAG_SEQUENCE_OCTET) && (strip_flag_field_type == STRIP_FLAG_FIELD_YES)));
         
     uint8_t                                  rx_count      = 0;       
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
@@ -446,10 +446,11 @@ void self_iniated_response_rx(const uint8_t *rx_buf, uint8_t rx_buf_len, const u
  * - call read
  * - CALL RETURN 
  */
-void peer_iniated_request_rx(const uint8_t *rx_buf, 
-                             uint8_t        rx_buf_len, 
-                             const uint8_t *resp_write_byte,
-                             const uint8_t *current_tx_write_byte)
+void peer_iniated_request_rx(const uint8_t            *rx_buf, 
+                             uint8_t                   rx_buf_len, 
+                             FlagSequenceOctetReadType read_type,
+                             const uint8_t            *resp_write_byte,
+                             const uint8_t            *current_tx_write_byte)
 {
     /* Internal logic error if both supplied params are != NULL. */
     CHECK(!((resp_write_byte != NULL) && (current_tx_write_byte != NULL)));
@@ -466,18 +467,23 @@ void peer_iniated_request_rx(const uint8_t *rx_buf,
     mock->return_value = 1;
 
     mbed::FileHandleMock::io_control(io_control);
+
+    mock_t * mock_read;    
+    if (read_type == READ_FLAG_SEQUENCE_OCTET) {
+        /* Phase 1: read frame start flag. */    
+    
+        mock_read = mock_free_get("read");
+        CHECK(mock_read != NULL); 
+        mock_read->output_param[0].param       = &(rx_buf[rx_count]);
+        mock_read->output_param[0].len         = sizeof(rx_buf[0]);
+        mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_read->input_param[0].param        = FLAG_SEQUENCE_OCTET_LEN;
+        mock_read->return_value                = 1;   
         
-    /* Issue read within deferred call context. */        
-    mock_t * mock_read = mock_free_get("read");
-    CHECK(mock_read != NULL); 
-    mock_read->output_param[0].param       = &(rx_buf[rx_count]);
-    mock_read->output_param[0].len         = sizeof(rx_buf[0]);
-    mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_read->input_param[0].param        = FLAG_SEQUENCE_OCTET_LEN;
-    mock_read->return_value                = 1;      
+        ++rx_count;
+    }    
            
     /* Phase 2: read next 3 bytes 1-byte at a time. */
-    ++rx_count;
     uint8_t read_len = FRAME_HEADER_READ_LEN;
     do {    
         /* Continue read cycle within current context. */            
@@ -1271,7 +1277,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_existing_open_pending_2)
         fcs_calculate(&write_byte[1], 3),
         FLAG_SEQUENCE_OCTET        
     };
-    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), &(write_byte[0]), NULL);   
+    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte),READ_FLAG_SEQUENCE_OCTET, &(write_byte[0]), NULL);   
     
     /* Issue multiplexer start while DM is in progress. */
     mock_t * mock_wait = mock_free_get("wait");
@@ -1972,7 +1978,7 @@ void mux_peer_iniated_open(const uint8_t *rx_buf, uint8_t rx_buf_len, bool expec
         FLAG_SEQUENCE_OCTET
     };
 
-    peer_iniated_request_rx(&(rx_buf[0]), rx_buf_len, &(write_byte[0]), NULL);
+    peer_iniated_request_rx(&(rx_buf[0]), rx_buf_len, READ_FLAG_SEQUENCE_OCTET, &(write_byte[0]), NULL);
     peer_iniated_response_tx(&(write_byte[1]),
                              (sizeof(write_byte) - sizeof(write_byte[0])),
                              NULL,
@@ -2426,7 +2432,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_peer_initiated)
     mux_peer_iniated_open(&(read_byte[0]), sizeof(read_byte), expected_mux_start_event_state);
 }
 
-#if 0
+
 /* Do successfull peer iniated dlci establishment.*/
 void dlci_peer_iniated_establish_accept(Role           role, 
                                         const uint8_t *rx_buf, 
@@ -2434,16 +2440,17 @@ void dlci_peer_iniated_establish_accept(Role           role,
                                         uint8_t        dlci_id,
                                         bool           expected_dlci_establishment_event_state)
 {       
-    const uint8_t write_byte[5] = 
+    const uint8_t write_byte[6] = 
     {
         FLAG_SEQUENCE_OCTET,        
-        (((role == ROLE_INITIATOR) ? 1 : 3) | (dlci_id << 2)),
-        (FRAME_TYPE_UA | PF_BIT),        
-        fcs_calculate(&write_byte[1], 2),
+        (((role == ROLE_INITIATOR) ? 1u : 3u) | (dlci_id << 2)),
+        (FRAME_TYPE_UA | PF_BIT),      
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte[1], 3u),
         FLAG_SEQUENCE_OCTET
     };
 
-    peer_iniated_request_rx(&(rx_buf[0]), rx_buf_len, &(write_byte[0]), NULL);
+    peer_iniated_request_rx(&(rx_buf[0]), rx_buf_len, SKIP_FLAG_SEQUENCE_OCTET, &(write_byte[0]), NULL);
     peer_iniated_response_tx(&(write_byte[1]),
                              (sizeof(write_byte) - sizeof(write_byte[0])),
                              NULL,
@@ -2475,11 +2482,12 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated_role_initiator_succ
 
     const Role role            = ROLE_INITIATOR;
     const uint8_t dlci_id      = 1u;
-    const uint8_t read_byte[4] = 
+    const uint8_t read_byte[5] = 
     {
         (((role == ROLE_INITIATOR) ? 1u : 3u) | (dlci_id << 2)),
         (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&read_byte[0], 2u),
+        LENGTH_INDICATOR_OCTET,        
+        fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
     };        
     
@@ -2491,7 +2499,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated_role_initiator_succ
                                        expected_dlci_established_event_state);
 }
 
-
+#if 0
 /*
  * TC - dlci establishment sequence, peer initiated, role initiator: DLCI id allready used
  * - self iniated open multiplexer
