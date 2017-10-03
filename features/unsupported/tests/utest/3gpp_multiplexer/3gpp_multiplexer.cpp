@@ -2738,7 +2738,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_id_lower_bound)
     dlci_self_iniated_establish(ROLE_INITIATOR, DLCI_ID_LOWER_BOUND);
 }
 
-#if 0
+
 /*
  * TC - dlci establishment sequence, peer initiated: dlci_id lower bound
  */
@@ -2758,15 +2758,16 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_iniated_id_lower_bound)
 
     const Role role            = ROLE_INITIATOR;
     const uint8_t dlci_id      = DLCI_ID_LOWER_BOUND;
-    const uint8_t read_byte[4] = 
+    const uint8_t read_byte[5] = 
     {
-        (((role == ROLE_INITIATOR) ? 1 : 3) | (dlci_id << 2)),
+        (((role == ROLE_INITIATOR) ? 1u : 3u) | (dlci_id << 2)),
         (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&read_byte[0], 2),
+        LENGTH_INDICATOR_OCTET,        
+        fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
     };        
     
-    const  bool expected_dlci_established_event_state = true;
+    const bool expected_dlci_established_event_state = true;
     dlci_peer_iniated_establish_accept(role,
                                        &(read_byte[0]),
                                        sizeof(read_byte),
@@ -2774,7 +2775,8 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_iniated_id_lower_bound)
                                        expected_dlci_established_event_state);   
 }
     
-    
+
+#if 0
 /*
  * TC - dlci establishment sequence, self initiated: dlci_id upper bound
  */
