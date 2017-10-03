@@ -2223,19 +2223,12 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_write_failure)
     CHECK(!MuxClient::is_mux_start_triggered());
 }
 
-#if 0
-void mux_start_self_initated_sem_wait_timeout(const void *)
+
+void mux_start_self_initated_sem_wait_timeout(const void *context)
 {
-    /* Complete the frame write. */
-    const uint8_t write_buf[4] = 
-    {
-        ADDRESS_MUX_START_REQ_OCTET, 
-        (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&write_buf[0], 2),
-        FLAG_SEQUENCE_OCTET
-    };
-    
-    self_iniated_request_tx(&(write_buf[0]), sizeof(write_buf));
+    /* Complete the frame write. */    
+    const uint8_t *write_buf = (const uint8_t *)context;
+    self_iniated_request_tx(&(write_buf[1]), (SABM_FRAME_LEN - 1u), FLAG_SEQUENCE_OCTET_LEN);
 
     /* --- begin frame re-transmit sequence --- */
 
@@ -2244,26 +2237,25 @@ void mux_start_self_initated_sem_wait_timeout(const void *)
     do {    
         mock_t * mock_write = mock_free_get("write");
         mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;        
-        mock_write->input_param[0].param        = (uint32_t)&write_byte;        
-        mock_write->input_param[1].param        = WRITE_LEN;
+        mock_write->input_param[0].param        = (uint32_t)&(write_buf[0]);        
+        mock_write->input_param[1].param        = SABM_FRAME_LEN;    
+        
         mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_write->return_value                = 1;    
         
         mock_write = mock_free_get("write");
         CHECK(mock_write != NULL); 
         mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        const uint32_t write_byte_2             = ADDRESS_MUX_START_REQ_OCTET;        
-        mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
-        mock_write->input_param[1].param        = WRITE_LEN;
+        mock_write->input_param[0].param        = (uint32_t)&(write_buf[1]);        
+        mock_write->input_param[1].param        = SABM_FRAME_LEN - 1u;            
         mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->return_value = 0;                
+        mock_write->return_value                = 0;                
 
         /* Trigger timer timeout. */
         mbed::EventQueueMock::io_control(eq_io_control);
         
         /* Re-transmit the complete remaining part of the frame. */
-        self_iniated_request_tx(&(write_buf[0]), sizeof(write_buf));
+        self_iniated_request_tx(&(write_buf[1]), (SABM_FRAME_LEN - 1u), FLAG_SEQUENCE_OCTET_LEN);
         
         --counter;
     } while (counter != 0);
@@ -2296,22 +2288,30 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_timeout)
     CHECK(mock_sigio != NULL);      
     mbed::Mux::serial_attach(&fh_mock);
       
+    const uint8_t write_buf[6] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET, 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_buf[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    
     /* Set mock. */
     mock_t * mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;        
-    mock_write->input_param[0].param        = (uint32_t)&write_byte;        
-    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[0].param        = (uint32_t)&(write_buf[0]);        
+    mock_write->input_param[1].param        = sizeof(write_buf);    
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 1;    
     
     mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    const uint32_t write_byte_2             = ADDRESS_MUX_START_REQ_OCTET;
-    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
-    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[0].param        = (uint32_t)&(write_buf[1]);        
+    mock_write->input_param[1].param        = sizeof(write_buf) - sizeof(write_buf[0]);        
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 0;                
 
@@ -2320,6 +2320,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_timeout)
     CHECK(mock_wait != NULL);
     mock_wait->return_value = 1;
     mock_wait->func         = mux_start_self_initated_sem_wait_timeout;
+    mock_wait->func_context = &(write_buf[0]);
 
     /* Start test sequence: fails with timeout. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
@@ -2333,6 +2334,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_timeout)
 }
 
 
+#if 0
 /*
  * TC - mux start-up sequence, 1st try:request timeout failure, 2nd try: success
  * - send 1st START request
