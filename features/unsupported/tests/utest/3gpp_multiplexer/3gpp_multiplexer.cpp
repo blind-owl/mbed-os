@@ -2798,7 +2798,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_id_upper_bound)
 }
 
 
-#if 0
+
 /*
  * TC - dlci establishment sequence, peer initiated: dlci_id lower bound
  */
@@ -2818,11 +2818,12 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_iniated_id_upper_bound)
 
     const Role role            = ROLE_INITIATOR;
     const uint8_t dlci_id      = DLCI_ID_UPPER_BOUND;
-    const uint8_t read_byte[4] = 
+    const uint8_t read_byte[5] = 
     {
-        (((role == ROLE_INITIATOR) ? 1 : 3) | (dlci_id << 2)),
-        (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&read_byte[0], 2),
+        (((role == ROLE_INITIATOR) ? 1u : 3u) | (dlci_id << 2)),
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,        
+        fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
     };        
     
@@ -2835,6 +2836,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_iniated_id_upper_bound)
 }
 
 
+#if 0
 /*
  * TC - dlci establishment sequence, self initiated: dlci_id out of bound
  */
