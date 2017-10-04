@@ -1966,7 +1966,10 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_rejected_by_peer)
 
 
 /* Do successfull multiplexer peer iniated open.*/
-void mux_peer_iniated_open(const uint8_t *rx_buf, uint8_t rx_buf_len, bool expected_mux_start_event_state)
+void mux_peer_iniated_open(const uint8_t            *rx_buf, 
+                           uint8_t                   rx_buf_len, 
+                           FlagSequenceOctetReadType read_type,
+                           bool                      expected_mux_start_event_state)
 {    
     const uint8_t write_byte[6] = 
     {
@@ -1978,7 +1981,7 @@ void mux_peer_iniated_open(const uint8_t *rx_buf, uint8_t rx_buf_len, bool expec
         FLAG_SEQUENCE_OCTET
     };
 
-    peer_iniated_request_rx(&(rx_buf[0]), rx_buf_len, READ_FLAG_SEQUENCE_OCTET, &(write_byte[0]), NULL);
+    peer_iniated_request_rx(&(rx_buf[0]), rx_buf_len, read_type, &(write_byte[0]), NULL);
     peer_iniated_response_tx(&(write_byte[1]),
                              (sizeof(write_byte) - sizeof(write_byte[0])),
                              NULL,
@@ -2015,7 +2018,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_role_responder_succ
         FLAG_SEQUENCE_OCTET
     };        
     const bool expected_mux_start_event_state = true;
-    mux_peer_iniated_open(&(read_byte[0]), sizeof(read_byte), expected_mux_start_event_state);
+    mux_peer_iniated_open(&(read_byte[0]), sizeof(read_byte), READ_FLAG_SEQUENCE_OCTET, expected_mux_start_event_state);
 
     dlci_self_iniated_establish(ROLE_RESPONDER, 1);   
 }
@@ -2429,7 +2432,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_peer_initiated)
         FLAG_SEQUENCE_OCTET
     };    
     const bool expected_mux_start_event_state = true;
-    mux_peer_iniated_open(&(read_byte[0]), sizeof(read_byte), expected_mux_start_event_state);
+    mux_peer_iniated_open(&(read_byte[0]), sizeof(read_byte), READ_FLAG_SEQUENCE_OCTET, expected_mux_start_event_state);
 }
 
 
@@ -2696,7 +2699,8 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated_role_responder_succ
         FLAG_SEQUENCE_OCTET
     };
     const bool expected_mux_start_event_state = true;
-    mux_peer_iniated_open(&(read_byte[0]), sizeof(read_byte), expected_mux_start_event_state);    
+    mux_peer_iniated_open(&(read_byte[0]), sizeof(read_byte),READ_FLAG_SEQUENCE_OCTET, expected_mux_start_event_state); 
+   
 
     const Role role              = ROLE_RESPONDER;
     const uint8_t dlci_id        = 1u;
@@ -2871,7 +2875,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_iniated_id_oob)
      * mux_open_peer_initiated TC. */ 
 }
 
-#if 0
+
 /*
  * TC - mux start-up sequence, peer initiated: multiplexer allready open
  * - 1st establishment
@@ -2895,27 +2899,29 @@ TEST(MultiplexerOpenTestGroup, mux_open_peer_initiated_allready_open)
     CHECK(mock_sigio != NULL);      
     mbed::Mux::serial_attach(&fh_mock);    
 
-    const uint8_t read_byte[5] = 
+    const uint8_t read_byte[6] = 
     {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_REQ_OCTET, 
-        (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&read_byte[1], 2),
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[1], 3u),
         FLAG_SEQUENCE_OCTET
     };    
 
     /* 1st cycle. */
     bool expected_mux_start_event_state = true;
-    mux_peer_iniated_open(&(read_byte[0]), sizeof(read_byte), expected_mux_start_event_state);    
-    
+    mux_peer_iniated_open(&(read_byte[0]), sizeof(read_byte),READ_FLAG_SEQUENCE_OCTET, expected_mux_start_event_state); 
+  
     /* 2nd cycle. */
     expected_mux_start_event_state = false;
     mux_peer_iniated_open(&(read_byte[1]), 
                           (sizeof(read_byte) - sizeof(read_byte[0])),
+                          SKIP_FLAG_SEQUENCE_OCTET,
                           expected_mux_start_event_state);
 }
 
-
+#if 0
 /* Multiplexer semaphore wait call from mux_open_simultaneous_self_iniated TC. */
 void mux_open_simultaneous_self_iniated_sem_wait(const void *context)
 {
