@@ -2836,7 +2836,6 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_iniated_id_upper_bound)
 }
 
 
-#if 0
 /*
  * TC - dlci establishment sequence, self initiated: dlci_id out of bound
  */
@@ -2854,10 +2853,10 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_id_oob)
    
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
     FileHandle *obj = NULL;    
-    uint32_t ret    = mbed::Mux::dlci_establish((DLCI_ID_LOWER_BOUND - 1), status, &obj);
+    uint32_t ret    = mbed::Mux::dlci_establish((DLCI_ID_LOWER_BOUND - 1u), status, &obj);
     CHECK_EQUAL(2, ret);
     CHECK_EQUAL(obj, NULL);
-    ret = mbed::Mux::dlci_establish((DLCI_ID_UPPER_BOUND + 1), status, &obj);
+    ret = mbed::Mux::dlci_establish((DLCI_ID_UPPER_BOUND + 1u), status, &obj);
     CHECK_EQUAL(2, ret);   
     CHECK_EQUAL(obj, NULL);    
 }
@@ -2872,7 +2871,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_iniated_id_oob)
      * mux_open_peer_initiated TC. */ 
 }
 
-
+#if 0
 /*
  * TC - mux start-up sequence, peer initiated: multiplexer allready open
  * - 1st establishment
