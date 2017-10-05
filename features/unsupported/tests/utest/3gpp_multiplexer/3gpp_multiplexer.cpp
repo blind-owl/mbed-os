@@ -4409,7 +4409,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_dm_tx_in_progress)
     CHECK(!MuxClient::is_dlci_establish_triggered());
 }
 
-#if 0
+#if 0 // WRITE ERROR TC NOT VALID
 void mux_open_self_iniated_dm_tx_in_progress_write_failure_sem_wait(const void *context)
 {
     const uint8_t *dlci_id      = static_cast<const uint8_t*>(context);    
@@ -4437,7 +4437,6 @@ void mux_open_self_iniated_dm_tx_in_progress_write_failure_sem_wait(const void *
  * - TX 1st byte of mux start-up request: write error
  * - API returns
  * - make self iniated mux-open successfully
-
  */
 TEST(MultiplexerOpenTestGroup, mux_open_self_iniated_dm_tx_in_progress_write_failure)
 {
@@ -4570,12 +4569,13 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_dm_tx_in_progress_wri
     /* Start test sequence: establishment success. */
     dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);
 }
- 
+#endif // 0
+
 
 /*
- * TC - Peer sends DISC command to DLCI 0, which is ignored by the implementation.
+ * TC - Mux open: Peer sends DISC command to DLCI 0, which is ignored by the implementation.
  */
-TEST(MultiplexerOpenTestGroup, mux_not_open_rx_disc_dlci_0)
+TEST(MultiplexerOpenTestGroup, mux_open_rx_disc_dlci_0)
 {
     mbed::FileHandleMock fh_mock;   
     mbed::EventQueueMock eq_mock;
@@ -4592,19 +4592,24 @@ TEST(MultiplexerOpenTestGroup, mux_not_open_rx_disc_dlci_0)
     const uint8_t dlci_id      = 0;
     const uint8_t read_byte[5] = 
     {
-        FLAG_SEQUENCE_OCTET,        
         /* Peer assumes the role of the responder. */
         1u | (dlci_id << 2),
         (FRAME_TYPE_DISC | PF_BIT), 
-        fcs_calculate(&read_byte[1], 2),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
     };               
     
-    /* Generate DISC from peer which is ignored buy the implementation. */        
-    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), NULL, NULL);
+    /* Generate DISC from peer which is ignored buy the implementation. */       
+    peer_iniated_request_rx(&(read_byte[0]), 
+                            sizeof(read_byte), 
+                            SKIP_FLAG_SEQUENCE_OCTET,                            
+                            NULL,   // No TX response frame within the RX cycle.
+                            NULL,   // No current frame in the TX pipeline.
+                            0);                                
 }
 
-
+#if 0
 /*
  * TC - Peer sends DISC command to established(used) DLCI, which is ignored by the implementation.
  */
