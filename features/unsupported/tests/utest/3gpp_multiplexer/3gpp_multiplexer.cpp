@@ -4073,30 +4073,22 @@ TEST(MultiplexerOpenTestGroup, mux_open_simultaneous_peer_iniated)
                              MuxClient::is_mux_start_triggered);      
 }
 
-#if 0
+
 /* Multiplexer semaphore wait call from dlci_establish_simultaneous_peer_iniated_same_dlci_id TC. */
 void dlci_establish_simultaneous_peer_iniated_same_dlci_id_sem_wait(const void *context)
 {
-    const dlci_establish_context_t *cntx = static_cast<const dlci_establish_context_t*>(context);    
-    
-    const uint8_t write_byte[4] = 
-    {
-        (((cntx->role == ROLE_INITIATOR) ? 1u : 3u) | (cntx->dlci_id << 2)),
-        (FRAME_TYPE_UA | PF_BIT), 
-        fcs_calculate(&write_byte[0], 2),
-        FLAG_SEQUENCE_OCTET
-    };    
-    /* Complete the existing peer iniated DLCI establishment cycle and release the call thread. */    
+    /* Complete the existing peer iniated DLCI establishment cycle and release the call thread. */       
     mock_t * mock_release = mock_free_get("release");
     CHECK(mock_release != NULL);
     mock_release->return_value                    = osOK;        
     const bool expected_establishment_event_state = true;    
+    const uint8_t *write_byte                     = (const uint8_t *)context;
     peer_iniated_response_tx(&(write_byte[0]),
-                             sizeof(write_byte),
+                             (UA_FRAME_LEN - 1u),
                              NULL,
                              expected_establishment_event_state,
                              MuxClient::is_dlci_establish_triggered);
-    CHECK(MuxClient::is_dlci_match(cntx->dlci_id));
+    CHECK(MuxClient::is_dlci_match(1u));
 }
 
 
@@ -4106,9 +4098,9 @@ void dlci_establish_simultaneous_peer_iniated_same_dlci_id_sem_wait(const void *
  * - DLCI establishment request received completely from the peer
  * - send 1st byte of DLCI establishment response
  * - issue DLCI establishment request -> set pending
- * - DLCI establishment response send to peer
+ * - DLCI establishment response send to peer 
  * - peer iniated DLCI establishment calllback called
- * - API returns dedicated error code to signal DLCI ID is allready used
+ * - API returns dedicated error code to signal the requested DLCI ID is allready used
  */
 TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_peer_iniated_same_dlci_id)
 {
@@ -4124,31 +4116,39 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_peer_iniated_same_dlc
 
     mux_self_iniated_open();    
 
-    const Role role            = ROLE_INITIATOR;
     const uint8_t dlci_id      = 1u;
-    const uint8_t read_byte[4] = 
+    const uint8_t read_byte[5] = 
     {
-        (((role == ROLE_INITIATOR) ? 1u : 3u) | (dlci_id << 2)),
+        1u | (dlci_id << 2),        
         (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&read_byte[0], 2u),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
     };        
 
     /* Receive completely peer iniated DLCI establishment and trigger TX of response. */
-    const dlci_establish_context_t context = {dlci_id, ROLE_INITIATOR};
-    const uint8_t write_byte[2]            = 
+    const uint8_t write_byte[6] = 
     {
         FLAG_SEQUENCE_OCTET,
-        (((context.role == ROLE_INITIATOR) ? 1u : 3u) | (context.dlci_id << 2))
-    };
-    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), &(write_byte[0]), NULL);        
+        1u | (dlci_id << 2),        
+        (FRAME_TYPE_UA | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,        
+        fcs_calculate(&write_byte[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };       
+    peer_iniated_request_rx(&(read_byte[0]), 
+                            sizeof(read_byte), 
+                            SKIP_FLAG_SEQUENCE_OCTET,                            
+                            &(write_byte[0]),   // TX response frame within the RX cycle.
+                            NULL,               // No current frame in the TX pipeline.
+                            0);                        
     
     /* Set mock. */    
     mock_t * mock_wait = mock_free_get("wait");
     CHECK(mock_wait != NULL);
-    mock_wait->return_value                = 1;
-    mock_wait->func                        = dlci_establish_simultaneous_peer_iniated_same_dlci_id_sem_wait;
-    mock_wait->func_context                = &context;        
+    mock_wait->return_value = 1;
+    mock_wait->func         = dlci_establish_simultaneous_peer_iniated_same_dlci_id_sem_wait;
+    mock_wait->func_context = &(write_byte[1]);
     
     /* DLCI establishment while peer iniated is in progress. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
@@ -4162,7 +4162,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_peer_iniated_same_dlc
     dlci_self_iniated_establish(ROLE_INITIATOR, (dlci_id + 1u));    
 }
 
-
+#if 0
 void mux_open_self_iniated_dm_tx_in_progress_sem_wait(const void *context)
 {
     const uint8_t *dlci_id      = static_cast<const uint8_t*>(context);    
