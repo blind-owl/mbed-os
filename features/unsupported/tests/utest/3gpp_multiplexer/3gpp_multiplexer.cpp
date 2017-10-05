@@ -4162,36 +4162,29 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_peer_iniated_same_dlc
     dlci_self_iniated_establish(ROLE_INITIATOR, (dlci_id + 1u));    
 }
 
-#if 0
+
 void mux_open_self_iniated_dm_tx_in_progress_sem_wait(const void *context)
 {
-    const uint8_t *dlci_id      = static_cast<const uint8_t*>(context);    
-    const uint8_t write_byte[4] = 
-    {
-        3u | (*dlci_id << 2),
-        (FRAME_TYPE_DM | PF_BIT),        
-        fcs_calculate(&write_byte[0], 2),
-        FLAG_SEQUENCE_OCTET
-    };       
-    const uint8_t write_byte_2[5] = 
+    const uint8_t write_byte[6] = 
     {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_REQ_OCTET, 
         (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&write_byte_2[1], 2),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte[1], 3u),
         FLAG_SEQUENCE_OCTET
-    };   
-    
+    };  
     /* Finish the DM TX sequence and TX 1st byte of the pending mux start-up request. */   
-    peer_iniated_response_tx(&write_byte[0], sizeof(write_byte), &write_byte_2[0], false, NULL);    
+    const uint8_t* write_byte_dm = (const uint8_t*)context;
+    peer_iniated_response_tx(&write_byte_dm[0], (DM_FRAME_LEN - 1u), &write_byte[0], false, NULL);    
 
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
     uint32_t ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(1, ret);
     CHECK(!MuxClient::is_mux_start_triggered()); 
-   
-    /* TX remainder of the mux start-up request. */    
-    self_iniated_request_tx(&(write_byte_2[1]), (sizeof(write_byte_2) - sizeof(write_byte_2[0])));
+
+    /* TX remainder of the mux start-up request. */
+    self_iniated_request_tx(&(write_byte[1]), (sizeof(write_byte) - sizeof(write_byte[0])), FRAME_HEADER_READ_LEN);
     
     status = mbed::Mux::MUX_ESTABLISH_MAX;    
     ret    = mbed::Mux::mux_start(status);
@@ -4199,14 +4192,19 @@ void mux_open_self_iniated_dm_tx_in_progress_sem_wait(const void *context)
     CHECK(!MuxClient::is_mux_start_triggered());     
     
     /* RX mux start-up response. */
-    const uint8_t read_byte[4] = 
+    const uint8_t read_byte[5] = 
     {
         ADDRESS_MUX_START_RESP_OCTET, 
         (FRAME_TYPE_UA | PF_BIT), 
-        fcs_calculate(&read_byte[0], 2),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
-    };        
-    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL);     
+    };       
+    self_iniated_response_rx(&(read_byte[0]), 
+                             sizeof(read_byte), 
+                             NULL,
+                             SKIP_FLAG_SEQUENCE_OCTET,
+                             STRIP_FLAG_FIELD_NO);    
 }
 
 
@@ -4236,32 +4234,42 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_iniated_dm_tx_in_progress)
     mbed::Mux::serial_attach(&fh_mock);
   
     const uint8_t dlci_id      = 0;
-    const uint8_t read_byte[5] = 
+    const uint8_t read_byte[6] = 
     {
         FLAG_SEQUENCE_OCTET,        
         /* Peer assumes the role of initiator. */
         3u | (dlci_id << 2),
         (FRAME_TYPE_DISC | PF_BIT), 
-        fcs_calculate(&read_byte[1], 2),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[1], 3u),
         FLAG_SEQUENCE_OCTET
     };           
 
     /* Generate DISC from peer and trigger TX of response DM. */
-    const uint8_t write_byte[4] = 
+    const uint8_t write_byte[6] = 
     {
         FLAG_SEQUENCE_OCTET,
-        3u | (dlci_id << 2)
-    };
-    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), &(write_byte[0]), NULL);
+        3u | (dlci_id << 2),
+        (FRAME_TYPE_DM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };   
+    peer_iniated_request_rx(&(read_byte[0]), 
+                            sizeof(read_byte), 
+                            READ_FLAG_SEQUENCE_OCTET,                            
+                            &(write_byte[0]),   // TX response frame within the RX cycle.
+                            NULL,               // No current frame in the TX pipeline.
+                            0);                            
 
     /* Issue multiplexer start while DM is in progress. */
     mock_t * mock_wait = mock_free_get("wait");
     CHECK(mock_wait != NULL);
     mock_wait->return_value = 1;
-    mock_wait->func         = mux_open_self_iniated_dm_tx_in_progress_sem_wait;    
-    mock_wait->func_context = dlci_id;
+    mock_wait->func         = mux_open_self_iniated_dm_tx_in_progress_sem_wait;   
+    mock_wait->func_context = &(write_byte[1]);    
     
-    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);   
     uint32_t ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(2, ret);
     CHECK_EQUAL(Mux::MUX_ESTABLISH_SUCCESS, status);
@@ -4273,7 +4281,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_iniated_dm_tx_in_progress)
     CHECK(!MuxClient::is_mux_start_triggered());         
 }
 
-
+#if 0
 void dlci_establish_self_initated_dm_tx_in_progress_sem_wait(const void *context)
 {
     const dlci_establish_context_t *cntx = static_cast<const dlci_establish_context_t*>(context);    
