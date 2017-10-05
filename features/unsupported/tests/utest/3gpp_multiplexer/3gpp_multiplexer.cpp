@@ -3686,44 +3686,46 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_peer_iniated_differen
     CHECK_EQUAL(obj, NULL);
 }
 
-#if 0
+
 /* Multiplexer semaphore wait call from 
    dlci_establish_simultaneous_self_iniated_different_dlci_id_race_for_last_resource TC. */
 void dlci_establish_simultaneous_self_iniated_different_dlci_id_race_for_last_resource_sem_wait(const void *context)
-{
-    const dlci_establish_context_t *cntx = static_cast<const dlci_establish_context_t*>(context);    
-    
-    /* Generate peer DLCI establishment request, its response is put pending by the implementation as TX is allready
-     * in progress. */
+{    
+    /* Generate peer DLCI establishment request for the last exisitng DLCI ID resource, its response is put pending by 
+       the implementation as TX is allready in progress. */
     const uint8_t read_byte[5] = 
     {
-        FLAG_SEQUENCE_OCTET,
-        (1u | ((cntx->dlci_id + 1u) << 2)), 
+        1u | (MAX_DLCI_COUNT << 2), 
         (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&read_byte[1], 2),
-        FLAG_SEQUENCE_OCTET
-    };   
-    const uint8_t write_byte[4] = 
-    {
-        ((cntx->role == ROLE_INITIATOR) ? 3u : 1u) | (cntx->dlci_id << 2), 
-        (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&write_byte[0], 2),
-        FLAG_SEQUENCE_OCTET
-    };       
-    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), NULL, &(write_byte[0]));    
-    
-    /* Generate the remaining part of the DLCI establishment request. */
-    self_iniated_request_tx(&(write_byte[0]), sizeof(write_byte));
-       
-    /* Generate peer DLCI establishment response, which is accepted by the implementation. */
-    const uint8_t read_byte_2[4] = 
-    {
-        ((cntx->role == ROLE_INITIATOR) ? 3u : 1u) | (cntx->dlci_id << 2), 
-        (FRAME_TYPE_UA | PF_BIT), 
-        fcs_calculate(&read_byte[0], 2),
+        LENGTH_INDICATOR_OCTET,        
+        fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
     };  
-    self_iniated_response_rx(&(read_byte_2[0]), sizeof(read_byte_2), NULL);
+    const uint8_t* write_byte = (const uint8_t*)context;
+    peer_iniated_request_rx(&(read_byte[0]),
+                            sizeof(read_byte),
+                            SKIP_FLAG_SEQUENCE_OCTET,   
+                            NULL,             // No response frame TX started as put pending.
+                            &(write_byte[0]), // Resume TX for the current byte in the TX pipeline.
+                            (SABM_FRAME_LEN - 1u));    
+    
+    /* Generate the remaining part of the DLCI establishment request. */
+    self_iniated_request_tx(&(write_byte[0]), (SABM_FRAME_LEN - 1u), FRAME_HEADER_READ_LEN);
+       
+    /* Generate peer DLCI establishment response, which is accepted by the implementation. */
+    const uint8_t read_byte_2[5] = 
+    {
+        3u | (MAX_DLCI_COUNT << 2),         
+        (FRAME_TYPE_UA | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,        
+        fcs_calculate(&read_byte[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };  
+    self_iniated_response_rx(&(read_byte_2[0]), 
+                             sizeof(read_byte_2), 
+                             NULL, 
+                             SKIP_FLAG_SEQUENCE_OCTET,
+                             STRIP_FLAG_FIELD_NO);
 }
 
 /*
@@ -3748,24 +3750,31 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_self_iniated_differen
     
     mux_self_iniated_open();
 
-    const Role role = ROLE_INITIATOR;
     uint8_t dlci_id = 0u;
     uint8_t i       = (MAX_DLCI_COUNT - 1u);
     
     /* Self started DLCI establishment: establish all but the last resource (only 1 available). */
     do {
-        dlci_self_iniated_establish(role, ++dlci_id);
+        dlci_self_iniated_establish(ROLE_INITIATOR, ++dlci_id);
         
         --i;
     } while (i != 0);
 
+    const uint8_t write_byte[6] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (++dlci_id << 2),         
+        (FRAME_TYPE_SABM | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };          
     /* Self started DLCI establishment: start establishment for the last pending DLCI ID resource. */
     mock_t * mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;        
-    mock_write->input_param[0].param        = (uint32_t)&write_byte;        
-    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);        
+    mock_write->input_param[1].param        = sizeof(write_byte);    
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 1;    
    
@@ -3773,30 +3782,28 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_self_iniated_differen
     mock_t * mock_wait = mock_free_get("wait");
     CHECK(mock_wait != NULL);
     mock_wait->return_value                = 1;
+    mock_wait->func_context                = &(write_byte[1]);    
     mock_wait->func = dlci_establish_simultaneous_self_iniated_different_dlci_id_race_for_last_resource_sem_wait;
-    const dlci_establish_context_t context = {++dlci_id, role};
-    mock_wait->func_context                = &context;    
     
     mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    const uint32_t write_byte_2             = ((role == ROLE_INITIATOR) ? 3u : 1u) | (context.dlci_id << 2);    
-    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
-    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[1]);        
+    mock_write->input_param[1].param        = sizeof(write_byte) - sizeof(write_byte[0]);        
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 0;                
 
     /* Start test sequence. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
     FileHandle *obj    = NULL;
-    const uint32_t ret = mbed::Mux::dlci_establish(context.dlci_id, status, &obj);
-    CHECK_EQUAL(4, ret);
+    const uint32_t ret = mbed::Mux::dlci_establish(dlci_id, status, &obj);
+    CHECK_EQUAL(4u, ret);
     CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_SUCCESS, status);      
     CHECK(obj != NULL);
     CHECK(!MuxClient::is_dlci_establish_triggered());
 }
 
-
+#if 0
 /* Multiplexer semaphore wait call from mux_open_simultaneous_self_iniated_full_frame TC. */
 void mux_open_simultaneous_self_iniated_full_frame_sem_wait(const void *context)
 {    
