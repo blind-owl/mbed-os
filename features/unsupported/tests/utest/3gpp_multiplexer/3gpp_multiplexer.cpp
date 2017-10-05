@@ -4011,7 +4011,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_self_iniated_full_fra
     CHECK(!MuxClient::is_dlci_establish_triggered());    
 }
 
-#if 0
+
 /*
  * TC - mux start-up sequence, peer initiated: peer issues mux start-up request while self iniated is in progress
  * - START request received completely from the peer 
@@ -4032,30 +4032,37 @@ TEST(MultiplexerOpenTestGroup, mux_open_simultaneous_peer_iniated)
     CHECK(mock_sigio != NULL);      
     mbed::Mux::serial_attach(&fh_mock);    
  
-    const uint8_t read_byte[5] = 
+    const uint8_t read_byte[6] = 
     {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_REQ_OCTET, 
         (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&read_byte[1], 2),
+        LENGTH_INDICATOR_OCTET,                
+        fcs_calculate(&read_byte[1], 3u),
         FLAG_SEQUENCE_OCTET
     };   
-    const uint8_t write_byte[5] = 
+    const uint8_t write_byte[6] = 
     {
         FLAG_SEQUENCE_OCTET,        
         ADDRESS_MUX_START_RESP_OCTET, 
         (FRAME_TYPE_UA | PF_BIT), 
-        fcs_calculate(&write_byte[1], 2),
+        LENGTH_INDICATOR_OCTET,                
+        fcs_calculate(&write_byte[1], 3u),
         FLAG_SEQUENCE_OCTET
     };
 
-    /* Generate peer iniated establishment and trigger TX of 1st response byte. */
-    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), &(write_byte[0]), NULL);    
+    /* Generate peer iniated establishment and trigger TX of 1st response byte. */    
+    peer_iniated_request_rx(&(read_byte[0]), 
+                            sizeof(read_byte), 
+                            READ_FLAG_SEQUENCE_OCTET,                            
+                            &(write_byte[0]),   // TX response frame within the RX cycle.
+                            NULL,               // No current frame in the TX pipeline.
+                            0);                    
     
     /* Start while peer iniated is in progress. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
     const uint32_t ret = mbed::Mux::mux_start(status);
-    CHECK_EQUAL(ret, 1);
+    CHECK_EQUAL(ret, 1u);
     
     /* Complete the existing peer iniated establishment cycle. */
     const bool expected_mux_start_event_state = true;    
@@ -4066,7 +4073,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_simultaneous_peer_iniated)
                              MuxClient::is_mux_start_triggered);      
 }
 
-
+#if 0
 /* Multiplexer semaphore wait call from dlci_establish_simultaneous_peer_iniated_same_dlci_id TC. */
 void dlci_establish_simultaneous_peer_iniated_same_dlci_id_sem_wait(const void *context)
 {
