@@ -3667,8 +3667,8 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_peer_iniated_differen
     peer_iniated_request_rx(&(read_byte[0]), 
                             sizeof(read_byte), 
                             SKIP_FLAG_SEQUENCE_OCTET,                            
-                            &(write_byte[0]),                            
-                            NULL, 
+                            &(write_byte[0]),   // Start response frame TX from the RX cycle.
+                            NULL,               // No current frame in the TX pipeline.
                             0);        
 
     /* Last available DLCI resource will be consumed by the running peer iniated establishment. This request will be 
@@ -3803,43 +3803,45 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_simultaneous_self_iniated_differen
     CHECK(!MuxClient::is_dlci_establish_triggered());
 }
 
-#if 0
+
 /* Multiplexer semaphore wait call from mux_open_simultaneous_self_iniated_full_frame TC. */
 void mux_open_simultaneous_self_iniated_full_frame_sem_wait(const void *context)
 {    
     /* Generate the remaining part of the mux START request. */
-    const uint8_t write_byte[4] = 
-    {
-        ADDRESS_MUX_START_REQ_OCTET, 
-        (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&write_byte[0], 2),
-        FLAG_SEQUENCE_OCTET
-    };
-    
-    self_iniated_request_tx(&(write_byte[0]), sizeof(write_byte));
+    const uint8_t *write_byte = (const uint8_t *)context; 
+    self_iniated_request_tx(&(write_byte[0]), (SABM_FRAME_LEN - 1u), FLAG_SEQUENCE_OCTET_LEN);
     
     /* Generate peer mux START request, which is ignored by the implementation. */
-    const uint8_t read_byte[5] = 
+    const uint8_t read_byte[6] = 
     {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_REQ_OCTET, 
         (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&read_byte[1], 2),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[1], 3u),
         FLAG_SEQUENCE_OCTET
-    };
-       
-    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), NULL, NULL);    
+    };      
+    peer_iniated_request_rx(&(read_byte[0]), 
+                            sizeof(read_byte), 
+                            READ_FLAG_SEQUENCE_OCTET,                            
+                            NULL,   // No response frame TX from the RX cycle.
+                            NULL,   // No current frame in the TX pipeline.
+                            0);            
    
     /* Generate peer mux START response, which is accepted by the implementation. */
-    const uint8_t read_byte_2[4] = 
+    const uint8_t read_byte_2[5] = 
     {
         ADDRESS_MUX_START_RESP_OCTET, 
         (FRAME_TYPE_UA | PF_BIT), 
-        fcs_calculate(&read_byte[0], 2),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
     };
-
-    self_iniated_response_rx(&(read_byte_2[0]), sizeof(read_byte_2), NULL);
+    self_iniated_response_rx(&(read_byte_2[0]),
+                             sizeof(read_byte_2), 
+                             NULL,
+                             SKIP_FLAG_SEQUENCE_OCTET,
+                             STRIP_FLAG_FIELD_NO);
 }
 
 
@@ -3861,22 +3863,30 @@ TEST(MultiplexerOpenTestGroup, mux_open_simultaneous_self_iniated_full_frame)
     CHECK(mock_sigio != NULL);      
     mbed::Mux::serial_attach(&fh_mock);
       
+    const uint8_t write_byte[6] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET, 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    
     /* Set mock. */
     mock_t * mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;        
-    mock_write->input_param[0].param        = (uint32_t)&write_byte;        
-    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);        
+    mock_write->input_param[1].param        = sizeof(write_byte);    
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 1;    
     
     mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    const uint32_t write_byte_2             = ADDRESS_MUX_START_REQ_OCTET;
-    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
-    mock_write->input_param[1].param        = WRITE_LEN;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[1]);        
+    mock_write->input_param[1].param        = sizeof(write_byte) - sizeof(write_byte[0]);        
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 0;            
 
@@ -3884,7 +3894,8 @@ TEST(MultiplexerOpenTestGroup, mux_open_simultaneous_self_iniated_full_frame)
     mock_t * mock_wait = mock_free_get("wait");
     CHECK(mock_wait != NULL);
     mock_wait->return_value = 1;
-    mock_wait->func = mux_open_simultaneous_self_iniated_full_frame_sem_wait;
+    mock_wait->func         = mux_open_simultaneous_self_iniated_full_frame_sem_wait;
+    mock_wait->func_context = &(write_byte[1]);
 
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
@@ -3894,6 +3905,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_simultaneous_self_iniated_full_frame)
 }
 
 
+#if 0
 /* Multiplexer semaphore wait call from dlci_establish_simultaneous_self_iniated_full_frame_same_dlci_id TC. */
 void dlci_establish_simultaneous_self_iniated_full_frame_sem_wait(const void *context)
 {    
