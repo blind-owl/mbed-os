@@ -4666,7 +4666,7 @@ void mux_open_self_initiated_full_frame_write_in_loop_succes_sem_wait(const void
                              sizeof(read_byte), 
                              NULL,
                              READ_FLAG_SEQUENCE_OCTET,
-                             STRIP_FLAG_FIELD_NO);            
+                             STRIP_FLAG_FIELD_NO);                
 }
 
 
@@ -4729,23 +4729,25 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_full_frame_write_in_loop_
     CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_SUCCESS, status);    
     CHECK(!MuxClient::is_mux_start_triggered());
 }
-#if 0
+
 
 /* Semaphore wait call from dlci_establish_self_initiated_full_frame_write_in_loop_succes TC. */
 void dlci_establish_self_initiated_full_frame_write_in_loop_succes_sem_wait(const void *context)
 {
-    /* Program read cycle. */
-    
-    const dlci_establish_context_t *cntx = static_cast<const dlci_establish_context_t *>(context);    
-    const uint8_t read_byte[4]           = 
+    /* Program read cycle. */   
+    const uint8_t read_byte[5] = 
     {
-        (((cntx->role == ROLE_INITIATOR) ? 1u : 3u) | (cntx->dlci_id << 2)),
+        3u | (1u << 2),
         (FRAME_TYPE_UA | PF_BIT), 
-        fcs_calculate(&read_byte[0], 2),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
-    };    
-
-    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL);
+    };   
+    self_iniated_response_rx(&(read_byte[0]), 
+                             sizeof(read_byte), 
+                             NULL,
+                             SKIP_FLAG_SEQUENCE_OCTET,
+                             STRIP_FLAG_FIELD_NO);                
 }
 
 
@@ -4768,13 +4770,13 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_full_frame_write_in
     mux_self_iniated_open();    
 
     /* Program write cycle. */
-    const dlci_establish_context_t cntx = {1u, ROLE_INITIATOR};
-    const uint8_t write_byte[5]         = 
+    const uint8_t write_byte[6] = 
     {
         FLAG_SEQUENCE_OCTET,
-        ((cntx.role == ROLE_INITIATOR) ? 3u : 1u) | (cntx.dlci_id << 2),        
+        3u | (1u << 2),        
         (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&write_byte[1], 2),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte[1], 3u),
         FLAG_SEQUENCE_OCTET
     };           
     mock_t * mock_write;
@@ -4784,7 +4786,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_full_frame_write_in
         CHECK(mock_write != NULL); 
         mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_write->input_param[0].param        = (uint32_t)&(write_byte[i]);        
-        mock_write->input_param[1].param        = WRITE_LEN;
+        mock_write->input_param[1].param        = (SABM_FRAME_LEN - i);
         mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_write->return_value                = 1;    
     
@@ -4803,19 +4805,18 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_full_frame_write_in
     CHECK(mock_wait != NULL);
     mock_wait->return_value = 1;
     mock_wait->func         = dlci_establish_self_initiated_full_frame_write_in_loop_succes_sem_wait;    
-    mock_wait->func_context = &cntx;        
     
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
     FileHandle *obj    = NULL;
-    const uint32_t ret = mbed::Mux::dlci_establish(cntx.dlci_id, status, &obj);
+    const uint32_t ret = mbed::Mux::dlci_establish(/*cntx.dlci_id*/1u, status, &obj);
     CHECK_EQUAL(ret, 4);
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_SUCCESS);      
     CHECK(obj != NULL);
     CHECK(!MuxClient::is_dlci_establish_triggered());
 }
 
-
+#if 0
 /*
  * TC - mux start-up sequence, self initiated with delay as DM frame TX is in progress: 
  * - peer sends a DISC command to DLCI 0 
