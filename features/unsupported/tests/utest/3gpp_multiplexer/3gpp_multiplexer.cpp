@@ -4648,21 +4648,25 @@ TEST(MultiplexerOpenTestGroup, mux_open_rx_disc_dlci_in_use)
                             0);                                
 }
 
-#if 0
+
 /* Semaphore wait call from mux_open_self_initiated_full_frame_write_in_loop_succes TC. */
 void mux_open_self_initiated_full_frame_write_in_loop_succes_sem_wait(const void *context)
 {
     /* Program read cycle. */
-    const uint8_t read_byte[5] =
+    const uint8_t read_byte[6] =
     {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_RESP_OCTET, 
         (FRAME_TYPE_UA | PF_BIT), 
-        fcs_calculate(&read_byte[1], 2),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[1], 3u),
         FLAG_SEQUENCE_OCTET
-    };    
-    
-    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL);
+    };   
+    self_iniated_response_rx(&(read_byte[0]), 
+                             sizeof(read_byte), 
+                             NULL,
+                             READ_FLAG_SEQUENCE_OCTET,
+                             STRIP_FLAG_FIELD_NO);            
 }
 
 
@@ -4682,12 +4686,13 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_full_frame_write_in_loop_
     mbed::Mux::serial_attach(&fh_mock);
     
     /* Program write cycle. */
-    const uint8_t write_byte[5] = 
+    const uint8_t write_byte[6] = 
     {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_REQ_OCTET, 
         (FRAME_TYPE_SABM | PF_BIT), 
-        fcs_calculate(&write_byte[1], 2),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte[1], 3u),
         FLAG_SEQUENCE_OCTET
     };       
     mock_t * mock_write;
@@ -4697,7 +4702,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_full_frame_write_in_loop_
         CHECK(mock_write != NULL); 
         mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_write->input_param[0].param        = (uint32_t)&(write_byte[i]);        
-        mock_write->input_param[1].param        = WRITE_LEN;
+        mock_write->input_param[1].param        = (SABM_FRAME_LEN - i);
         mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_write->return_value                = 1;    
     
@@ -4724,7 +4729,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_full_frame_write_in_loop_
     CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_SUCCESS, status);    
     CHECK(!MuxClient::is_mux_start_triggered());
 }
-
+#if 0
 
 /* Semaphore wait call from dlci_establish_self_initiated_full_frame_write_in_loop_succes TC. */
 void dlci_establish_self_initiated_full_frame_write_in_loop_succes_sem_wait(const void *context)
