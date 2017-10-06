@@ -4609,7 +4609,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_rx_disc_dlci_0)
                             0);                                
 }
 
-#if 0
+
 /*
  * TC - Peer sends DISC command to established(used) DLCI, which is ignored by the implementation.
  */
@@ -4627,24 +4627,28 @@ TEST(MultiplexerOpenTestGroup, mux_open_rx_disc_dlci_in_use)
     
     mux_self_iniated_open();
   
-    const uint8_t dlci_id = 1;
-    
+    const uint8_t dlci_id = 1;    
     dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);    
 
     const uint8_t read_byte[5] = 
     {
-        FLAG_SEQUENCE_OCTET,        
         /* Peer assumes the role of the responder. */
         1u | (dlci_id << 2),
         (FRAME_TYPE_DISC | PF_BIT), 
-        fcs_calculate(&read_byte[1], 2),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
     };                     
-    /* Generate DISC from peer which is ignored buy the implementation. */        
-    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), NULL, NULL);
+    /* Generate DISC from peer which is ignored buy the implementation. */       
+    peer_iniated_request_rx(&(read_byte[0]), 
+                            sizeof(read_byte), 
+                            SKIP_FLAG_SEQUENCE_OCTET,                            
+                            NULL,   // No TX response frame within the RX cycle.
+                            NULL,   // No current frame in the TX pipeline.
+                            0);                                
 }
 
-
+#if 0
 /* Semaphore wait call from mux_open_self_initiated_full_frame_write_in_loop_succes TC. */
 void mux_open_self_initiated_full_frame_write_in_loop_succes_sem_wait(const void *context)
 {
