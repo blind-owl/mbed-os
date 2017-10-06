@@ -3,7 +3,7 @@
 #include <stddef.h>
 #include <string.h>
 
-#define DB_LEN 10u
+#define DB_LEN 12u
 
 static mock_t db[DB_LEN];
 
