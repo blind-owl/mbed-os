@@ -11,13 +11,6 @@ namespace mbed {
 #define ADDRESS_MUX_START_RESP_OCTET        ADDRESS_MUX_START_REQ_OCTET
 #define FCS_INPUT_LEN                       3u            /* Length of the input for FCS calculation in number of 
                                                              bytes. Consisting of address, control and length fields. */
-#if 0                                                             
-#define CONTROL_ESCAPE_OCTET                0x7Du         /* Control escape octet used as the transparency 
-                                                             identifier. */                                             
-#define WRITE_LEN                           1u            /* Length of write in number of bytes. */    
-#define READ_LEN                            1u            /* Length of read in number of bytes. */   
-#endif // 0
-
 #define SABM_FRAME_LEN                      6u            /* Length of the SABM frame in number of bytes. */
 #define UA_FRAME_LEN                        6u            /* Length of the UA frame in number of bytes. */
 #define DM_FRAME_LEN                        6u            /* Length of the DM frame in number of bytes. */
@@ -147,21 +140,6 @@ void Mux::on_timeout()
     }
 }
 
-#if 0
-bool Mux::is_rx_frame_valid()
-{
-//    trace("is_rx_frame_valid::_rx_context.offset: ", _rx_context.offset);    
-    
-    return (_rx_context.offset >= 4) ? true : false;
-}
-
-
-bool Mux::is_rx_suspend_requited()
-{
-    // @todo: implement me!    
-    return false;
-}
-#endif // 0
 
 void Mux::ua_response_construct(uint8_t dlci_id)
 {
@@ -314,23 +292,6 @@ void Mux::on_rx_frame_dm()
 void Mux::tx_internal_resp_entry_run()
 {
     write_do();
-    
-#if 0 // LEGACY    
-    ssize_t write_err;    
-//@todo: WRITE NOT REQUIRED? IMPLEMENTTAION GUARANTEE THAT THIS FUNCTION ORIGINATES FROM on_deferredd_call() RX PATH
-    do {
-        write_err = write_do();
-    } while (write_err > 0);   
-    
-    if (_tx_context.bytes_remaining == 0) {
-        /* Complete frame write done, we can directly transit back to idle state. */
-        tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);        
-    } else if (write_err < 0) {
-        _state.is_write_error = 1u; // @todo implementation missing: propagate to event to user.
-    } else {
-        /* No implementation required, we remain in the current state until transmission is completed. */
-    }       
-#endif // 0    
 }
 
 
@@ -407,109 +368,6 @@ Mux::FrameRxType Mux::frame_rx_type_resolve()
     }
 }
 
-#if 0
-void Mux::valid_rx_frame_decode()
-{ 
-#if 0    
-    trace("valid_rx_frame_decode: ", _rx_context.offset);  
-    for (uint8_t i = 0; i != _rx_context.offset; ++i) {
-        trace("DECODE BYTE:", _rx_context.buffer[i]);
-    }
-#endif // 0    
-    
-    typedef void (*rx_frame_decoder_func_t)();    
-    static const rx_frame_decoder_func_t decoder_func[FRAME_RX_TYPE_MAX] = {
-        on_rx_frame_sabm,
-        on_rx_frame_ua,
-        on_rx_frame_dm,
-        on_rx_frame_disc,
-        on_rx_frame_uih,
-        on_rx_frame_not_supported
-    };
-
-    const Mux::FrameRxType frame_type = frame_rx_type_resolve();
-    rx_frame_decoder_func_t func      = decoder_func[frame_type];
-    func();      
-    
-    _rx_context.offset = 1;    
-}
-
-#if 0
-void Mux::decoder_state_change(DecoderState new_state)
-{
-    _rx_context.decoder_state = new_state;
-}
-#endif // 0
-
-void Mux::decoder_state_decode_run()
-{
-//trace("decoder_state_decode_run: ", _rx_context.buffer[_rx_context.offset]);
-    
-    const uint8_t current_byte = _rx_context.buffer[_rx_context.offset];
-       
-    if (current_byte != CONTROL_ESCAPE_OCTET) {            
-        if (current_byte == FLAG_SEQUENCE_OCTET) {
-            if (is_rx_frame_valid()) {
-                if (is_rx_suspend_requited()) {
-                    MBED_ASSERT(false); // // @todo ASSERT for now                    
-                } else {
-                    valid_rx_frame_decode();
-                }                
-            } else {
-                // @todo: below code needs TC
-                if (_rx_context.offset != 1u) {
-                    trace("_rx_context.offset: ", _rx_context.offset);    
-                    MBED_ASSERT(false); // // @todo invalid frame: ASSERT for now               
-                }
-            }            
-        } else {
-            ++_rx_context.offset;
-            if (_rx_context.offset == sizeof(_rx_context.buffer)) {           
-                MBED_ASSERT(false); // @todo overflow: ASSERT for now            
-            }                       
-        }                     
-    } else {
-        MBED_ASSERT(false); // @todo ASSERT for now
-    }
-}
-
-
-void Mux::decoder_state_sync_run()
-{
-//trace("decoder_state_sync_run: ", _rx_context.buffer[_rx_context.offset]);    
-
-    if (_rx_context.buffer[_rx_context.offset] == FLAG_SEQUENCE_OCTET) {
-        ++_rx_context.offset;
-        decoder_state_change(DECODER_STATE_DECODE);
-    }
-}
-
-
-void Mux::decode_do()
-{
-    typedef void (*decoder_func_t)();    
-    static const decoder_func_t decoder_func[DECODER_STATE_MAX] = {
-        decoder_state_sync_run,
-        decoder_state_decode_run
-    };
-    
-    decoder_func_t func = decoder_func[_rx_context.decoder_state];
-    func();   
-}
-
-
-void Mux::read_do()
-{
-    ssize_t read_ret;    
-    
-    do {
-        read_ret = _serial->read(&(_rx_context.buffer[_rx_context.offset]), READ_LEN);
-        if (read_ret > 0) {
-            decode_do();
-        }
-    } while (read_ret > 0);
-}
-#endif // 0
 
 void Mux::tx_state_change(TxState new_state, tx_state_entry_func_t entry_func, tx_state_exit_func_t exit_func)
 {
@@ -590,7 +448,7 @@ void Mux::on_post_tx_frame_ua()
 
 void Mux::pending_self_iniated_mux_open_start()
 {
-    /* Construct the frame, start the tx sequence 1-byte at time, set and reset relevant state contexts. */
+    /* Construct the frame, start the tx sequence, set and reset relevant state contexts. */
     _state.is_mux_open_self_iniated_running = 1u;       
     _state.is_mux_open_self_iniated_pending = 0;
 
@@ -609,7 +467,7 @@ void Mux::pending_self_iniated_mux_open_start()
 
 void Mux::pending_self_iniated_dlci_open_start()
 {
-    /* Construct the frame, start the tx sequence 1-byte at time, set and reset relevant state contexts. */    
+    /* Construct the frame, start the tx sequence, set and reset relevant state contexts. */    
     _state.is_dlci_open_self_iniated_running = 1u;
     _state.is_dlci_open_self_iniated_pending = 0;
 
@@ -876,6 +734,7 @@ void Mux::rx_event_do(RxEvent event)
                 _rx_context.rx_state = RX_HEADER_READ;
                 
                 // @todo: schedule system thread
+                MBED_ASSERT(false);
             } else {
                 /* No implementation required. */
             }
@@ -956,54 +815,6 @@ void Mux::on_deferred_call()
 }
 
 
-#if 0 // LEGACY
-void Mux::on_deferred_call()
-{
-    read_do(); 
-
-// @todo: replace with while (_tx_context.bytes_remaining != 0) as post_tx_xxx generate new frame and
-// tx_internal_resp_entry_run() can remove write sequence?? => NOT AS GETS MESSY
-    if (_tx_context.bytes_remaining != 0) {
-        ssize_t write_err;          
-        do {
-            write_err = write_do();        
-        } while (write_err > 0);       
-        
-        if (_tx_context.bytes_remaining == 0) {
-            /* Frame write complete, exucute correct post processing function for clean-up. */
-            typedef void (*post_tx_frame_func_t)(); 
-            static const post_tx_frame_func_t post_tx_func[FRAME_TX_TYPE_MAX] = {
-                on_post_tx_frame_sabm,
-                on_post_tx_frame_ua,
-                on_post_tx_frame_dm,
-                on_post_tx_frame_uih
-            };
-            
-            const Mux::FrameTxType frame_type = frame_tx_type_resolve();
-            post_tx_frame_func_t func         = post_tx_func[frame_type];
-            func();                              
-        } else if (write_err < 0) {
-            switch (_tx_context.tx_state) {
-                osStatus os_status;
-                case TX_RETRANSMIT_ENQUEUE:
-                    _establish_status = MUX_ESTABLISH_WRITE_ERROR;
-                    os_status         = _semaphore.release();
-                    MBED_ASSERT(os_status == osOK);   
-                    tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);             
-                    break;
-                default:
-                    // @todo DEFECT write failure for non user orgined TX: propagate error event to the user and reset
-                    MBED_ASSERT(false); 
-                    break;
-            }                  
-        } else {
-                /* No implementation required. */
-        }          
-    }
-}
-#endif // 0
-
-
 void Mux::on_sigio()
 {
     const int id = _event_q->call(Mux::on_deferred_call);
@@ -1068,50 +879,6 @@ void Mux::sabm_request_construct(uint8_t dlci_id)
 }
 
 
-#if 0
-uint8_t Mux::encode_do()
-{
-    uint8_t       encoded_byte;
-    const uint8_t current_byte = _tx_context.buffer[_tx_context.offset];
-    
-    /* Encoding done only between the opening and closing flag. */
-    if ((_tx_context.offset != 0) && (_tx_context.bytes_remaining != 1)) {
-        if ((current_byte != FLAG_SEQUENCE_OCTET) && (current_byte != CONTROL_ESCAPE_OCTET)) {
-            encoded_byte = current_byte;
-        } else {
-            MBED_ASSERT(false); // @todo ASSERT for now
-            
-            _tx_context.buffer[_tx_context.offset] ^= (1 << 5);
-            encoded_byte                            = CONTROL_ESCAPE_OCTET;
-        }
-    } else {
-        encoded_byte = current_byte;
-    }
-    
-    return encoded_byte;
-}
-
-
-ssize_t Mux::write_do()
-{
-    ssize_t write_ret = 0;
-    
-    if (_tx_context.bytes_remaining != 0) {
-        const uint8_t encoded_byte = encode_do();
-        
-//trace("WRITE: ", _tx_context.offset);
-        
-        write_ret = _serial->write(&encoded_byte, WRITE_LEN);
-        if (write_ret == 1) {
-            --(_tx_context.bytes_remaining);
-            ++(_tx_context.offset);
-        } 
-    }
-    
-    return write_ret;
-}
-#endif // 0
-
 bool Mux::is_dlci_q_full()
 {
     const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);
@@ -1127,17 +894,20 @@ bool Mux::is_dlci_q_full()
 
 void Mux::dlci_id_append(uint8_t dlci_id)
 {
-//    FileHandle *obj   = NULL;
-    const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);
-    for (uint8_t i = 0; i != end; ++i) {   
+    uint8_t i         = 0;
+    const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);    
+    do {
         if (_mux_objects[i].dlci == MUX_DLCI_INVALID_ID) {
             _mux_objects[i].dlci = dlci_id;
             
             break;
         }
-    }
+        
+        ++i;
+    } while (i != end);
     
-//    MBED_ASSERT(i != end);
+    /* Internal implementation error if append was not done as Q size is checked prior call. */
+    MBED_ASSERT(i != end);
 }
 
 
@@ -1192,9 +962,6 @@ uint32_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHa
             _tx_context.retransmit_counter = RETRANSMIT_COUNT; // @todo: set to tx_idle_exit           
             tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
             if (_state.is_write_error) {
-#if 0 // NOT                
-                tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);
-#endif // 0                
                 status = MUX_ESTABLISH_WRITE_ERROR;
 // @todo: add mutex_free                                
                 return 4u;
@@ -1248,23 +1015,6 @@ void Mux::tx_retransmit_enqueu_entry_run()
     _state.is_user_thread_context = 1u;
     write_do();
     _state.is_user_thread_context = 0;
-    
-#if 0 // LEGACY    
-    ssize_t write_err;    
-    
-    do {
-        write_err = write_do();
-    } while (write_err > 0);   
-    
-    if (_tx_context.bytes_remaining == 0) {
-        /* Complete frame write done, we can directly transit to next state. */
-        tx_state_change(TX_RETRANSMIT_DONE, tx_retransmit_done_entry_run, NULL);        
-    } else if (write_err < 0) {
-        _state.is_write_error = 1u;
-    } else {
-        /* No implementation required, we remain in the current state. */
-    }   
-#endif // 0    
 }
 
     
@@ -1294,7 +1044,6 @@ uint32_t Mux::mux_start(Mux::MuxEstablishStatus &status)
             _tx_context.retransmit_counter = RETRANSMIT_COUNT;            
             tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
             if (_state.is_write_error) {
-                tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);
                 status = MUX_ESTABLISH_WRITE_ERROR;
 // @todo: add mutex_free                                
                 return 2u;

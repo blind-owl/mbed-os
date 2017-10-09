@@ -291,44 +291,7 @@ private:
     static ssize_t on_rx_read_state_header_read();
     static ssize_t on_rx_read_state_trailer_read();
     static ssize_t on_rx_read_state_suspend();
-    
-#if 0    
-    /** Do read operation. */
-    static void read_do();
-
-    /** Encode a byte.
-     * 
-     *  @return Encoded byte.
-     */        
-    static uint8_t encode_do();
-    
-    /** Do a decode operation for a byte read. */
-    static void decode_do();
-    
-    /** Frame decoder state machine operation. */    
-    static void decoder_state_sync_run();
-    
-    /** Frame decoder state machine operation. */        
-    static void decoder_state_decode_run();
-    
-    /** Change frame decoder state machine state. 
-     * 
-     *  @param new_state    State to transit.
-     */            
-    static void decoder_state_change(DecoderState new_state);
-    
-    /** Evaluate is rx frame valid for further processing. 
-     * 
-     *  @return true when frame is valid, false otherwise.
-     */                
-    static bool is_rx_frame_valid();
-    
-    /** Evaluate is suspending rx processing required.
-     * 
-     *  @return true when suspending is required, false otherwise.
-     */                
-    static bool is_rx_suspend_requited();
-#endif // 0       
+   
     /** Process received SABM frame. */    
     static void on_rx_frame_sabm();
     
@@ -472,7 +435,6 @@ private:
     typedef struct 
     {        
         RxState rx_state;                       /* Rx state machine current state. */
-//        DecoderState decoder_state;                  /* Decoder state machine current state. */
         uint8_t offset;                         /* Offset in the buffer where to read to. */
         uint8_t frame_trailer_length;           /* Length of the frame trailer to read in number of bytes. */        
         uint8_t buffer[MBED_CONF_BUFFER_SIZE];  /* Rx buffer. */
