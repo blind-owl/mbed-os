@@ -2289,13 +2289,13 @@ void mux_start_self_initated_sem_wait_timeout(const void *context)
 
 
 /*
- * TC - mux start-up sequence, request timeout failure:
+ * TC - mux start-up sequence, 1st try:request timeout failure, 2nd try: success
  * - send START request
  * - request timeout timer expires 
  * - generate timeout event to the user
- * - 2nd iteration will succeed
+ * - 2nd mux start-up sequence will succeed
  */
-TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_timeout)
+TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_success_after_timeout)
 {
     mbed::FileHandleMock fh_mock;   
     mbed::EventQueueMock eq_mock;
@@ -2351,67 +2351,6 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_timeout)
     /* Start test sequence: successfull. */
     mux_self_iniated_open();
 }
-
-
-
-/*
- * TC - mux start-up sequence, 1st try:request timeout failure, 2nd try: success
- * - send 1st START request
- * - request timeout timer expires 
- * - generate timeout event to the user
- * - send 2nd START request
- * - success
- */
-#if 0 // IDENTICAL TO mux_open_self_initiated_timeout => CAN BE DEPRICATED
-TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_success_after_timeout)
-{
-    mbed::FileHandleMock fh_mock;   
-    mbed::EventQueueMock eq_mock;
-    
-    mbed::Mux::eventqueue_attach(&eq_mock);
-       
-    /* Set and test mock. */
-    mock_t * mock_sigio = mock_free_get("sigio");    
-    CHECK(mock_sigio != NULL);      
-    mbed::Mux::serial_attach(&fh_mock);
-      
-    /* Set mock. */
-    mock_t * mock_write = mock_free_get("write");
-    CHECK(mock_write != NULL); 
-    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    const uint32_t write_byte               = FLAG_SEQUENCE_OCTET;        
-    mock_write->input_param[0].param        = (uint32_t)&write_byte;        
-    mock_write->input_param[1].param        = WRITE_LEN;
-    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->return_value                = 1;    
-    
-    mock_write = mock_free_get("write");
-    CHECK(mock_write != NULL); 
-    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    const uint32_t write_byte_2             = ADDRESS_MUX_START_REQ_OCTET;
-    mock_write->input_param[0].param        = (uint32_t)&write_byte_2;        
-    mock_write->input_param[1].param        = WRITE_LEN;
-    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->return_value                = 0;            
-
-    /* Set mock. */    
-    mock_t * mock_wait = mock_free_get("wait");
-    CHECK(mock_wait != NULL);
-    mock_wait->return_value = 1;
-    mock_wait->func         = mux_start_self_initated_sem_wait_timeout;
-
-    /* Start test sequence. Test set mocks. */
-    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    const uint32_t ret = mbed::Mux::mux_start(status);
-    CHECK_EQUAL(ret, 2);
-    CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_TIMEOUT);
-    
-    CHECK(!MuxClient::is_mux_start_triggered());              
-    
-    // 2nd try - success.
-    mux_self_iniated_open();
-}
-#endif // 0
 
 
 /*
