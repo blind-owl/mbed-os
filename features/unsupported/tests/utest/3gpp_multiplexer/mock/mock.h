@@ -41,6 +41,7 @@ typedef struct
     output_param_t   output_param[OUTPUT_PARAM_COUNT];    
     uint8_t          is_valid : 1;    
     char             name[NAME_LEN];
+    uint8_t          magic;
 } mock_t; 
 
 /* Below ones to be called only outside the mock object. */

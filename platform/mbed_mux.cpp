@@ -14,6 +14,7 @@ namespace mbed {
 #define SABM_FRAME_LEN                      6u            /* Length of the SABM frame in number of bytes. */
 #define UA_FRAME_LEN                        6u            /* Length of the UA frame in number of bytes. */
 #define DM_FRAME_LEN                        6u            /* Length of the DM frame in number of bytes. */
+#define UIH_FRAME_MIN_LEN                   6u            /* Minimum length of user frame. */
 #define T1_TIMER_VALUE                      300u          /* T1 timer value. */
 #define RETRANSMIT_COUNT                    3u            /* Retransmission count for the tx frames requiring a
                                                              response. */
@@ -86,6 +87,8 @@ void Mux::module_init()
     _state.is_dlci_open_peer_iniated_running = 0;  
     _state.is_write_error                    = 0;
     _state.is_user_thread_context            = 0;
+    _state.is_tx_callback_context            = 0;
+    _state.is_user_tx_pending                = 0;
    
     _rx_context.offset               = 0;
     _rx_context.frame_trailer_length = 0;        
@@ -510,6 +513,89 @@ void Mux::tx_idle_exit_run()
     _state.is_write_error                    = 0;
 }
 
+#if 0
+uint8_t Mux::stored_tx_callback_index_get()
+{
+// NOT??    return ((_tx_context.tx_callback_context & 0xF0u) >> 4);
+}
+#endif  // 0
+
+uint8_t Mux::tx_callback_index_advance()
+{
+    /* Increment and get the index bit accounting the roll over. */
+    uint8_t index = ((_tx_context.tx_callback_context & 0xF0u) >> 4);
+    index <<= 1;
+    if ((index & 0x0Fu) == 0) {
+        index = 1u;
+    }
+          
+    /* Clear existing index bit and assign the new incremented index bit. */
+    _tx_context.tx_callback_context &= 0x0Fu;
+    _tx_context.tx_callback_context |= (index << 4);
+    
+    return index;
+}
+
+
+uint8_t Mux::tx_callback_pending_mask_get()
+{
+    return (_tx_context.tx_callback_context & 0x0Fu);
+}
+
+
+void Mux::tx_callback_pending_bit_clear(uint8_t bit)
+{
+    _tx_context.tx_callback_context &= ~bit;
+}
+
+
+void Mux::tx_callback_pending_bit_set(uint8_t dlci_id)
+{   
+    uint8_t i         = 0;
+    uint8_t bit       = 1u;    
+    const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);    
+
+    do {
+        if (_mux_objects[i].dlci == dlci_id) {
+            break;
+        }
+        
+        ++i;
+        bit <<= 1;
+    } while (i != end);
+    
+    MBED_ASSERT(i != end);    
+    
+    _tx_context.tx_callback_context |= bit;
+}
+
+
+MuxDataService& Mux::tx_callback_lookup(uint8_t bit)
+{
+    uint8_t i         = 0;    
+    const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);
+
+    do {        
+        bit >>= 1;
+        if (bit == 0) {
+            break;
+        }
+        
+        ++i;
+    } while (i != end);
+    
+    MBED_ASSERT(i != end);
+    
+    return _mux_objects[i];
+}
+
+
+void Mux::tx_callback_dispatch(uint8_t bit)
+{
+    MuxDataService& obj = tx_callback_lookup(bit);
+    obj._sigio_cb();
+}
+
 
 void Mux::tx_idle_entry_run()
 {
@@ -545,9 +631,64 @@ trace("NO TX PEND", 0);
     } else {
         /* No implementation required. */
     }
-#if 0    
-trace("tx_idle_entry_run: EXIT", 0);    
-#endif // 0
+    
+    
+    /* TX callback processing block below could be entered recursively within same thread context. Protection bit is 
+     * used to prevent that. */
+    if (!_state.is_tx_callback_context) {
+        /* Lock this code block from multiple entries within same thread context by using a protection bit. Check and 
+           process possible pending user TX callback request. Round robin shceduling used for dispatching pending
+           TX callback. */
+        
+        _state.is_tx_callback_context = 1u;
+        
+        uint8_t tx_callback_pending_mask = tx_callback_pending_mask_get();
+        uint8_t current_tx_index         = tx_callback_index_advance();
+        const uint8_t stored_tx_index    = current_tx_index;    
+        do {
+            if (tx_callback_pending_mask & current_tx_index) { 
+                /* Process pending TX callback request. */
+                
+                tx_callback_pending_bit_clear(current_tx_index);
+//trace("TX_PEND-DISPATCH", 0);                    
+                // @todo: get and dispatc callback based on current index
+                tx_callback_dispatch(current_tx_index);
+                
+                               
+                if (_tx_context.tx_state != TX_IDLE) {
+                    /* TX cycle activated within callback context, stop callback processing. 
+                       Only valid reason for this would be DLCI establishment request started within the callback. */
+                    
+                    // NOT: AS CANT CALL ESTABLISH DLCI IN SYSTEM THREAD CONTEXT => DEADLOCK WITHIN SEMAPHORE
+                    // => MBED_ASSERT TO dlci_establish entry
+                    break;
+                } else {
+                    /* TX cycle is not active after callback this can be due following reasons:
+                     * 1) No TX was requested by callback
+                     * 2) TX was request by callback and it was completed within callback context. */                   
+                    
+                    if (_state.is_user_tx_pending) {
+                       /* User TX was requested by user within callback context. */
+//trace("TX_PEND-RUN", 0);                                           
+                       /* TX buffer is constructed within @ref user_data_tx, start the TX cycle. */
+                       _state.is_user_tx_pending = 0;                                             
+                       tx_state_change(TX_NORETRANSMIT, tx_noretransmit_entry_run, tx_idle_exit_run);
+                       if (_tx_context.tx_state != TX_IDLE) {
+                           /* TX cycle not finished within current context, stop callback processing. */ 
+                           
+                           break;
+                       }
+                    }
+                }
+                
+                break;
+            }       
+            
+            current_tx_index = tx_callback_index_advance();
+        } while (stored_tx_index != current_tx_index);
+           
+        _state.is_tx_callback_context = 0;
+    }
 }
  
  
@@ -568,7 +709,16 @@ void Mux::on_post_tx_frame_dm()
 
 void Mux::on_post_tx_frame_uih()
 {
-    MBED_ASSERT(false);    
+    switch (_tx_context.tx_state) {
+        case TX_NORETRANSMIT:   
+            tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);           
+            break;
+        default:
+            /* Code that should never be reached. */
+            trace("_tx_context.tx_state", _tx_context.tx_state);                       
+            MBED_ASSERT(false);
+            break;
+    }                   
 }
 
 
@@ -751,6 +901,7 @@ void Mux::write_do()
 {
     switch (_tx_context.tx_state) {
         ssize_t write_err;
+        case TX_NORETRANSMIT:
         case TX_RETRANSMIT_ENQUEUE:
         case TX_INTERNAL_RESP:    
 //trace("!B-bytes_remaining: ", _tx_context.bytes_remaining);
@@ -1085,5 +1236,94 @@ uint32_t Mux::mux_start(Mux::MuxEstablishStatus &status)
    
     return 2u;   
 }
+
+
+void Mux::user_information_construct(uint8_t dlci_id, const void* buffer, size_t size)
+{
+    frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::_tx_context.buffer[0]));
+    
+    frame_hdr->flag_seq = FLAG_SEQUENCE_OCTET;
+    frame_hdr->address  = (_state.is_initiator ? 3u : 1u) | (dlci_id << 2);                 
+    frame_hdr->control  = (FRAME_TYPE_UIH | PF_BIT);           
+    frame_hdr->length   = (1u | (size << 1));
+    
+    memmove(&(frame_hdr->information[0]), buffer, size);
+    
+    uint8_t* fcs_pos = (&(frame_hdr->information[0]) + size);
+    *fcs_pos         = fcs_calculate(&(Mux::_tx_context.buffer[1]), FCS_INPUT_LEN);    
+    *(++fcs_pos)     = FLAG_SEQUENCE_OCTET;
+    
+    _tx_context.bytes_remaining = UIH_FRAME_MIN_LEN + size;
+    _tx_context.offset          = 0;                        
+    
+    //&(Mux::_tx_context.buffer[0]) + (sizeof(*frame_hdr) + size);
+#if 0    
+    frame_hdr->information[0] = fcs_calculate(&(Mux::_tx_context.buffer[1]), FCS_INPUT_LEN);    
+    (++frame_hdr)->flag_seq   = FLAG_SEQUENCE_OCTET;
+    
+    _tx_context.bytes_remaining = SABM_FRAME_LEN;
+    _tx_context.offset          = 0;                    
+#endif // 0    
+}
+
+
+void Mux::tx_noretransmit_entry_run()
+{
+//    _state.is_user_thread_context = 1u; // @todo: is this really so?? we should set this allways in dfc or timeout 
+                                        // to be sure and use is_system_thread_context
+    write_do();
+//    _state.is_user_thread_context = 0;
+}
+
+
+ssize_t Mux::user_data_tx(uint8_t dlci_id, const void* buffer, size_t size)
+{
+// @todo: get mutex
+   
+    MBED_ASSERT((size & ~0x7Fu) == 0);
+    if (size != 0) {
+        MBED_ASSERT(buffer != NULL);
+    }
+    
+    ssize_t write_ret;
+    switch (_tx_context.tx_state) {        
+        case TX_IDLE:
+            if (!_state.is_tx_callback_context) {
+                /* Proper state to start TX cycle. */
+                
+                user_information_construct(dlci_id, buffer, size);
+                tx_state_change(TX_NORETRANSMIT, tx_noretransmit_entry_run, tx_idle_exit_run);
+                
+                write_ret = size;
+            } else {
+                /* Signal callback context to start TX cycle assuming not allready done. */
+                
+                if (!_state.is_user_tx_pending) { 
+//trace("TX_PEND-SET", 0);                    
+                    _state.is_user_tx_pending = 1u;                    
+                    user_information_construct(dlci_id, buffer, size);
+                    
+                    write_ret = size;
+                } else {                    
+                    /* TX allready scheduled, set TX callback pending. */
+                    
+                    tx_callback_pending_bit_set(dlci_id);
+                    write_ret = 0;
+                }
+            }
+            break;            
+        default:
+            /* TX allready in use, set TX callback pending. */
+            
+            tx_callback_pending_bit_set(dlci_id);
+            write_ret = 0;
+            break;
+    }
+        
+// @todo: release mutex   
+
+    return write_ret;
+}
+
 
 } // namespace mbed

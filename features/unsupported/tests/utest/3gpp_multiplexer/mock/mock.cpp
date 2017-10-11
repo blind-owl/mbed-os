@@ -14,6 +14,7 @@ UT_PRINT(__FUNCTION__);
 #endif
     for (uint8_t i = 0; i != (sizeof(db) / sizeof(db[0])); ++i) {
         db[i].is_valid  = 0;
+        db[i].magic     = 0;
     }
 }
 

@@ -65,6 +65,7 @@ ssize_t FileHandleMock::write(const void *buffer, size_t size)
                 trace("actual: ", actual);
                 trace("index: ", i);
             }
+            trace("magic: ", mock->magic);
             FAIL("FAILURE:");        
         }
     }

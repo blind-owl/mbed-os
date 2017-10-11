@@ -4,13 +4,7 @@ namespace mbed {
    
 ssize_t MuxDataService::write(const void* buffer, size_t size)
 {
-    return 0;
-}
-    
-
-short MuxDataService::poll(short events) const
-{
-    return 0;
+    return Mux::user_data_tx(dlci, buffer, size);
 }
     
 
@@ -34,7 +28,7 @@ int MuxDataService::close()
 
 void MuxDataService::sigio(Callback<void()> func)
 {
-
+    _sigio_cb = func;
 }
     
 } // namespace mbed

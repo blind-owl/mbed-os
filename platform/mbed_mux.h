@@ -62,18 +62,7 @@ public:
      *  @return         The number of bytes written, negative error on failure.
      */
     virtual ssize_t write(const void* buffer, size_t size);
-    
-    /** Equivalent to POSIX poll(). Returns bitmap of events available. 
-     *
-     *  @note: Events are self clearing, this meaning if this API is called again without new event being generated 
-     *         event bit will be clear.
-     *  
-     *  @param events   Ignored by the implementation.
-     *  @return POLLIN  Data should be availabe for read by @ref read.
-     *  @return POLLOUT New enqueue operation should be possible @ref write.
-     */
-    virtual short poll(short events) const;    
-    
+       
     /** Read user data into a buffer.
      *
      *  @note: This is API is only meant to be used for the multiplexer (user) data service rx. 
@@ -126,7 +115,8 @@ private:
 class MuxCallback;
 class EventQueueMock;
 class FileHandle;
-class Mux {    
+class Mux {
+friend class MuxDataService;    
 public:
 
 /* Definition for multiplexer event id type. */
@@ -232,6 +222,7 @@ private:
         TX_RETRANSMIT_ENQUEUE,
         TX_RETRANSMIT_DONE,
         TX_INTERNAL_RESP,
+        TX_NORETRANSMIT,
         TX_STATE_MAX
     } TxState;
     
@@ -281,6 +272,12 @@ private:
      *  @param dlci_id  ID of the DLCI to establish
      */                
     static void ua_response_construct(uint8_t dlci_id);
+    
+    /** Construct user information frame.
+     * 
+     *  @param dlci_id  ID of the DLCI to establish
+     */                
+    static void user_information_construct(uint8_t dlci_id, const void *buffer, size_t size);
     
     /** Do write operation if pending data available.
      */
@@ -340,13 +337,15 @@ private:
     /** Begin the frame retransmit sequence. */
     static void frame_retransmit_begin();
     
-    /** State entry function. */
+    /** TX state entry functions. */
     static void tx_retransmit_enqueu_entry_run();  
     static void tx_retransmit_done_entry_run();  
     static void tx_idle_entry_run();   
     static void tx_internal_resp_entry_run();
+    static void tx_noretransmit_entry_run();
     typedef void (*tx_state_entry_func_t)();       
     
+    /** TX state exit functions. */    
     static void tx_idle_exit_run();
     typedef void (*tx_state_exit_func_t)();       
     
@@ -372,7 +371,7 @@ private:
      * 
      *  @return Valid File handle or NULL if not found.
      */                        
-    static FileHandle * file_handle_get(uint8_t dlci_id);
+    static FileHandle* file_handle_get(uint8_t dlci_id);
     
     /** Evaluate is DLCI ID in use. 
      * 
@@ -399,6 +398,28 @@ private:
      *  @param dlci_id  ID of the DLCI to establish.
      */                
     static void pending_peer_iniated_dlci_open_start(uint8_t dlci_id);
+
+    /** Enqueue user data for transmission. 
+     *
+     *  @note: This is API is only meant to be used for the multiplexer (user) data service tx. Supplied buffer can be 
+     *         reused/freed upon call return.
+     * 
+     *  @param dlci_id  ID of the DLCI to use.
+     *  @param buffer   Begin of the user data.
+     *  @param size     The number of bytes to write.
+     *  @return         The number of bytes written, negative error on failure.
+     */    
+    static ssize_t user_data_tx(uint8_t dlci_id, const void* buffer, size_t size);
+    
+    static uint8_t stored_tx_callback_index_get();
+    
+    static void tx_callback_pending_bit_clear(uint8_t bit);
+    static void tx_callback_pending_bit_set(uint8_t dlci_id);
+
+    static uint8_t tx_callback_index_advance();
+    static uint8_t tx_callback_pending_mask_get();
+    static void tx_callback_dispatch(uint8_t bit);
+    static MuxDataService& tx_callback_lookup(uint8_t bit);
     
     /* Deny object creation. */    
     Mux();
@@ -418,6 +439,8 @@ private:
         uint8_t bytes_remaining;                /* Bytes remaining in the buffer to write. */
         uint8_t offset;                         /* Offset in the buffer where to write from. */
         uint8_t buffer[MBED_CONF_BUFFER_SIZE];  /* Tx buffer. */
+        
+        uint8_t tx_callback_context;  // @todo: set me in init()          
        
     } tx_context_t;
        
@@ -446,14 +469,17 @@ private:
     {
         uint16_t is_mux_open :                       1;         /* True when multiplexer is open. */       
         uint16_t is_initiator :                      1;         /* True when role is initiator. */
-        uint16_t is_mux_open_self_iniated_pending :  1;
-        uint16_t is_mux_open_self_iniated_running :  1;
+        uint16_t is_mux_open_self_iniated_pending  : 1;
+        uint16_t is_mux_open_self_iniated_running  : 1;
         uint16_t is_dlci_open_self_iniated_pending : 1;
         uint16_t is_dlci_open_self_iniated_running : 1;
         uint16_t is_dlci_open_peer_iniated_pending : 1;
         uint16_t is_dlci_open_peer_iniated_running : 1;                
         uint16_t is_write_error                    : 1;
         uint16_t is_user_thread_context            : 1;
+        
+        uint16_t is_tx_callback_context            : 1;
+        uint16_t is_user_tx_pending                : 1;        
 #if 0        
         uint8_t is_dlci_establish_pending : 1;  /* True if @ref mux_start or @ref dlci_establish is pending. */
         uint8_t is_user_tx_pending : 1;         /* True if user TX request is pending. */

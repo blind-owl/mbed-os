@@ -1358,7 +1358,7 @@ void dlci_establish_self_initated_sem_wait(const void *context)
 
 
 /* Do successfull self iniated dlci establishment.*/
-void dlci_self_iniated_establish(Role role, uint8_t dlci_id)
+FileHandle* dlci_self_iniated_establish(Role role, uint8_t dlci_id)
 {
     const uint32_t address      = ((role == ROLE_INITIATOR) ? 3u : 1u) | (dlci_id << 2);        
     const uint8_t write_byte[6] = 
@@ -1405,6 +1405,8 @@ void dlci_self_iniated_establish(Role role, uint8_t dlci_id)
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_SUCCESS);      
     CHECK(obj != NULL);
     CHECK(!MuxClient::is_dlci_establish_triggered());
+    
+    return obj;
 }
 
 
@@ -4821,6 +4823,181 @@ TEST(MultiplexerOpenTestGroup, mux_not_open_dm_tx_full_frame_write_in_loop)
     };           
     
     peer_iniated_request_rx_full_frame_tx(&(read_byte[0]), sizeof(read_byte), &(write_byte[0]), sizeof(write_byte));
+}
+
+
+static void single_user_tx_full_frame_in_1_write_call_0_information_payload_tx_callback()
+{
+    FAIL("TC FAILURE IF CALLED");
+}
+
+
+/*
+ * TC - 0 length UIH frame TX in 1 write call
+ */
+TEST(MultiplexerOpenTestGroup, single_user_tx_full_frame_in_1_write_call_0_information_payload)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+   
+    const uint8_t dlci_id = 1u;
+    FileHandle* f_handle  = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);   
+    f_handle->sigio(single_user_tx_full_frame_in_1_write_call_0_information_payload_tx_callback);
+    
+    /* Program write cycle. */
+    const uint8_t write_byte[6] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (dlci_id << 2),        
+        (FRAME_TYPE_UIH | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };               
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);        
+    mock_write->input_param[1].param        = sizeof(write_byte);
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = sizeof(write_byte);    
+        
+    const ssize_t ret = f_handle->write(NULL, 0);
+    CHECK_EQUAL(0, ret);
+}
+
+
+static FileHandle* m_file_handle = NULL;
+static uint8_t m_write_byte[7]   = {0};
+
+static void user_tx_callback_triggered_tx_within_callback_tx_callback()
+{
+    /* Issue new write to the same DLCI within the callback context. */
+    const uint8_t user_data = 2u;
+    
+    m_write_byte[0] = FLAG_SEQUENCE_OCTET;
+    m_write_byte[1] = 3u | (1u << 2);
+    m_write_byte[2] = (FRAME_TYPE_UIH | PF_BIT);
+    m_write_byte[3] = LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1);
+    m_write_byte[4] = user_data;
+    m_write_byte[5] = fcs_calculate(&m_write_byte[1], 3u);
+    m_write_byte[6] = FLAG_SEQUENCE_OCTET;            
+   
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(m_write_byte[0]);        
+    mock_write->input_param[1].param        = 7u;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = mock_write->input_param[1].param;    
+
+    const ssize_t ret = m_file_handle->write(&user_data, sizeof(user_data));
+    CHECK_EQUAL(sizeof(user_data), ret);   
+}
+
+
+/*
+ * TC - 1 byte length UIH frame TX in 1 write call
+ * - TX pending cllback called
+ * - new TX done within the callback
+ */
+TEST(MultiplexerOpenTestGroup, user_tx_callback_triggered_tx_within_callback)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+   
+    const uint8_t dlci_id = 1u;
+    m_file_handle         = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);   
+    m_file_handle->sigio(user_tx_callback_triggered_tx_within_callback_tx_callback);
+    
+    /* Program write cycle. */
+    const uint8_t user_data     = 1u;
+    const uint8_t write_byte[7] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (dlci_id << 2),        
+        (FRAME_TYPE_UIH | PF_BIT), 
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&write_byte[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };               
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);        
+    mock_write->input_param[1].param        = sizeof(write_byte);
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 1;    
+    
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[1]);        
+    mock_write->input_param[1].param        = sizeof(write_byte) - sizeof(write_byte[0]);
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;        
+   
+    /* 1st write request accepted by the implementation. */
+    ssize_t ret = m_file_handle->write(&user_data, sizeof(user_data));
+    CHECK_EQUAL(sizeof(user_data), ret);
+    
+    /* 1st write request not yet completed by the implementation, issue 2nd request which sets the pending TX callback. 
+    */
+    const uint8_t user_data_2 = 0xA5u;
+    ret                       = m_file_handle->write(&user_data_2, sizeof(user_data_2));
+    CHECK_EQUAL(0, ret);
+    
+    /* Begin sequence: Complete the 1st write, which triggers the pending TX callback. */    
+    
+    /* Enqueue deferred call to EventQueue. Trigger sigio callback from the Filehandle used by the Mux (component under 
+       test). */
+    mock_t * mock_call = mock_free_get("call");
+    CHECK(mock_call != NULL);           
+    mock_call->return_value                             = 1;        
+    const mbed::FileHandleMock::io_control_t io_control = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};
+    mbed::FileHandleMock::io_control(io_control);    
+    
+    /* Nothing to read within the RX cycle. */
+    mock_t * mock_read = mock_free_get("read");
+    CHECK(mock_read != NULL);
+    mock_read->output_param[0].param       = NULL;
+    mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_read->input_param[0].param        = FRAME_HEADER_READ_LEN;
+    mock_read->return_value                = 0;                         
+    
+    /* Complete the 1st write request which is in progress. */
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[1]);        
+    mock_write->input_param[1].param        = sizeof(write_byte) - sizeof(write_byte[0]);
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = sizeof(write_byte) - sizeof(write_byte[0]);        
+    
+    /* Trigger deferred call to execute the programmed mocks above. */
+    const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
+    mbed::EventQueueMock::io_control(eq_io_control);
+    
+    /* End sequence: Complete the 1st write, which triggers the pending TX callback. */    
 }
 
 } // namespace mbed
