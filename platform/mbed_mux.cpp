@@ -1287,36 +1287,38 @@ ssize_t Mux::user_data_tx(uint8_t dlci_id, const void* buffer, size_t size)
     switch (_tx_context.tx_state) {        
         case TX_IDLE:
             if (!_state.is_tx_callback_context) {
-                /* Proper state to start TX cycle. */
+                /* Proper state to start TX cycle within current context. */
                 
                 user_information_construct(dlci_id, buffer, size);
                 tx_state_change(TX_NORETRANSMIT, tx_noretransmit_entry_run, tx_idle_exit_run);
                 
                 write_ret = size;
             } else {
-                /* Signal callback context to start TX cycle assuming not allready done. */
+                /* Current context is TX callback context. */
                 
                 if (!_state.is_user_tx_pending) { 
+                    /* Signal callback context to start TX cycle and construct the frame. */
 trace("TX_PEND-SET", 0);                    
                     _state.is_user_tx_pending = 1u;                    
                     user_information_construct(dlci_id, buffer, size);
                     
                     write_ret = size;
                 } else {                    
-                    /* TX allready scheduled, set TX callback pending. */
-//@todo: TC me: 2nd TX from the callback context
-//                    MBED_ASSERT(false);
+                    /* TX cycle allready scheduled, set TX callback pending and inform caller by return value that no 
+                       action was taken. */
 
                     tx_callback_pending_bit_set(dlci_id);
                     write_ret = 0;
                 }
             }
+            
             break;            
         default:
-            /* TX allready in use, set TX callback pending. */
-            
+            /* TX allready in use, set TX callback pending and inform caller by return value that no action was taken. 
+             */
             tx_callback_pending_bit_set(dlci_id);
             write_ret = 0;
+            
             break;
     }
         
