@@ -4885,7 +4885,7 @@ static uint8_t m_user_tx_callback_triggered_tx_within_callback_check_value = 0;
 
 static void user_tx_callback_triggered_tx_within_callback_tx_callback()
 {
-    const uint8_t user_data = 2u;    
+    static const uint8_t user_data = 2u;    
     /* Needs to be static as referenced after this function returns. */ 
     static const uint8_t write_byte[7] = 
     {
