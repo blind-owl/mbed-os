@@ -4934,6 +4934,37 @@ static void user_tx_callback_triggered_tx_within_callback_tx_callback()
 }
 
 
+void single_complete_write_cycle(const uint8_t *write_byte, uint8_t length)
+{
+    mock_t * mock_call = mock_free_get("call");
+    CHECK(mock_call != NULL);           
+    mock_call->return_value                             = 1;        
+    const mbed::FileHandleMock::io_control_t io_control = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};
+    mbed::FileHandleMock::io_control(io_control);    
+    
+    /* Nothing to read within the RX cycle. */
+    mock_t * mock_read = mock_free_get("read");
+    CHECK(mock_read != NULL);
+    mock_read->output_param[0].param       = NULL;
+    mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_read->input_param[0].param        = FRAME_HEADER_READ_LEN;
+    mock_read->return_value                = 0;                         
+    
+    /* Complete the 1st write request which is in progress. */
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)(write_byte);        
+    mock_write->input_param[1].param        = length;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = mock_write->input_param[1].param;        
+    
+    /* Trigger deferred call to execute the programmed mocks above. */
+    const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
+    mbed::EventQueueMock::io_control(eq_io_control);
+}
+
+
 /*
  * TC - 1 byte length UIH frame TX in 1 write call
  * - TX pending cllback called
@@ -4998,36 +5029,9 @@ TEST(MultiplexerOpenTestGroup, user_tx_callback_triggered_tx_within_callback)
     CHECK_EQUAL(0, ret);
     
     /* Begin sequence: Complete the 1st write, which triggers the pending TX callback. */    
-    
-    /* Enqueue deferred call to EventQueue. Trigger sigio callback from the Filehandle used by the Mux (component under 
-       test). */
-    mock_t * mock_call = mock_free_get("call");
-    CHECK(mock_call != NULL);           
-    mock_call->return_value                             = 1;        
-    const mbed::FileHandleMock::io_control_t io_control = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};
-    mbed::FileHandleMock::io_control(io_control);    
-    
-    /* Nothing to read within the RX cycle. */
-    mock_t * mock_read = mock_free_get("read");
-    CHECK(mock_read != NULL);
-    mock_read->output_param[0].param       = NULL;
-    mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_read->input_param[0].param        = FRAME_HEADER_READ_LEN;
-    mock_read->return_value                = 0;                         
-    
-    /* Complete the 1st write request which is in progress. */
-    mock_write = mock_free_get("write");
-    CHECK(mock_write != NULL); 
-    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->input_param[0].param        = (uint32_t)&(write_byte[1]);        
-    mock_write->input_param[1].param        = sizeof(write_byte) - sizeof(write_byte[0]);
-    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->return_value                = sizeof(write_byte) - sizeof(write_byte[0]);        
-    
-    /* Trigger deferred call to execute the programmed mocks above. */
-    const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
-    mbed::EventQueueMock::io_control(eq_io_control);
-    
+
+    single_complete_write_cycle(&(write_byte[1]), (sizeof(write_byte) - sizeof(write_byte[0])));
+
     /* Validate proper callback sequence. */
     CHECK_EQUAL(2, m_user_tx_callback_triggered_tx_within_callback_check_value);
     
@@ -5110,40 +5114,109 @@ TEST(MultiplexerOpenTestGroup, user_tx_callback_set_pending_multiple_times_for_s
     
     /* Begin sequence: Complete the 1st write, which triggers the pending TX callback. */    
     
-    /* Enqueue deferred call to EventQueue. Trigger sigio callback from the Filehandle used by the Mux (component under 
-       test). */
-    mock_t * mock_call = mock_free_get("call");
-    CHECK(mock_call != NULL);           
-    mock_call->return_value                             = 1;        
-    const mbed::FileHandleMock::io_control_t io_control = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};
-    mbed::FileHandleMock::io_control(io_control);    
+    single_complete_write_cycle(&(write_byte[1]), (sizeof(write_byte) - sizeof(write_byte[0])));
+
+    /* Validate proper callback sequence. */
+    CHECK_EQUAL(1u, m_user_tx_callback_set_pending_multiple_times_for_same_dlci_only_1_callback_generated_value);
     
-    /* Nothing to read within the RX cycle. */
-    mock_t * mock_read = mock_free_get("read");
-    CHECK(mock_read != NULL);
-    mock_read->output_param[0].param       = NULL;
-    mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_read->input_param[0].param        = FRAME_HEADER_READ_LEN;
-    mock_read->return_value                = 0;                         
+    /* End sequence: Complete the 1st write, which triggers the pending TX callback. */        
+}
+
+
+static uint8_t m_user_tx_callback_set_pending_for_all_dlcis_check_value = 0;
+static void user_tx_callback_set_pending_for_all_dlcis_tx_callback()
+{
+    ++m_user_tx_callback_set_pending_for_all_dlcis_check_value;
+}
+
+
+/*
+ * TC - all channels have TX callback pending 
+ * - Expected bahaviour: Correct amount of callbacks executed
+ */
+TEST(MultiplexerOpenTestGroup, user_tx_callback_set_pending_for_all_dlcis)
+{
+    m_user_tx_callback_set_pending_for_all_dlcis_check_value = 0;
     
-    /* Complete the 1st write request which is in progress. */
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+    
+    /* Create max amount of DLCIs and collect the handles */
+    uint8_t dlci_id = DLCI_ID_LOWER_BOUND;
+    for (uint8_t i = 0; i!= MAX_DLCI_COUNT; ++i) {
+        m_file_handle[i] = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);             
+        CHECK(m_file_handle[i] != NULL);
+        (m_file_handle[i])->sigio(user_tx_callback_set_pending_for_all_dlcis_tx_callback);
+        
+        ++dlci_id;
+    }    
+    
+    /* All available DLCI ids consumed. Next request will fail. */
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
+    FileHandle *obj              = NULL;
+    const uint32_t establish_ret = mbed::Mux::dlci_establish(dlci_id, status, &obj);
+    CHECK_EQUAL(establish_ret, 0);    
+    CHECK_EQUAL(obj, NULL);  
+   
+    /* Program write cycle. */
+    dlci_id                     = DLCI_ID_LOWER_BOUND;    
+    const uint8_t user_data     = 1u;
+    const uint8_t write_byte[7] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (dlci_id << 2),        
+        (FRAME_TYPE_UIH | PF_BIT), 
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&write_byte[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };               
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);        
+    mock_write->input_param[1].param        = sizeof(write_byte);
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 1;    
+    
     mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->input_param[0].param        = (uint32_t)&(write_byte[1]);        
     mock_write->input_param[1].param        = sizeof(write_byte) - sizeof(write_byte[0]);
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->return_value                = sizeof(write_byte) - sizeof(write_byte[0]);        
+    mock_write->return_value                = 0;        
+   
+    /* 1st write request accepted by the implementation. */
+    ssize_t write_ret = (m_file_handle[0])->write(&user_data, sizeof(user_data));
+    CHECK_EQUAL(sizeof(user_data), write_ret);
     
-    /* Trigger deferred call to execute the programmed mocks above. */
-    const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
-    mbed::EventQueueMock::io_control(eq_io_control);
+    /* TX cycle in progress, all further write request will fail. */
+    for (uint8_t i = 0; i!= MAX_DLCI_COUNT; ++i) {
+        ssize_t write_ret = (m_file_handle[i])->write(&user_data, sizeof(user_data));
+        CHECK_EQUAL(0, write_ret);        
+    }
     
+    /* Begin sequence: Complete the 1st write, which triggers the pending TX callback. */    
+    
+    single_complete_write_cycle(&(write_byte[1]), (sizeof(write_byte) - sizeof(write_byte[0])));
+
     /* Validate proper callback sequence. */
-    CHECK_EQUAL(1u, m_user_tx_callback_set_pending_multiple_times_for_same_dlci_only_1_callback_generated_value);
+    CHECK_EQUAL(MAX_DLCI_COUNT, m_user_tx_callback_set_pending_for_all_dlcis_check_value);
     
-    /* End sequence: Complete the 1st write, which triggers the pending TX callback. */        
+    /* End sequence: Complete the 1st write, which triggers the pending TX callback. */            
 }
+
+
 
 /*
  * TC - all channels have TX callback pending and no action is taken within the callback handler
