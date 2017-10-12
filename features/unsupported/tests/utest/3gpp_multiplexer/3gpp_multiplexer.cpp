@@ -4877,31 +4877,61 @@ TEST(MultiplexerOpenTestGroup, single_user_tx_full_frame_in_1_write_call_0_infor
 
 
 static FileHandle* m_file_handle = NULL;
-static uint8_t m_write_byte[7]   = {0};
+
+//TC: sama ID pending monta kertaa ainoastaan 1 callback, muuta 
+
+
+static uint8_t m_user_tx_callback_triggered_tx_within_callback_check_value = 0;
 
 static void user_tx_callback_triggered_tx_within_callback_tx_callback()
 {
-    /* Issue new write to the same DLCI within the callback context. */
-    const uint8_t user_data = 2u;
+    const uint8_t user_data = 2u;    
+    /* Needs to be static as referenced after this function returns. */ 
+    static const uint8_t write_byte[7] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (1u << 2),        
+        (FRAME_TYPE_UIH | PF_BIT), 
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&write_byte[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };                                   
     
-    m_write_byte[0] = FLAG_SEQUENCE_OCTET;
-    m_write_byte[1] = 3u | (1u << 2);
-    m_write_byte[2] = (FRAME_TYPE_UIH | PF_BIT);
-    m_write_byte[3] = LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1);
-    m_write_byte[4] = user_data;
-    m_write_byte[5] = fcs_calculate(&m_write_byte[1], 3u);
-    m_write_byte[6] = FLAG_SEQUENCE_OCTET;            
-   
-    mock_t * mock_write = mock_free_get("write");
-    CHECK(mock_write != NULL); 
-    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->input_param[0].param        = (uint32_t)&(m_write_byte[0]);        
-    mock_write->input_param[1].param        = 7u;
-    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->return_value                = mock_write->input_param[1].param;    
+    switch (m_user_tx_callback_triggered_tx_within_callback_check_value) {
+        case 0:
+            m_user_tx_callback_triggered_tx_within_callback_check_value = 1u;
+            
+            /* Issue new write to the same DLCI within the callback context. */
+                                             
+            mock_t * mock_write = mock_free_get("write");
+            CHECK(mock_write != NULL); 
+            mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+            mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);        
+            mock_write->input_param[1].param        = sizeof(write_byte);
+            mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+            /* Write all in a 1 write request. */
+            mock_write->return_value                = mock_write->input_param[1].param;    
 
-    const ssize_t ret = m_file_handle->write(&user_data, sizeof(user_data));
-    CHECK_EQUAL(sizeof(user_data), ret);   
+            /* This write is started when this callback function returns. */
+            ssize_t ret = m_file_handle->write(&user_data, sizeof(user_data));
+            CHECK_EQUAL(sizeof(user_data), ret);   
+
+            /* This write request will set the pending TX callback, and triggers this function to be called 2nd time. */
+            const uint8_t user_data_2 = 0xA5u;
+            ret                       = m_file_handle->write(&user_data_2, sizeof(user_data_2));
+            CHECK_EQUAL(0, ret);  
+            
+            break;
+        case 1:
+            m_user_tx_callback_triggered_tx_within_callback_check_value = 2u;     
+            
+            break;
+        default:
+            FAIL("FAIL");
+            
+            break;
+    }
 }
 
 
@@ -4912,6 +4942,8 @@ static void user_tx_callback_triggered_tx_within_callback_tx_callback()
  */
 TEST(MultiplexerOpenTestGroup, user_tx_callback_triggered_tx_within_callback)
 {
+    m_user_tx_callback_triggered_tx_within_callback_check_value = 0;
+
     mbed::FileHandleMock fh_mock;   
     mbed::EventQueueMock eq_mock;
     
@@ -4996,6 +5028,9 @@ TEST(MultiplexerOpenTestGroup, user_tx_callback_triggered_tx_within_callback)
     /* Trigger deferred call to execute the programmed mocks above. */
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
     mbed::EventQueueMock::io_control(eq_io_control);
+    
+    /* Validate proper callback sequence. */
+    CHECK_EQUAL(2, m_user_tx_callback_triggered_tx_within_callback_check_value);
     
     /* End sequence: Complete the 1st write, which triggers the pending TX callback. */    
 }
