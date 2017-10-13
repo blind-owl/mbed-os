@@ -529,7 +529,7 @@ uint8_t Mux::tx_callback_index_advance()
     if ((index & 0x0Fu) == 0) {
         index = 1u;
     }
-          
+
     /* Clear existing index bit and assign the new incremented index bit. */
     _tx_context.tx_callback_context &= 0x0Fu;
     _tx_context.tx_callback_context |= (index << 4);
@@ -1251,16 +1251,7 @@ void Mux::user_information_construct(uint8_t dlci_id, const void* buffer, size_t
     *(++fcs_pos)     = FLAG_SEQUENCE_OCTET;
     
     _tx_context.bytes_remaining = UIH_FRAME_MIN_LEN + size;
-    _tx_context.offset          = 0;                        
-    
-    //&(Mux::_tx_context.buffer[0]) + (sizeof(*frame_hdr) + size);
-#if 0    
-    frame_hdr->information[0] = fcs_calculate(&(Mux::_tx_context.buffer[1]), FCS_INPUT_LEN);    
-    (++frame_hdr)->flag_seq   = FLAG_SEQUENCE_OCTET;
-    
-    _tx_context.bytes_remaining = SABM_FRAME_LEN;
-    _tx_context.offset          = 0;                    
-#endif // 0    
+    _tx_context.offset          = 0;
 }
 
 
@@ -1297,6 +1288,7 @@ ssize_t Mux::user_data_tx(uint8_t dlci_id, const void* buffer, size_t size)
                 /* Current context is TX callback context. */
                 
                 if (!_state.is_user_tx_pending) { 
+//@todo: ALLWAYS CLEAR PENDING BIT HERE                    
                     /* Signal callback context to start TX cycle and construct the frame. */
 trace("TX_PEND-SET", 0);                    
                     _state.is_user_tx_pending = 1u;                    
