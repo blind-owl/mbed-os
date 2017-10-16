@@ -1724,6 +1724,66 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_all_dlci_ids_used)
 }
 
 
+bool is_file_handle_uniqueue(FileHandle* obj, uint8_t current_idx)
+{
+    if (current_idx == 0) {
+        return true;
+    }
+    
+    for (uint8_t i = 0; i != current_idx; ++i) {
+        if (m_file_handle[i] == obj) {
+            return false;
+        }
+    }        
+    
+    m_file_handle[current_idx] = obj;
+    
+    return true;
+}
+
+
+/*
+ * TC - dlci establishment sequence, self initiated, role initiator: all DLCI ids used
+ * Cloned from TC: dlci_establish_self_initiated_all_dlci_ids_used
+ * 
+ * Difference: ensures established DLCIs are uniqueue
+ */
+TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_consume_all_dlci_ids_ensure_uniqueue)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+
+    FileHandle *obj;
+    bool bool_check;
+    uint8_t dlci_id = DLCI_ID_LOWER_BOUND;
+    for (uint8_t i = 0; i != MAX_DLCI_COUNT; ++i) {
+        obj = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);
+        CHECK(obj != NULL);
+        bool_check = is_file_handle_uniqueue(obj, i);
+        CHECK(bool_check);
+        m_file_handle[i] = obj;        
+
+        ++dlci_id;        
+    }
+
+    /* All available DLCI ids consumed. Next request will fail. */
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
+    obj = NULL;
+    const uint32_t ret = mbed::Mux::dlci_establish(dlci_id, status, &obj);
+    CHECK_EQUAL(ret, 0);    
+    CHECK_EQUAL(obj, NULL);        
+}
+
+
 void single_write_cycle_fail(const uint8_t *write_byte,
                              uint8_t        tx_len, 
                              uint8_t        read_len, 
