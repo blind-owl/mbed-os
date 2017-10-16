@@ -4882,7 +4882,7 @@ TEST(MultiplexerOpenTestGroup, single_user_tx_full_frame_in_1_write_call_0_infor
 
 
 static uint8_t m_user_tx_callback_triggered_tx_within_callback_check_value = 0;
-static void user_tx_callback_triggered_tx_within_callback_tx_callback()
+static void tx_callback_dispatch_triggered_tx_within_callback_tx_callback()
 {
     static const uint8_t user_data = 2u;    
     /* Needs to be static as referenced after this function returns. */ 
@@ -4970,7 +4970,7 @@ void single_complete_write_cycle(const uint8_t *write_byte, uint8_t length)
  * - TX pending cllback called
  * - new TX done within the callback
  */
-TEST(MultiplexerOpenTestGroup, user_tx_callback_triggered_tx_within_callback)
+TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_triggered_tx_within_callback)
 {
     m_user_tx_callback_triggered_tx_within_callback_check_value = 0;
 
@@ -4988,7 +4988,7 @@ TEST(MultiplexerOpenTestGroup, user_tx_callback_triggered_tx_within_callback)
    
     const uint8_t dlci_id = 1u;
     m_file_handle[0]      = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);   
-    (m_file_handle[0])->sigio(user_tx_callback_triggered_tx_within_callback_tx_callback);
+    (m_file_handle[0])->sigio(tx_callback_dispatch_triggered_tx_within_callback_tx_callback);
     
     /* Program write cycle. */
     const uint8_t user_data     = 1u;
@@ -5039,7 +5039,7 @@ TEST(MultiplexerOpenTestGroup, user_tx_callback_triggered_tx_within_callback)
 }
 
 static uint8_t m_user_tx_callback_set_pending_multiple_times_for_same_dlci_only_1_callback_generated_value = 0;
-static void user_tx_callback_set_pending_multiple_times_for_same_dlci_only_1_callback_generated_cb()
+static void tx_callback_dispatch_set_pending_multiple_times_for_same_dlci_only_1_callback_generated_cb()
 {
     ++m_user_tx_callback_set_pending_multiple_times_for_same_dlci_only_1_callback_generated_value;
 }
@@ -5048,7 +5048,7 @@ static void user_tx_callback_set_pending_multiple_times_for_same_dlci_only_1_cal
 /*
  * TC - TX callback pending is set multiple times for same DLCI only 1 callback gets generated.
  */
-TEST(MultiplexerOpenTestGroup, user_tx_callback_set_pending_multiple_times_for_same_dlci_only_1_callback_generated)
+TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_set_pending_multiple_times_for_same_dlci_only_1_callback_generated)
 {
     m_user_tx_callback_set_pending_multiple_times_for_same_dlci_only_1_callback_generated_value = 0;
 
@@ -5066,7 +5066,8 @@ TEST(MultiplexerOpenTestGroup, user_tx_callback_set_pending_multiple_times_for_s
    
     const uint8_t dlci_id = 1u;
     m_file_handle[0]      = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);   
-    (m_file_handle[0])->sigio(user_tx_callback_set_pending_multiple_times_for_same_dlci_only_1_callback_generated_cb);
+    
+(m_file_handle[0])->sigio(tx_callback_dispatch_set_pending_multiple_times_for_same_dlci_only_1_callback_generated_cb);
     
     /* Program write cycle. */
     const uint8_t user_data     = 1u;
@@ -5124,7 +5125,7 @@ TEST(MultiplexerOpenTestGroup, user_tx_callback_set_pending_multiple_times_for_s
 
 
 static uint8_t m_user_tx_callback_set_pending_for_all_dlcis_check_value = 0;
-static void user_tx_callback_set_pending_for_all_dlcis_tx_callback()
+static void tx_callback_dispatch_set_pending_for_all_dlcis_tx_callback()
 {
     ++m_user_tx_callback_set_pending_for_all_dlcis_check_value;
 }
@@ -5134,7 +5135,7 @@ static void user_tx_callback_set_pending_for_all_dlcis_tx_callback()
  * TC - all channels have TX callback pending 
  * - Expected bahaviour: Correct amount of callbacks executed
  */
-TEST(MultiplexerOpenTestGroup, user_tx_callback_set_pending_for_all_dlcis)
+TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_set_pending_for_all_dlcis)
 {
     m_user_tx_callback_set_pending_for_all_dlcis_check_value = 0;
     
@@ -5155,7 +5156,7 @@ TEST(MultiplexerOpenTestGroup, user_tx_callback_set_pending_for_all_dlcis)
     for (uint8_t i = 0; i!= MAX_DLCI_COUNT; ++i) {
         m_file_handle[i] = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);             
         CHECK(m_file_handle[i] != NULL);
-        (m_file_handle[i])->sigio(user_tx_callback_set_pending_for_all_dlcis_tx_callback);
+        (m_file_handle[i])->sigio(tx_callback_dispatch_set_pending_for_all_dlcis_tx_callback);
         
         ++dlci_id;
     }    
@@ -5218,7 +5219,7 @@ TEST(MultiplexerOpenTestGroup, user_tx_callback_set_pending_for_all_dlcis)
 
 
 static uint8_t m_user_tx_callback_rollover_tx_pending_bitmask_check_value = 0;
-static void user_tx_callback_rollover_tx_pending_bitmask_tx_callback()
+static void tx_callback_dispatch_rollover_tx_pending_bitmask_tx_callback()
 {
     ++m_user_tx_callback_rollover_tx_pending_bitmask_check_value;
     
@@ -5271,7 +5272,7 @@ static void user_tx_callback_rollover_tx_pending_bitmask_tx_callback()
  * Expected outcome:
  * - Validate proper TX callback callcount in m_user_tx_callback_rollover_tx_pending_bitmask_check_value
  */
-TEST(MultiplexerOpenTestGroup, user_tx_callback_rollover_tx_pending_bitmask)
+TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_rollover_tx_pending_bitmask)
 {
     m_user_tx_callback_rollover_tx_pending_bitmask_check_value = 0;
     
@@ -5292,7 +5293,7 @@ TEST(MultiplexerOpenTestGroup, user_tx_callback_rollover_tx_pending_bitmask)
     for (uint8_t i = 0; i!= MAX_DLCI_COUNT; ++i) {
         m_file_handle[i] = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);             
         CHECK(m_file_handle[i] != NULL);
-        (m_file_handle[i])->sigio(user_tx_callback_rollover_tx_pending_bitmask_tx_callback);
+        (m_file_handle[i])->sigio(tx_callback_dispatch_rollover_tx_pending_bitmask_tx_callback);
         
         ++dlci_id;
     }    
@@ -5348,7 +5349,7 @@ TEST(MultiplexerOpenTestGroup, user_tx_callback_rollover_tx_pending_bitmask)
 
 
 static uint8_t m_user_tx_callback_tx_to_different_dlci_check_value = 0;
-static void user_tx_callback_tx_to_different_dlci_tx_callback()
+static void tx_callback_dispatch_tx_to_different_dlci_tx_callback()
 {
     static const uint8_t user_data = 2u;    
     /* Needs to be static as referenced after this function returns. */ 
@@ -5415,7 +5416,7 @@ static void user_tx_callback_tx_to_different_dlci_tx_callback()
  * Expected outcome:
  * - Validate proper TX callback callcount in m_user_tx_callback_tx_to_different_dlci_check_value
  */
-TEST(MultiplexerOpenTestGroup, user_tx_callback_tx_to_different_dlci_within_current_context)
+TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_tx_to_different_dlci_within_current_context)
 {
     m_user_tx_callback_tx_to_different_dlci_check_value = 0;
     
@@ -5436,7 +5437,7 @@ TEST(MultiplexerOpenTestGroup, user_tx_callback_tx_to_different_dlci_within_curr
     for (uint8_t i = 0; i!= 2u; ++i) {
         m_file_handle[i] = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);             
         CHECK(m_file_handle[i] != NULL);
-        (m_file_handle[i])->sigio(user_tx_callback_tx_to_different_dlci_tx_callback);
+        (m_file_handle[i])->sigio(tx_callback_dispatch_tx_to_different_dlci_tx_callback);
         
         ++dlci_id;
     }
@@ -5493,7 +5494,7 @@ TEST(MultiplexerOpenTestGroup, user_tx_callback_tx_to_different_dlci_within_curr
 static uint8_t m_write_byte[7];
 
 static uint8_t m_user_tx_callback_tx_to_different_dlci_not_within_current_context_check_value = 0;
-static void user_tx_callback_tx_to_different_dlci_not_within_current_context_tx_callback()
+static void tx_callback_dispatch_tx_to_different_dlci_not_within_current_context_tx_callback()
 {
     const uint8_t user_data = 2u;    
     
@@ -5565,7 +5566,7 @@ static void user_tx_callback_tx_to_different_dlci_not_within_current_context_tx_
  * - Validate proper TX callback callcount in 
  *   m_user_tx_callback_tx_to_different_dlci_not_within_current_context_check_value
  */
-TEST(MultiplexerOpenTestGroup, user_tx_callback_tx_to_different_dlci_not_within_current_context)
+TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_tx_to_different_dlci_not_within_current_context)
 {
     m_user_tx_callback_tx_to_different_dlci_not_within_current_context_check_value = 0;
     
@@ -5586,7 +5587,7 @@ TEST(MultiplexerOpenTestGroup, user_tx_callback_tx_to_different_dlci_not_within_
     for (uint8_t i = 0; i!= 2u; ++i) {
         m_file_handle[i] = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);             
         CHECK(m_file_handle[i] != NULL);
-        (m_file_handle[i])->sigio(user_tx_callback_tx_to_different_dlci_not_within_current_context_tx_callback);
+        (m_file_handle[i])->sigio(tx_callback_dispatch_tx_to_different_dlci_not_within_current_context_tx_callback);
         
         ++dlci_id;
     }
