@@ -656,7 +656,7 @@ trace("NO TX PEND", 0);
             
             /* Clear pending bit and dispatch TX callback. */
             tx_callback_pending_bit_clear(current_tx_index);
-trace("TX_PEND-DISPATCH", current_tx_index);                   
+//trace("TX_PEND-DISPATCH", current_tx_index);                   
             tx_callback_dispatch(current_tx_index);
             
             /* No valid use case exists for TX cycle activation within TX callback as per design user TX is started 
@@ -1294,7 +1294,7 @@ ssize_t Mux::user_data_tx(uint8_t dlci_id, const void* buffer, size_t size)
                      * stored sequence this will result to dispatching 1 unnecessary TX callback, if this is a issue one
                      * should clear the TX callback pending bit marker for this DLCI in this place. */
 
-trace("TX_PEND-SET", 0);                    
+//trace("TX_PEND-SET", 0);                    
                     _state.is_user_tx_pending = 1u;                    
                     user_information_construct(dlci_id, buffer, size);
                     

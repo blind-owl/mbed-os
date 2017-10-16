@@ -1704,10 +1704,12 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_all_dlci_ids_used)
     
     mux_self_iniated_open();
     
+    FileHandle* f_handle;
     uint8_t i       = MAX_DLCI_COUNT;
     uint8_t dlci_id = DLCI_ID_LOWER_BOUND;
     do {
-        dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);
+        f_handle = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);
+        CHECK(f_handle != NULL);
        
         --i;
         ++dlci_id;
@@ -5639,101 +5641,6 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_tx_to_different_dlci_not_wit
     
     /* Validate proper TX callback callcount. */
     CHECK_EQUAL(2u, m_user_tx_callback_tx_to_different_dlci_not_within_current_context_check_value);
-}
-
-
-/*
- * TC - all channels have TX callback pending and no action is taken within the callback handler
- * extecped results:
- * - Callbacks are executed within correct order
- */
-TEST(MultiplexerOpenTestGroup, user_tx_callback_max_amount_no_action_within_callback)
-{
-#if 0    
-    
-#if 1
-
-    mbed::FileHandleMock fh_mock;   
-    mbed::EventQueueMock eq_mock;
-    
-    mbed::Mux::eventqueue_attach(&eq_mock);
-       
-    /* Set and test mock. */
-    mock_t * mock_sigio = mock_free_get("sigio");    
-    CHECK(mock_sigio != NULL);      
-    mbed::Mux::serial_attach(&fh_mock);
-    
-    mux_self_iniated_open();
-    
-    uint8_t dlci_id = DLCI_ID_LOWER_BOUND;
-    for (uint8_t i = 0; i!= MAX_DLCI_COUNT; ++i) {
-        m_file_handle[i] = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);             
-        ++dlci_id;
-    }    
-#if 0
-    /* Create max amount of DLCIs and collect the handles */
-    uint8_t dlci_id;// = DLCI_ID_LOWER_BOUND;
-    for (uint8_t i = 0, dlci_id = DLCI_ID_LOWER_BOUND; i!= MAX_DLCI_COUNT; ++i, ++dlci_id) {
-        m_file_handle[i] = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);             
-    }
-#endif 
-#if 0
-    uint8_t i       = MAX_DLCI_COUNT;
-    uint8_t dlci_id = DLCI_ID_LOWER_BOUND;
-    do {
-        dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);
-       
-        --i;
-        ++dlci_id;
-    } while (i != 0);
-#endif // 0    
-    
-    /* All available DLCI ids consumed. Next request will fail. */
-    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    FileHandle *obj    = NULL;
-    const uint32_t ret = mbed::Mux::dlci_establish(dlci_id, status, &obj);
-    CHECK_EQUAL(ret, 0);    
-    CHECK_EQUAL(obj, NULL);    
-#endif // 0
-#if 0    
-    const uint8_t dlci_id = 1u;
-    m_file_handle         = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);   
-    m_file_handle->sigio(user_tx_callback_triggered_tx_within_callback_tx_callback);
-    
-    /* Program write cycle. */
-    const uint8_t user_data     = 1u;
-    const uint8_t write_byte[7] = 
-    {
-        FLAG_SEQUENCE_OCTET,
-        3u | (dlci_id << 2),        
-        (FRAME_TYPE_UIH | PF_BIT), 
-        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
-        user_data,
-        fcs_calculate(&write_byte[1], 3u),
-        FLAG_SEQUENCE_OCTET
-    };               
-    mock_t * mock_write = mock_free_get("write");
-    CHECK(mock_write != NULL); 
-    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);        
-    mock_write->input_param[1].param        = sizeof(write_byte);
-    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->return_value                = 1;    
-    
-    mock_write = mock_free_get("write");
-    CHECK(mock_write != NULL); 
-    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->input_param[0].param        = (uint32_t)&(write_byte[1]);        
-    mock_write->input_param[1].param        = sizeof(write_byte) - sizeof(write_byte[0]);
-    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->return_value                = 0;        
-   
-    /* 1st write request accepted by the implementation. */
-    ssize_t ret = m_file_handle->write(&user_data, sizeof(user_data));
-    CHECK_EQUAL(sizeof(user_data), ret);    
-#endif // 0    
-
-#endif // 0
 }
 
 
