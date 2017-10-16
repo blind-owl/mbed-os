@@ -5332,7 +5332,7 @@ TEST(MultiplexerOpenTestGroup, user_tx_callback_rollover_tx_pending_bitmask)
     
     /* TX cycle in progress, set TX pending bit for all established DLCIs. */
     for (uint8_t i = 0; i!= MAX_DLCI_COUNT; ++i) {
-        ssize_t write_ret = (m_file_handle[i])->write(&user_data, sizeof(user_data));
+        write_ret = (m_file_handle[i])->write(&user_data, sizeof(user_data));
         CHECK_EQUAL(0, write_ret);        
     }    
     
@@ -5344,6 +5344,150 @@ TEST(MultiplexerOpenTestGroup, user_tx_callback_rollover_tx_pending_bitmask)
     CHECK_EQUAL((MAX_DLCI_COUNT +1u), m_user_tx_callback_rollover_tx_pending_bitmask_check_value);
     
     /* End sequence: Complete the 1st write, which triggers the pending TX callback. */                
+}
+
+
+static uint8_t m_user_tx_callback_tx_to_different_dlci_check_value = 0;
+static void user_tx_callback_tx_to_different_dlci_tx_callback()
+{
+    static const uint8_t user_data = 2u;    
+    /* Needs to be static as referenced after this function returns. */ 
+    static const uint8_t write_byte[7] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | ((DLCI_ID_LOWER_BOUND +1u) << 2),        
+        (FRAME_TYPE_UIH | PF_BIT), 
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&write_byte[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+        
+    switch (m_user_tx_callback_tx_to_different_dlci_check_value) {
+        mock_t * mock_write;
+        ssize_t write_ret;
+        case 0:
+            /* Current context is TX callback for the 1st handle. */
+            
+            ++m_user_tx_callback_tx_to_different_dlci_check_value;
+            
+            mock_write = mock_free_get("write");
+            CHECK(mock_write != NULL); 
+            mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+            mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);        
+            mock_write->input_param[1].param        = sizeof(write_byte);
+            mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+            /* Write all in a 1 write request, which will guarantee callback processing continues within current 
+             * disptach loop. */
+            mock_write->return_value = mock_write->input_param[1].param;    
+
+            /* Start TX to 2nd handle. */
+            write_ret = (m_file_handle[1])->write(&user_data, sizeof(user_data));
+            CHECK_EQUAL(sizeof(user_data), write_ret);               
+            break;
+        case 1:
+            /* Current context is TX callback for the 2nd handle. */
+            
+            ++m_user_tx_callback_tx_to_different_dlci_check_value;            
+            break;
+        default:
+            /*No implementtaion required. Proper callback count enforced within the test body. */
+            break;
+    }
+}
+
+
+/*
+ * TC - Ensure correct TX callbac count when doing TX, from TX callback, to a different DLCI than the current TX 
+ * callback
+ * 
+ * @note: The current implementation is not optimal as If user is starting a TX to a DLCI, which is after the current 
+ *        DLCI TX callback within the stored sequence this will result to dispatching 1 unnecessary TX callback, if this 
+ *        is a issue one should clear the TX callback pending bit marker for this DLCI in @ref Mux::user_data_tx(...)
+ *        in the place having @note and update this TC accordingly
+ * 
+ * Test sequence:
+ * 1. Establish 2 DLCIs
+ * 2. Set TX pending bit for all establish DLCIs
+ * 3. Within 1st DLCI callback issue write for 2nd DLCI of the sequence, which completes the TX cycle within the call 
+ *    context
+ * 
+ * Expected outcome:
+ * - Validate proper TX callback callcount in m_user_tx_callback_tx_to_different_dlci_check_value
+ */
+TEST(MultiplexerOpenTestGroup, user_tx_callback_tx_to_different_dlci)
+{
+    m_user_tx_callback_tx_to_different_dlci_check_value = 0;
+    
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+   
+    /* Create 2 DLCIs and collect the handles. */
+    uint8_t dlci_id = DLCI_ID_LOWER_BOUND;
+    for (uint8_t i = 0; i!= 2u; ++i) {
+        m_file_handle[i] = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);             
+        CHECK(m_file_handle[i] != NULL);
+        (m_file_handle[i])->sigio(user_tx_callback_tx_to_different_dlci_tx_callback);
+        
+        ++dlci_id;
+    }
+
+    /* Start write cycle for the 1st DLCI. */
+    dlci_id                     = DLCI_ID_LOWER_BOUND;    
+    const uint8_t user_data     = 1u;
+    const uint8_t write_byte[7] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (dlci_id << 2),        
+        (FRAME_TYPE_UIH | PF_BIT), 
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&write_byte[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };               
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);        
+    mock_write->input_param[1].param        = sizeof(write_byte);
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 1;    
+    
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[1]);        
+    mock_write->input_param[1].param        = sizeof(write_byte) - sizeof(write_byte[0]);
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;        
+   
+    /* 1st write request accepted by the implementation: TX cycle not finished. */
+    ssize_t write_ret = (m_file_handle[0])->write(&user_data, sizeof(user_data));
+    CHECK_EQUAL(sizeof(user_data), write_ret);    
+    
+    /* TX cycle in progress, set TX pending bit for all established DLCIs. */
+    for (uint8_t i = 0; i!= 2u; ++i) {
+        write_ret = (m_file_handle[i])->write(&user_data, sizeof(user_data));
+        CHECK_EQUAL(0, write_ret);        
+    }    
+    
+    /* Begin sequence: Complete the 1st write, which triggers the pending TX callback. */    
+    
+    single_complete_write_cycle(&(write_byte[1]), (sizeof(write_byte) - sizeof(write_byte[0])));
+    
+    /* Validate proper TX callback callcount. */
+    CHECK_EQUAL(2u, m_user_tx_callback_tx_to_different_dlci_check_value);
+    
+    /* End sequence: Complete the 1st write, which triggers the pending TX callback. */                    
 }
 
 

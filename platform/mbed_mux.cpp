@@ -1287,9 +1287,13 @@ ssize_t Mux::user_data_tx(uint8_t dlci_id, const void* buffer, size_t size)
             } else {
                 /* Current context is TX callback context. */
                 
-                if (!_state.is_user_tx_pending) { 
-//@todo: ALLWAYS CLEAR PENDING BIT HERE                    
+                if (!_state.is_user_tx_pending) {
                     /* Signal callback context to start TX cycle and construct the frame. */
+                    
+                    /* @note: If user is starting a TX to a DLCI, which is after the current DLCI TX callback within the
+                     * stored sequence this will result to dispatching 1 unnecessary TX callback, if this is a issue one
+                     * should clear the TX callback pending bit marker for this DLCI in this place. */
+
 trace("TX_PEND-SET", 0);                    
                     _state.is_user_tx_pending = 1u;                    
                     user_information_construct(dlci_id, buffer, size);
