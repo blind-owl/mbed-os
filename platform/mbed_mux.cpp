@@ -1270,7 +1270,7 @@ ssize_t Mux::user_data_tx(uint8_t dlci_id, const void* buffer, size_t size)
 // @todo: get mutex
 
     // @todo: add MBED_ASSERT for max size
-    MBED_ASSERT((size & ~0x7Fu) == 0);
+    MBED_ASSERT(size <= (MBED_CONF_BUFFER_SIZE - 6u)); // @todo: define magic
     if (size != 0) {
         MBED_ASSERT(buffer != NULL);
     }

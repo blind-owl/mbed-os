@@ -37,7 +37,7 @@
 #define MBED_CONF_MUX_DLCI_COUNT    3u
 #endif
 #ifndef MBED_CONF_BUFFER_SIZE
-#define MBED_CONF_BUFFER_SIZE       64u
+#define MBED_CONF_BUFFER_SIZE       31u
 #endif 
 
 /* @todo:
