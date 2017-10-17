@@ -4944,6 +4944,81 @@ TEST(MultiplexerOpenTestGroup, user_tx_full_frame_in_1_write_call_0_information_
 }
 
 
+static void user_tx_2_full_frame_writes_tx_callback()
+{
+    FAIL("TC FAILURE IF CALLED");
+}
+
+
+/*
+ * TC - 2 sequential UIH frame TX in 1 write call
+ */
+TEST(MultiplexerOpenTestGroup, user_tx_2_full_frame_writes)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+   
+    const uint8_t dlci_id = 1u;
+    FileHandle* f_handle  = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);   
+    f_handle->sigio(user_tx_2_full_frame_writes_tx_callback);
+    
+    /* Program write cycle, complete in 1 write call within the call context. */
+    uint8_t user_data = 0xA5u;
+    const uint8_t write_byte_1[7] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (dlci_id << 2),        
+        (FRAME_TYPE_UIH | PF_BIT), 
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&write_byte_1[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };    
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte_1[0]);        
+    mock_write->input_param[1].param        = sizeof(write_byte_1);
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = mock_write->input_param[1].param;
+
+    ssize_t write_ret = f_handle->write(&user_data, sizeof(user_data));
+    CHECK_EQUAL(sizeof(user_data), write_ret);    
+    
+    /* Program write cycle, complete in 1 write call within the call context. */    
+    ++user_data;
+    const uint8_t write_byte_2[7] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (dlci_id << 2),        
+        (FRAME_TYPE_UIH | PF_BIT), 
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&write_byte_2[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };                      
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte_2[0]);        
+    mock_write->input_param[1].param        = sizeof(write_byte_2);
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = mock_write->input_param[1].param;        
+
+    write_ret = f_handle->write(&user_data, sizeof(user_data));
+    CHECK_EQUAL(sizeof(user_data), write_ret);    
+}
+
+
 void single_complete_write_cycle(const uint8_t *write_byte, 
                                  uint8_t        length, 
                                  const uint8_t *new_write_byte)
@@ -5459,8 +5534,6 @@ static void tx_callback_dispatch_rollover_tx_pending_bitmask_tx_callback()
         write_ret = (m_file_handle[0])->write(&user_data, sizeof(user_data));
         CHECK_EQUAL(0, write_ret);                
     }
-    
-    
 }
 
 
