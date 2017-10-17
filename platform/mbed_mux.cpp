@@ -1127,6 +1127,7 @@ uint32_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHa
             }
             break;
         case TX_INTERNAL_RESP:
+        case TX_NORETRANSMIT:
             _state.is_dlci_open_self_iniated_pending = 1u;
             _dlci_id                                 = dlci_id;
 // @todo: add mutex_free               
