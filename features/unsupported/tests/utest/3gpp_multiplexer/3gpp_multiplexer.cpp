@@ -4893,7 +4893,7 @@ TEST(MultiplexerOpenTestGroup, mux_not_open_dm_tx_full_frame_write_in_loop)
 }
 
 
-static void single_user_tx_full_frame_in_1_write_call_0_information_payload_tx_callback()
+static void user_tx_full_frame_in_1_write_call_0_information_payload_tx_callback()
 {
     FAIL("TC FAILURE IF CALLED");
 }
@@ -4902,7 +4902,7 @@ static void single_user_tx_full_frame_in_1_write_call_0_information_payload_tx_c
 /*
  * TC - 0 length UIH frame TX in 1 write call
  */
-TEST(MultiplexerOpenTestGroup, single_user_tx_full_frame_in_1_write_call_0_information_payload)
+TEST(MultiplexerOpenTestGroup, user_tx_full_frame_in_1_write_call_0_information_payload)
 {
     mbed::FileHandleMock fh_mock;   
     mbed::EventQueueMock eq_mock;
@@ -4918,7 +4918,7 @@ TEST(MultiplexerOpenTestGroup, single_user_tx_full_frame_in_1_write_call_0_infor
    
     const uint8_t dlci_id = 1u;
     FileHandle* f_handle  = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);   
-    f_handle->sigio(single_user_tx_full_frame_in_1_write_call_0_information_payload_tx_callback);
+    f_handle->sigio(user_tx_full_frame_in_1_write_call_0_information_payload_tx_callback);
     
     /* Program write cycle. */
     const uint8_t write_byte[6] = 
