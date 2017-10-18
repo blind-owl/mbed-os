@@ -2116,6 +2116,39 @@ TEST(MultiplexerOpenTestGroup, mux_open_peer_initiated)
 
 
 /*
+ * TC - DLCI establish, peer initiated:
+ * - receive DLCI START request from the peer
+ * Expected result:
+ * - No action taken by the implementation
+ */
+TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated)
+{ 
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);    
+    
+    mux_self_iniated_open();    
+ 
+    const uint8_t read_byte[5] = 
+    {        
+        1u | (DLCI_ID_LOWER_BOUND << 2),
+        (FRAME_TYPE_SABM | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };    
+
+    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), SKIP_FLAG_SEQUENCE_OCTET, NULL, NULL, 0);
+}
+
+
+/*
  * TC - dlci establishment sequence, self initiated: dlci_id lower bound
  */
 TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_id_lower_bound)
