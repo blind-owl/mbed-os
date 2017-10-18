@@ -767,8 +767,9 @@ ssize_t Mux::on_rx_read_state_header_read()
 //trace("!RX-FRAME_HEADER", 0);
 
     ssize_t read_err;
-    // @todo:DEFECT we need counter for this = > reuse frame_trailer_length? Set init value in state transit time.
-    size_t  read_len = FRAME_HEADER_READ_LEN; 
+    // @todo:DEFECT we need counter for this(as we can enter this func multiple times) = > reuse frame_trailer_length? 
+    // Set init value in state transit time.
+    size_t read_len = FRAME_HEADER_READ_LEN;
     do {
 //trace("read_len", read_len);
         read_err = _serial->read(&(_rx_context.buffer[_rx_context.offset]), read_len);
@@ -1259,7 +1260,7 @@ void Mux::user_information_construct(uint8_t dlci_id, const void* buffer, size_t
 void Mux::tx_noretransmit_entry_run()
 {
 //    _state.is_user_thread_context = 1u; // @todo: is this really so?? we should set this allways in dfc or timeout 
-                                        // to be sure and use is_system_thread_context
+                                          // to be sure and use is_system_thread_context => FEELS LIKE A GOOD IDEA
     write_do();
 //    _state.is_user_thread_context = 0;
 }
