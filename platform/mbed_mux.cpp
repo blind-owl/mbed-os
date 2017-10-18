@@ -80,8 +80,7 @@ void Mux::module_init()
     _state.is_mux_open_self_iniated_pending  = 0;
     _state.is_mux_open_self_iniated_running  = 0;    
     _state.is_dlci_open_self_iniated_pending = 0;
-    _state.is_dlci_open_self_iniated_running = 0;          
-    _state.is_write_error                    = 0;
+    _state.is_dlci_open_self_iniated_running = 0;
     _state.is_user_thread_context            = 0;
     _state.is_tx_callback_context            = 0;
     _state.is_user_tx_pending                = 0;
@@ -121,9 +120,6 @@ void Mux::on_timeout()
                 --(_tx_context.retransmit_counter);
                 frame_retransmit_begin();
                 tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, NULL);
-                if (_state.is_write_error) {
-                    tx_state_change(TX_IDLE, tx_idle_entry_run, NULL); // @todo: untested code
-                }
             } else {
                 /* Retransmission limit reached, change state and release the suspended call thread with appropriate 
                    status code. */
@@ -132,7 +128,8 @@ void Mux::on_timeout()
                 MBED_ASSERT(os_status == osOK);    
                 tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);
                 // @todo: need to be carefull of call order between the thread release and state change.
-            }            
+            }
+            
             break;
         default:
             /* No implementation required. */
@@ -362,14 +359,7 @@ void Mux::pending_self_iniated_mux_open_start()
 
     sabm_request_construct(0);
     tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
-    if (!_state.is_write_error) {
-        _tx_context.retransmit_counter = RETRANSMIT_COUNT;           
-    } else {
-        _establish_status        = MUX_ESTABLISH_WRITE_ERROR;
-        const osStatus os_status = _semaphore.release();
-        MBED_ASSERT(os_status == osOK);        
-        tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);        
-    }
+    _tx_context.retransmit_counter = RETRANSMIT_COUNT; // @todo: set in 1 place         
 }
 
 
@@ -381,20 +371,13 @@ void Mux::pending_self_iniated_dlci_open_start()
 
     sabm_request_construct(_dlci_id);
     tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
-    if (!_state.is_write_error) {
-        _tx_context.retransmit_counter = RETRANSMIT_COUNT;           
-    } else {
-        _establish_status        = MUX_ESTABLISH_WRITE_ERROR;
-        const osStatus os_status = _semaphore.release();
-        MBED_ASSERT(os_status == osOK);        
-        tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);        
-    }   
+    _tx_context.retransmit_counter = RETRANSMIT_COUNT; // @todo: set in 1 place
 }
 
 
 void Mux::tx_idle_exit_run()
 {
-    _state.is_write_error = 0;
+
 }
 
 
@@ -761,10 +744,11 @@ void Mux::write_do()
 //            while ((_tx_context.bytes_remaining != 0) && (write_err > 0)) { // @todo: change to do...while
             do {
                 write_err = _serial->write(&(_tx_context.buffer[_tx_context.offset]), _tx_context.bytes_remaining);
-                if (write_err > 0) {
-                    _tx_context.bytes_remaining -= write_err;
-                    _tx_context.offset          += write_err;
-                }  
+                MBED_ASSERT(write_err >= 0);
+
+                _tx_context.bytes_remaining -= write_err;
+                _tx_context.offset          += write_err;
+
 //trace("!write_err: ", write_err);        
             } while ((_tx_context.bytes_remaining != 0) && (write_err > 0));
 //trace("!E-bytes_remaining: ", _tx_context.bytes_remaining);    
@@ -780,28 +764,8 @@ void Mux::write_do()
                 const Mux::FrameTxType     frame_type = frame_tx_type_resolve();
                 const post_tx_frame_func_t func       = post_tx_func[frame_type];
                 func();                                
-            } else if (write_err < 0) {
-                switch (_tx_context.tx_state) {
-                    osStatus os_status;
-                    case TX_RETRANSMIT_ENQUEUE:
-                        if (_state.is_user_thread_context) {
-                            _state.is_write_error = 1u;
-                        } else {
-                            _establish_status = MUX_ESTABLISH_WRITE_ERROR;
-                            os_status         = _semaphore.release();
-                            MBED_ASSERT(os_status == osOK);                              
-                        }
-                        
-                        tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);            
-                        break;
-                    default:
-                        // @todo: write failure for non user orgined TX: propagate error event to the user
-                        MBED_ASSERT(false);
-                        break;
-                }                  
-            } else {
-                /* No implementation required. */
-            }
+            } 
+            
             break;
         default:
             /* No implementattion required. */
@@ -957,14 +921,7 @@ uint32_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHa
             sabm_request_construct(dlci_id);
             _tx_context.retransmit_counter = RETRANSMIT_COUNT; // @todo: set to tx_idle_exit           
             tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
-            if (_state.is_write_error) {
-                status = MUX_ESTABLISH_WRITE_ERROR;
-// @todo: add mutex_free                                
-                return 4u;
-            }               
-
-            _state.is_dlci_open_self_iniated_running = 1u;
-              
+            _state.is_dlci_open_self_iniated_running = 1u;              
 // @todo: add mutex_free here               
             ret_wait = _semaphore.wait();
             MBED_ASSERT(ret_wait == 1);
@@ -1039,14 +996,7 @@ uint32_t Mux::mux_start(Mux::MuxEstablishStatus &status)
             sabm_request_construct(0);
             _tx_context.retransmit_counter = RETRANSMIT_COUNT;            
             tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
-            if (_state.is_write_error) {
-                status = MUX_ESTABLISH_WRITE_ERROR;
-// @todo: add mutex_free                                
-                return 2u;
-            }               
-
-            _state.is_mux_open_self_iniated_running = 1u;
-              
+            _state.is_mux_open_self_iniated_running = 1u;              
 // @todo: add mutex_free here               
             ret_wait = _semaphore.wait();
             MBED_ASSERT(ret_wait == 1);

@@ -437,7 +437,6 @@ private:
         uint16_t is_mux_open_self_iniated_running  : 1;
         uint16_t is_dlci_open_self_iniated_pending : 1;
         uint16_t is_dlci_open_self_iniated_running : 1;
-        uint16_t is_write_error                    : 1;
         uint16_t is_user_thread_context            : 1;
         
         uint16_t is_tx_callback_context            : 1;
