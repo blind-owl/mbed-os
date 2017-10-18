@@ -2086,12 +2086,11 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_success_after_timeout)
 /*
  * TC - mux start-up sequence, peer initiated:
  * - receive START request
- * - send START response
- * - generate completion event to the user/client
+ * Expected result:
+ * - No action taken by the implementation
  */
 TEST(MultiplexerOpenTestGroup, mux_open_peer_initiated)
-{  
-#if 0 // FIX ME PEER INIATED: VERIFY IN ACTION    
+{ 
     mbed::FileHandleMock fh_mock;   
     mbed::EventQueueMock eq_mock;
     
@@ -2111,9 +2110,8 @@ TEST(MultiplexerOpenTestGroup, mux_open_peer_initiated)
         fcs_calculate(&read_byte[1], 3),
         FLAG_SEQUENCE_OCTET
     };    
-    const bool expected_mux_start_event_state = true;
-    mux_peer_iniated_open(&(read_byte[0]), sizeof(read_byte), READ_FLAG_SEQUENCE_OCTET, expected_mux_start_event_state);
-#endif // 0    
+
+    peer_iniated_request_rx(&(read_byte[0]),sizeof(read_byte), READ_FLAG_SEQUENCE_OCTET, NULL, NULL, 0);
 }
 
 
