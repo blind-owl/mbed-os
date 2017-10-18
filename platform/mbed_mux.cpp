@@ -42,7 +42,6 @@ volatile uint8_t Mux::_establish_status = 0;
 volatile uint8_t Mux::_dlci_id          = 0;
 FileHandle *Mux::_serial                = NULL;
 EventQueueMock *Mux::_event_q           = NULL;
-MuxCallback *Mux::_mux_obj_cb           = NULL;
 MuxDataService Mux::_mux_objects[MBED_CONF_MUX_DLCI_COUNT];
 
 //rtos::Semaphore Mux::_semaphore(0);
@@ -78,13 +77,10 @@ extern void trace(char *string, int data);
 void Mux::module_init()
 {
     _state.is_mux_open                       = 0;
-    _state.is_initiator                      = 0;
     _state.is_mux_open_self_iniated_pending  = 0;
     _state.is_mux_open_self_iniated_running  = 0;    
     _state.is_dlci_open_self_iniated_pending = 0;
-    _state.is_dlci_open_self_iniated_running = 0;           
-    _state.is_dlci_open_peer_iniated_pending = 0;
-    _state.is_dlci_open_peer_iniated_running = 0;  
+    _state.is_dlci_open_self_iniated_running = 0;          
     _state.is_write_error                    = 0;
     _state.is_user_thread_context            = 0;
     _state.is_tx_callback_context            = 0;
@@ -145,26 +141,6 @@ void Mux::on_timeout()
 }
 
 
-void Mux::ua_response_construct(uint8_t dlci_id)
-{
-//trace("ua_response_construct: ", 0);        
-
-    frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::_tx_context.buffer[0]));
-    
-    frame_hdr->flag_seq       = FLAG_SEQUENCE_OCTET;
-    frame_hdr->address        = (_state.is_initiator ? 1u : 3u) | (dlci_id << 2);
-    frame_hdr->control        = (FRAME_TYPE_UA | PF_BIT);  
-    frame_hdr->length         = 1u;
-    frame_hdr->information[0] = fcs_calculate(&(Mux::_tx_context.buffer[1]), FCS_INPUT_LEN);    
-    (++frame_hdr)->flag_seq   = FLAG_SEQUENCE_OCTET;
-    
-    // @todo: make START_RESP_FRAME_LEN define
-    
-    _tx_context.bytes_remaining = UA_FRAME_LEN;
-    _tx_context.offset          = 0;               
-}
-
-
 void Mux::dm_response_construct()
 {
 //    trace("dm_response_construct: ", 0);        
@@ -190,52 +166,7 @@ void Mux::dm_response_construct()
 
 void Mux::on_rx_frame_sabm()
 {    
-    // @todo: DEFECT q checking functionality must be tx state agnostic in this function.
-    
-    switch (_tx_context.tx_state) {
-        uint8_t dlci_id;
-        case TX_IDLE:
-            /* Construct the frame, start the tx sequence 1-byte at time, reset relevant state contexts. */             
-            
-            // @todo: make decoder func for dlci_id;
-            // @todo: verify dlci_id: not in use allready, use bitmap for it.
-            dlci_id = _rx_context.buffer[1] >> 2;            
-            if ((dlci_id == 0) || 
-                ((dlci_id != 0) && _state.is_mux_open)) {
-                if (is_dlci_in_use(dlci_id)) {                                   
-                    ua_response_construct(dlci_id);
-                } else {
-                    if (!is_dlci_q_full()) {
-                        ua_response_construct(dlci_id);
-                    } else {
-                        dm_response_construct();
-                    }                        
-                }
-            } else {
-                dm_response_construct();
-            }
-            
-            tx_state_change(TX_INTERNAL_RESP, tx_internal_resp_entry_run, tx_idle_exit_run);                    
-            
-            // @todo DEFECT we should check write error bit and transit back to TX_IDLE ??          
-            break;
-        case TX_RETRANSMIT_ENQUEUE:
-        case TX_RETRANSMIT_DONE:              
-            dlci_id = _rx_context.buffer[1] >> 2;            
-            if (!is_dlci_in_use(dlci_id)) {
-#if 0                
-                _address_field                           = _rx_context.buffer[1];
-trace("SET peer iniated pending: ", 0);
-#endif // 0                
-                _state.is_dlci_open_peer_iniated_pending = 1u;
-            }
-            break;
-        default:
-            /* Code that should never be reached. */
-            trace("on_rx_frame_sabm: ", _tx_context.tx_state);    
-            MBED_ASSERT(false);
-            break;        
-    }
+    /* No implementation required. */
 }
 
 
@@ -251,11 +182,9 @@ void Mux::on_rx_frame_ua()
             _event_q->cancel(_tx_context.timer_id);           
             _establish_status = Mux::MUX_ESTABLISH_SUCCESS;
             dlci_id           = _rx_context.buffer[1] >> 2;            
-            if (dlci_id == 0) {
-                _state.is_initiator = 1u; // @todo: TC required for branching
-            } else {
-                dlci_id_append(dlci_id);                
-            }
+            if (dlci_id != 0) {
+                dlci_id_append(dlci_id);
+            } 
             os_status = _semaphore.release();
             MBED_ASSERT(os_status == osOK); 
             // @todo: need to verify correct call order for sm change and Semaphore release.
@@ -345,6 +274,7 @@ void Mux::on_rx_frame_uih()
 
 void Mux::on_rx_frame_not_supported()
 {
+    // @todo: test me
     trace("rx_frame_not_supported_do: ", _rx_context.buffer[2]);        
     
     MBED_ASSERT(false);    
@@ -424,32 +354,6 @@ void Mux::on_post_tx_frame_sabm()
 }
 
 
-void Mux::on_post_tx_frame_ua()
-{
-    switch (_tx_context.tx_state) {
-        case TX_INTERNAL_RESP:
-            if (!_state.is_mux_open) {
-                _state.is_mux_open = 1;
-                _mux_obj_cb->on_mux_start();                
-            } else {
-                const uint8_t dlci_id = (_tx_context.buffer[1] >> 2);
-                if (!is_dlci_in_use(dlci_id)) {
-                    dlci_id_append(dlci_id);
-                    _mux_obj_cb->on_dlci_establish(NULL, dlci_id); // todo@: DLCI FileHandle needs to be extracted.
-                }                
-            } 
-            
-            tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);            
-            break;
-        default:
-            /* Code that should never be reached. */
-            trace("_tx_context.tx_state", _tx_context.tx_state);                       
-            MBED_ASSERT(false);
-            break;
-    }       
-}
-
-
 void Mux::pending_self_iniated_mux_open_start()
 {
     /* Construct the frame, start the tx sequence, set and reset relevant state contexts. */
@@ -488,38 +392,11 @@ void Mux::pending_self_iniated_dlci_open_start()
 }
 
 
-void Mux::pending_peer_iniated_dlci_open_start(uint8_t dlci_id)
-{
-#if 0    
-trace("START peer iniated pending: ", 0);
-#endif // 0
-
-    /* Construct the frame, start the tx sequence 1-byte at time, set and reset relevant state contexts. */  
-    _state.is_dlci_open_peer_iniated_running = 1u;
-    _state.is_dlci_open_peer_iniated_pending = 0;
-                
-    ua_response_construct(dlci_id);
-
-    tx_state_change(TX_INTERNAL_RESP, tx_internal_resp_entry_run, tx_idle_exit_run);      
-    // @todo DEFECT we should check write error bit and transit back to TX_IDLE - NOT? DO IT IN THE ERR DETECT PLACE
-}
-
-
 void Mux::tx_idle_exit_run()
 {
-#if 0    
-    _address_field                           = (DLCI_ID_UPPER_BOUND << 2);
-#endif // 0    
-    _state.is_dlci_open_peer_iniated_pending = 0; 
-    _state.is_write_error                    = 0;
+    _state.is_write_error = 0;
 }
 
-#if 0
-uint8_t Mux::stored_tx_callback_index_get()
-{
-// NOT??    return ((_tx_context.tx_callback_context & 0xF0u) >> 4);
-}
-#endif  // 0
 
 uint8_t Mux::tx_callback_index_advance()
 {
@@ -609,32 +486,13 @@ trace("tx_idle_entry_run: ", _state.is_dlci_open_peer_iniated_pending);
     if (_state.is_mux_open_self_iniated_pending) {
         pending_self_iniated_mux_open_start();
     } else if (_state.is_dlci_open_self_iniated_pending) {
-        if (!is_dlci_in_use(_dlci_id) && !is_dlci_q_full()) {
-            pending_self_iniated_dlci_open_start();
-        } else {
-            _state.is_dlci_open_self_iniated_pending = 0;
-            _establish_status                        = MUX_ESTABLISH_MAX;
-            const osStatus os_status                 = _semaphore.release();
-            MBED_ASSERT(os_status == osOK);
-        }
-    } else if (_state.is_dlci_open_peer_iniated_pending) {    
-#if 0        
-        const uint8_t dlci_id = _address_field >> 2;          
-#endif // 0        
-        const uint8_t dlci_id = _rx_context.buffer[1] >> 2;                  
-        
-        if (!is_dlci_in_use(dlci_id) && !is_dlci_q_full()) {
-            pending_peer_iniated_dlci_open_start(dlci_id);
-        } else {
-            /* No implementation required. */
-#if 0            
-trace("NO TX PEND", 0);
-#endif // 0
-        }
+        pending_self_iniated_dlci_open_start();
     } else {
         /* No implementation required. */
     }
-      
+
+//@todo: SHOULD TX CALLBACK DISPATCH BE IN else clause above or even the first one??
+
     /* TX callback processing block below could be entered recursively within same thread context. Protection bit is 
      * used to prevent that. */
     if (!_state.is_tx_callback_context) {
@@ -725,8 +583,6 @@ Mux::FrameTxType Mux::frame_tx_type_resolve()
     
     if (frame_type == FRAME_TYPE_SABM) {
         return FRAME_TX_TYPE_SABM;
-    } else if (frame_type == FRAME_TYPE_UA) {
-        return FRAME_TX_TYPE_UA;
     } else if (frame_type == FRAME_TYPE_DM) {
         return FRAME_TX_TYPE_DM;
     } else if (frame_type == FRAME_TYPE_UIH) {
@@ -873,9 +729,6 @@ void Mux::rx_event_do(RxEvent event)
                 read_err = func();
             } while (read_err != -EAGAIN);
             
-            if (read_err < 0) {
-                // @todo: propagate read error event to user: NOT
-            }
             break;
         case RX_RESUME:
             if (_rx_context.rx_state == RX_SUSPEND) {
@@ -886,6 +739,7 @@ void Mux::rx_event_do(RxEvent event)
             } else {
                 /* No implementation required. */
             }
+            
             break;
         default:
             /* Code that should never be reached. */
@@ -920,7 +774,6 @@ void Mux::write_do()
                 typedef void (*post_tx_frame_func_t)();
                 static const post_tx_frame_func_t post_tx_func[FRAME_TX_TYPE_MAX] = {
                     on_post_tx_frame_sabm,
-                    on_post_tx_frame_ua,
                     on_post_tx_frame_dm,
                     on_post_tx_frame_uih
                 };
@@ -985,12 +838,6 @@ void Mux::serial_attach(FileHandle *serial)
 }
 
 
-void Mux::callback_attach(MuxCallback *callback)
-{
-    _mux_obj_cb = callback;
-}
-
-
 uint8_t Mux::fcs_calculate(const uint8_t *buffer,  uint8_t input_len)
 {
     uint8_t fcs = 0xFFu;
@@ -1016,7 +863,7 @@ void Mux::sabm_request_construct(uint8_t dlci_id)
     if (dlci_id == 0) {
         frame_hdr->address = 3 | (dlci_id << 2);                  
     } else {
-        frame_hdr->address = (_state.is_initiator ? 3 : 1) | (dlci_id << 2);                  
+        frame_hdr->address = (/*_state.is_initiator ? */3/* : 1*/) | (dlci_id << 2);                  
     }
     frame_hdr->control        = (FRAME_TYPE_SABM | PF_BIT);         
     frame_hdr->length         = 1u;
@@ -1186,7 +1033,6 @@ uint32_t Mux::mux_start(Mux::MuxEstablishStatus &status)
     }
 
     switch (_tx_context.tx_state) {
-        Mux::FrameTxType tx_frame_type;
         int              ret_wait;
         case TX_IDLE:
             /* Construct the frame, start the tx sequence, and suspend the call thread upon write sequence success. */
@@ -1210,11 +1056,6 @@ uint32_t Mux::mux_start(Mux::MuxEstablishStatus &status)
             }                                         
             break;
         case TX_INTERNAL_RESP:
-            tx_frame_type = frame_tx_type_resolve();
-            if (tx_frame_type == FRAME_TX_TYPE_UA) {
-// @todo: add mutex free                
-                return 1u;
-            } 
             _state.is_mux_open_self_iniated_pending = 1u;
 // @todo: add mutex_free               
             ret_wait = _semaphore.wait();
@@ -1242,7 +1083,7 @@ void Mux::user_information_construct(uint8_t dlci_id, const void* buffer, size_t
     frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::_tx_context.buffer[0]));
     
     frame_hdr->flag_seq = FLAG_SEQUENCE_OCTET;
-    frame_hdr->address  = (_state.is_initiator ? 3u : 1u) | (dlci_id << 2);                 
+    frame_hdr->address  = (/*_state.is_initiator ? */3u/* : 1u*/) | (dlci_id << 2);                 
     frame_hdr->control  = (FRAME_TYPE_UIH | PF_BIT);           
     frame_hdr->length   = (1u | (size << 1));
     

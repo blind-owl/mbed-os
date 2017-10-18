@@ -69,8 +69,7 @@ public:
      *
      *  @param buffer   The buffer to read in to.
      *  @param size     The number of bytes to read.
-     *  @return         EAGAIN if no data availabe for read.
-     *  @return         The number of bytes read, negative error on failure
+     *  @return         The number of bytes read, -EAGAIN if no data availabe for read.
      */
     virtual ssize_t read(void *buffer, size_t size); 
     
@@ -112,28 +111,11 @@ private:
     Callback<void()> _sigio_cb; /* Registered signal callback. */        
 };
 
-class MuxCallback;
 class EventQueueMock;
 class FileHandle;
-class Mux {
+class Mux {    
 friend class MuxDataService;    
 public:
-
-/* Definition for multiplexer event id type. */
-typedef enum
-{
-    MUX_EVT_RX_OVERFLOW = 0,    /* Rx overflow. Rx buffer enqueue index is reset, which means that all the existing 
-                                   data in the buffer will be overwritten. */
-    MUX_EVT_ID_MAX              /* Enumeration upper bound. */
-} MuxEventId;
-
-/* Definition for multiplexer event type. */
-#if 0
-typedef struct
-{
-  MuxEventId id; /* Event id. */
-} mux_event_t;
-#endif // 0
     
 /* Definition for multiplexer establishment status type. */
 typedef enum
@@ -165,6 +147,7 @@ typedef enum
      *
      *  @note: Relevant request specific parameters are fixed at compile time within multiplexer component.
      *  @note: Call returns when response from the peer is received, timeout or write error occurs.
+     * 
      *  @warning: Not allowed to be called from callback context.
      *
      *  @param dlci_id  ID of the DLCI to establish. Valid range 1 - 63. 
@@ -184,13 +167,7 @@ typedef enum
      *  @param serial Serial interface to be used.
      */        
     static void serial_attach(FileHandle *serial);
-    
-    /** Attach callback interface to the object.
-     *
-     *  @param callback Callback interface to be used.
-     */        
-    static void callback_attach(MuxCallback *callback);    
-    
+
     /** Attach eventqueue interface to the object.
      *
      *  @param event_queue Event queue interface to be used.
@@ -200,7 +177,7 @@ typedef enum
     // @todo make these private if possible as not meant to be called by user
     /** Registered time-out expiration event. */
     static void on_timeout();    
-    /** Registered deferred call event in safe (thread context). */
+    /** Registered deferred call event in safe (thread context) passed in @ref eventqueue_attach. */
     static void on_deferred_call();    
     /** Registered sigio callback from FileHandle. */    
     static void on_sigio();
@@ -242,7 +219,6 @@ private:
     typedef enum 
     {
         FRAME_TX_TYPE_SABM = 0,
-        FRAME_TX_TYPE_UA,
         FRAME_TX_TYPE_DM,
         FRAME_TX_TYPE_UIH,       
         FRAME_TX_TYPE_MAX
@@ -266,13 +242,7 @@ private:
     /** Construct dm response message.
      */            
     static void dm_response_construct();
-    
-    /** Construct ua response message.
-     * 
-     *  @param dlci_id  ID of the DLCI to establish
-     */                
-    static void ua_response_construct(uint8_t dlci_id);
-    
+       
     /** Construct user information frame.
      * 
      *  @param dlci_id  ID of the DLCI to establish
@@ -312,10 +282,7 @@ private:
     
     /** SABM frame tx path post processing. */    
     static void on_post_tx_frame_sabm();
-    
-    /** UA frame tx path post processing. */        
-    static void on_post_tx_frame_ua();
-    
+       
     /** DM frame tx path post processing. */            
     static void on_post_tx_frame_dm();
     
@@ -410,9 +377,7 @@ private:
      *  @return         The number of bytes written, negative error on failure.
      */    
     static ssize_t user_data_tx(uint8_t dlci_id, const void* buffer, size_t size);
-    
-    static uint8_t stored_tx_callback_index_get();
-    
+       
     static void tx_callback_pending_bit_clear(uint8_t bit);
     static void tx_callback_pending_bit_set(uint8_t dlci_id);
 
@@ -467,28 +432,19 @@ private:
     /* Definition for state type. */
     typedef struct
     {
-        uint16_t is_mux_open :                       1;         /* True when multiplexer is open. */       
-        uint16_t is_initiator :                      1;         /* True when role is initiator. */
+        uint16_t is_mux_open :                       1;         /* True when multiplexer is open. */
         uint16_t is_mux_open_self_iniated_pending  : 1;
         uint16_t is_mux_open_self_iniated_running  : 1;
         uint16_t is_dlci_open_self_iniated_pending : 1;
         uint16_t is_dlci_open_self_iniated_running : 1;
-        uint16_t is_dlci_open_peer_iniated_pending : 1;
-        uint16_t is_dlci_open_peer_iniated_running : 1;                
         uint16_t is_write_error                    : 1;
         uint16_t is_user_thread_context            : 1;
         
         uint16_t is_tx_callback_context            : 1;
-        uint16_t is_user_tx_pending                : 1;        
-#if 0        
-        uint8_t is_dlci_establish_pending : 1;  /* True if @ref mux_start or @ref dlci_establish is pending. */
-        uint8_t is_user_tx_pending : 1;         /* True if user TX request is pending. */
-        uint8_t is_internal_tx_pending : 1;     /* True if internal TX response is pending. */
-#endif //         
+        uint16_t is_user_tx_pending                : 1;       
     } state_t;
     
-    static FileHandle      *_serial;                                /* Serial used. */        
-    static MuxCallback     *_mux_obj_cb;                            /* Multiplexer object callback used. */  
+    static FileHandle      *_serial;                                /* Serial used. */  
     static EventQueueMock  *_event_q;                               /* Event queue used. */  
 //    static rtos::Semaphore  _semaphore;                             /* Semaphore. */
     static SemaphoreMock    _semaphore;
@@ -500,38 +456,7 @@ private:
     static const uint8_t    _crctable[MUX_CRC_TABLE_LEN];           /* CRC table used for frame FCS. */
     
     static volatile uint8_t _establish_status;
-    static volatile uint8_t _dlci_id;
-    
-//    static uint8_t          _address_field;
-};
-
-
-/* Callback API for the Mux user. */
-class MuxCallback {
-public:
-
-    /** Multiplexer control channel establishment event.
-     *
-     *  @note: This is only called for the peer initiated establishment. 
-     *
-     *  @param success  True upon establishment success, false in other case.
-     */            
-    virtual void on_mux_start(/*bool success DON*T CARE*/) = 0;
-        
-    /** DLCI establishment event.
-     *
-     *  @note: This is only called for the peer initiated establishment. 
-     *
-     *  @param obj      Valid object upon establishment success, NULL upon failure.     
-     *  @param dlci_id  ID of the DLCI established. Range of 1 - 63.      
-     */            
-    virtual void on_dlci_establish(FileHandle *obj, uint8_t dlci_id) = 0;
-    
-    /** Generic event receive. 
-     *
-     *  @param event Event to receive.
-     */
-    virtual void event_receive(/*const Mux::mux_event_t &event*/) = 0;    
+    static volatile uint8_t _dlci_id;   
 };
 
 } // namespace mbed
