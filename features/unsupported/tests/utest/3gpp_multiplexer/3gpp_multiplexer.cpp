@@ -150,6 +150,8 @@ TEST(MultiplexerOpenTestGroup, FirstTest)
 #define PF_BIT                       (1u << 4)                   /* P/F bit position in the frame control field. */     
 #define DLCI_ID_LOWER_BOUND          1u                          /* Lower bound DLCI id value. */ 
 #define DLCI_ID_UPPER_BOUND          63u                         /* Upper bound DLCI id value. */ 
+#define TX_BUFFER_SIZE               31u                         /* Size of the TX buffer in nbumber of bytes. */ 
+
 
 static const uint8_t crctable[CRC_TABLE_LEN] = {
     0x00, 0x91, 0xE3, 0x72, 0x07, 0x96, 0xE4, 0x75,  0x0E, 0x9F, 0xED, 0x7C, 0x09, 0x98, 0xEA, 0x7B,
@@ -4901,7 +4903,7 @@ static void user_tx_size_lower_bound_tx_callback()
 
 
 /*
- * TC - 0 length UIH frame TX in 1 write call
+ * TC - 0 length UIH frame TX in 1 write call: lower bound test
  */
 TEST(MultiplexerOpenTestGroup, user_tx_size_lower_bound)
 {
@@ -4941,6 +4943,63 @@ TEST(MultiplexerOpenTestGroup, user_tx_size_lower_bound)
         
     const ssize_t ret = f_handle->write(NULL, 0);
     CHECK_EQUAL(0, ret);
+}
+
+
+static void sequence_generate(uint8_t* write_byte, uint8_t count)
+{
+    while (count != 0) {     
+        *write_byte = count;
+        
+        ++write_byte;
+        --count;
+    }
+}
+
+
+/*
+ * TC - MAX length UIH frame TX in 1 write call: upper bound test
+ */
+TEST(MultiplexerOpenTestGroup, user_tx_size_upper_bound)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+   
+    const uint8_t dlci_id = 1u;
+    FileHandle* f_handle  = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);   
+    f_handle->sigio(user_tx_size_lower_bound_tx_callback);
+    
+    /* Program write cycle. */
+    uint8_t write_byte[TX_BUFFER_SIZE] = {0};
+    write_byte[0]                      = FLAG_SEQUENCE_OCTET;
+    write_byte[1]                      = 3u | (dlci_id << 2);
+    write_byte[2]                      = (FRAME_TYPE_UIH | PF_BIT);
+    write_byte[3]                      = LENGTH_INDICATOR_OCTET | ((TX_BUFFER_SIZE - 6u) << 1);
+    
+    sequence_generate(&(write_byte[4]), TX_BUFFER_SIZE);
+    
+    write_byte[TX_BUFFER_SIZE - 2]     = fcs_calculate(&write_byte[1], 3u);
+    write_byte[TX_BUFFER_SIZE - 1]     = FLAG_SEQUENCE_OCTET;
+    
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);        
+    mock_write->input_param[1].param        = sizeof(write_byte);
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = mock_write->input_param[1].param;    
+        
+    const ssize_t ret = f_handle->write(&(write_byte[4]), (TX_BUFFER_SIZE - 6u));
+    CHECK_EQUAL((TX_BUFFER_SIZE - 6u), ret);
 }
 
 
