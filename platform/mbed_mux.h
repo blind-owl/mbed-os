@@ -59,7 +59,7 @@ public:
      * 
      *  @param buffer   Begin of the user data.
      *  @param size     The number of bytes to write.
-     *  @return         The number of bytes written, negative error on failure.
+     *  @return         The number of bytes written.
      */
     virtual ssize_t write(const void* buffer, size_t size);
        
@@ -85,12 +85,9 @@ public:
      */        
     virtual int close();
     
-    /** Register a callback on completion of enqueued write and read operations. The user is expected to use @ref poll
-     *  to resolve correct event(s).
+    /** Register a callback on completion of enqueued write and read operations. 
      *
-     *  @note: The specified callback will be called upon generation of events defined in @ref poll
-     *
-     *  @note: The registered callback is called within thread context. 
+     *  @note: The registered callback is called within thread context supplied in @ref eventqueue_attach. 
      *
      *  @param func Function to call upon event generation.
      */
@@ -123,7 +120,6 @@ typedef enum
     MUX_ESTABLISH_SUCCESS = 0, /* Peer accepted the request. */
     MUX_ESTABLISH_REJECT,      /* Peer rejected the request. */
     MUX_ESTABLISH_TIMEOUT,     /* Timeout occurred for the request. */
-    MUX_ESTABLISH_WRITE_ERROR, /* Write error occurred for the request. */    
     MUX_ESTABLISH_MAX          /* Enumeration upper bound. */
 } MuxEstablishStatus;
 
@@ -138,7 +134,7 @@ typedef enum
      *  @param status Operation completion code.
      *
      *  @return 2   Operation completed, check @ref status for completion code.
-     *  @return 1   Operation not started, peer or self initiated control channel open allready in progress.     
+     *  @return 1   Operation not started, control channel open allready in progress.     
      *  @return 0   Operation not started, multiplexer control channel allready open.    
      */
     static uint32_t mux_start(MuxEstablishStatus &status);
@@ -146,16 +142,16 @@ typedef enum
     /** Establish a DLCI.
      *
      *  @note: Relevant request specific parameters are fixed at compile time within multiplexer component.
-     *  @note: Call returns when response from the peer is received, timeout or write error occurs.
+     *  @note: Call returns when response from the peer is received or timeout occurs.
      * 
      *  @warning: Not allowed to be called from callback context.
      *
      *  @param dlci_id  ID of the DLCI to establish. Valid range 1 - 63. 
      *  @param status   Operation completion code.     
-     *  @param obj      Valid object upon @ref status having success, NULL upon failure.     
+     *  @param obj      Valid object upon @ref status having @ref MUX_ESTABLISH_SUCCESS, NULL upon failure.     
      *
      *  @return 4   Operation completed, check @ref status for completion code.
-     *  @return 3   Operation not started, self initiated DLCI establishment allready in progress.     
+     *  @return 3   Operation not started, DLCI establishment allready in progress.     
      *  @return 2   Operation not started, DLCI ID not in valid range.
      *  @return 1   Operation not started, no established multiplexer control channel exists.
      *  @return 0   Operation not started, @ref dlci_id, or all available DLCI ID resources, allready in use.
@@ -177,7 +173,7 @@ typedef enum
     // @todo make these private if possible as not meant to be called by user
     /** Registered time-out expiration event. */
     static void on_timeout();    
-    /** Registered deferred call event in safe (thread context) passed in @ref eventqueue_attach. */
+    /** Registered deferred call event in safe (thread context) supplied in @ref eventqueue_attach. */
     static void on_deferred_call();    
     /** Registered sigio callback from FileHandle. */    
     static void on_sigio();
