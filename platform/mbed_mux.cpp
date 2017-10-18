@@ -749,7 +749,7 @@ ssize_t Mux::on_rx_read_state_frame_start()
     do {
         read_err = _serial->read(&(_rx_context.buffer[_rx_context.offset]), FRAME_START_READ_LEN);
 //trace("!READ_VALUE", _rx_context.buffer[_rx_context.offset]);        
-    } while ((_rx_context.buffer[_rx_context.offset] != FLAG_SEQUENCE_OCTET) && (read_err > 0));
+    } while ((_rx_context.buffer[_rx_context.offset] != FLAG_SEQUENCE_OCTET) && (read_err != -EAGAIN));
     
     if (_rx_context.buffer[_rx_context.offset] == FLAG_SEQUENCE_OCTET) {        
         _rx_context.offset  += FRAME_START_READ_LEN;
@@ -773,7 +773,7 @@ ssize_t Mux::on_rx_read_state_header_read()
     do {
 //trace("read_len", read_len);
         read_err = _serial->read(&(_rx_context.buffer[_rx_context.offset]), read_len);
-        if (read_err > 0) {
+        if (read_err != -EAGAIN) {
             if ((_rx_context.offset == 1u) && (_rx_context.buffer[_rx_context.offset] == FLAG_SEQUENCE_OCTET)) {
                 /* Overlapping block move 1-index possible trailing data after the flag sequence octet. */
 //trace("!!SKIP!!", 0);                
@@ -790,7 +790,7 @@ ssize_t Mux::on_rx_read_state_header_read()
                 read_len           -= read_err;                
             }
         }
-    } while ((read_len != 0) && (read_err > 0));
+    } while ((read_len != 0) && (read_err != -EAGAIN));
     
     if (_rx_context.offset == (FRAME_HEADER_READ_LEN + FRAME_START_READ_LEN)) {       
         /* Decode remaining frame read length and change state. Current implementation supports only 1-byte length 
@@ -823,10 +823,10 @@ ssize_t Mux::on_rx_read_state_trailer_read()
     ssize_t read_err;
     do {
         read_err = _serial->read(&(_rx_context.buffer[_rx_context.offset]), _rx_context.frame_trailer_length);
-        if (read_err > 0) {
+        if (read_err != -EAGAIN) {
             _rx_context.frame_trailer_length -= read_err;
         }
-    } while ((_rx_context.frame_trailer_length != 0) && (read_err > 0));
+    } while ((_rx_context.frame_trailer_length != 0) && (read_err != -EAGAIN));
     
     if (_rx_context.frame_trailer_length == 0) {
         /* Complete frame received, decode frame type and process it. */
@@ -838,7 +838,7 @@ ssize_t Mux::on_rx_read_state_trailer_read()
         _rx_context.offset   = 1u;            // @todo: only set when travel back to RX_HEADER_READ
         _rx_context.rx_state = RX_HEADER_READ;        
         
-        read_err = 0;
+        read_err = -EAGAIN;
     }
     
     return read_err;
@@ -849,7 +849,7 @@ ssize_t Mux::on_rx_read_state_suspend()
 {
     MBED_ASSERT(false);
     
-    return 0;
+    return -EAGAIN;
 }
 
 
@@ -871,10 +871,10 @@ void Mux::rx_event_do(RxEvent event)
                 func     = rx_read_func[_rx_context.rx_state];
 //trace("!RUN-READ", 0);                
                 read_err = func();
-            } while (read_err > 0);
+            } while (read_err != -EAGAIN);
             
             if (read_err < 0) {
-                // @todo: propagate read error event to user
+                // @todo: propagate read error event to user: NOT
             }
             break;
         case RX_RESUME:

@@ -222,7 +222,7 @@ void self_iniated_request_tx(const uint8_t *tx_buf, uint8_t tx_buf_len, uint8_t 
         mock_read->output_param[0].param       = NULL;
         mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_read->input_param[0].param        = read_len;
-        mock_read->return_value                = 0;                         
+        mock_read->return_value                = -EAGAIN;                         
         
         mock_t * mock_write = mock_free_get("write");
         CHECK(mock_write != NULL);        
@@ -794,7 +794,7 @@ void peer_iniated_response_tx_new_write_error(const uint8_t *buf, uint8_t buf_le
         mock_read->output_param[0].param       = NULL;
         mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_read->input_param[0].param        = READ_LEN;
-        mock_read->return_value                = 0;                                 
+        mock_read->return_value                = -EAGAIN;                                 
 
         mock_t * mock_write = mock_free_get("write");
         CHECK(mock_write != NULL);        
@@ -814,7 +814,7 @@ void peer_iniated_response_tx_new_write_error(const uint8_t *buf, uint8_t buf_le
                 mock_write->input_param[0].param        = (uint32_t)new_tx_byte;                       
                 mock_write->input_param[1].param        = WRITE_LEN;
                 mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-                mock_write->return_value                = (uint32_t)-1;                           
+                mock_write->return_value                = -1;                           
                 
                 /* Release the call thread after write error. */
                 mock_t * mock_release = mock_free_get("release");
@@ -879,7 +879,7 @@ void peer_iniated_response_tx(const uint8_t *buf,
         mock_read->output_param[0].param       = NULL;
         mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_read->input_param[0].param        = FRAME_HEADER_READ_LEN;
-        mock_read->return_value                = 0;                                 
+        mock_read->return_value                = -EAGAIN;                                 
         
         mock_t * mock_write = mock_free_get("write");
         CHECK(mock_write != NULL);        
@@ -975,7 +975,7 @@ void peer_iniated_response_tx_no_pending_tx(const uint8_t *buf,
         mock_read->output_param[0].param       = NULL;
         mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_read->input_param[0].param        = FRAME_HEADER_READ_LEN;
-        mock_read->return_value                = 0;                                 
+        mock_read->return_value                = -EAGAIN;                                 
         
         mock_t * mock_write = mock_free_get("write");
         CHECK(mock_write != NULL);        
@@ -1811,7 +1811,7 @@ void single_write_cycle_fail(const uint8_t *write_byte,
     mock_read->output_param[0].param       = NULL;
     mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_read->input_param[0].param        = read_len;    
-    mock_read->return_value                = 0;                             
+    mock_read->return_value                = -EAGAIN;                             
     
     mock_t * mock_write = mock_free_get("write");
     CHECK(mock_write != NULL);    
@@ -1819,7 +1819,7 @@ void single_write_cycle_fail(const uint8_t *write_byte,
     mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);
     mock_write->input_param[1].param        = tx_len;    
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->return_value                = (uint32_t)-1;  
+    mock_write->return_value                = -1;  
     
     if (pending_write_byte != NULL)  {
 // @todo:fix this block hole block
@@ -1900,7 +1900,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_write_failure)
     mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);                
     mock_write->input_param[1].param        = sizeof(write_byte);    
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->return_value                = (uint32_t)-1;        
+    mock_write->return_value                = -1;        
 
     /* 1st test sequence start: fails in 1st phase. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
@@ -2265,7 +2265,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_write_failure)
     mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);        
     mock_write->input_param[1].param        = sizeof(write_byte);    
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->return_value                = (uint32_t)-1;    
+    mock_write->return_value                = -1;    
 
     /* 1st test sequence start: fails in 1st phase. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
@@ -5094,7 +5094,7 @@ void single_complete_write_cycle(const uint8_t *write_byte,
     mock_read->output_param[0].param       = NULL;
     mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_read->input_param[0].param        = FRAME_HEADER_READ_LEN;
-    mock_read->return_value                = 0;                         
+    mock_read->return_value                = -EAGAIN;                         
     
     /* Complete the 1st write request which is in progress. */
     mock_t * mock_write = mock_free_get("write");

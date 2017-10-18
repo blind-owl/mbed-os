@@ -33,7 +33,7 @@ typedef struct
 
 typedef struct 
 {
-    uint32_t         return_value;
+    int32_t          return_value;
     callback_handler func;                              /* Default out-of-the-box value is NULL, set by the mock 
                                                            implementation. */  
     const void *     func_context;
