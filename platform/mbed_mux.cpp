@@ -218,7 +218,7 @@ void Mux::on_rx_frame_dm()
     }
 }
 
-// @todo: DEFECT FRAME POST TX NEEDS TO BE CALLED ALLWAYS WHEN TX FRAME DONE NOW JUST IN on_deferredd_call
+
 void Mux::tx_internal_resp_entry_run()
 {
     write_do();
@@ -227,10 +227,8 @@ void Mux::tx_internal_resp_entry_run()
 
 void Mux::dm_response_send()
 {
-    dm_response_construct();
-    
-    tx_state_change(TX_INTERNAL_RESP, tx_internal_resp_entry_run, tx_idle_exit_run);      
-    // @todo DEFECT we should check write error bit and transit back to TX_IDLE - NOT? DO IT IN THE ERR DETECT PLACE
+    dm_response_construct();    
+    tx_state_change(TX_INTERNAL_RESP, tx_internal_resp_entry_run, tx_idle_exit_run);     
 }
 
 
@@ -674,7 +672,7 @@ ssize_t Mux::on_rx_read_state_trailer_read()
         const rx_frame_decoder_func_t func       = rx_frame_decoder_func[frame_type];
         func();      
    
-        _rx_context.offset   = 1u;            // @todo: only set when travel back to RX_HEADER_READ
+        _rx_context.offset   = 1u;            
         _rx_context.rx_state = RX_HEADER_READ;        
         
         read_err = -EAGAIN;
@@ -741,7 +739,6 @@ void Mux::write_do()
         case TX_INTERNAL_RESP:    
 //trace("!B-bytes_remaining: ", _tx_context.bytes_remaining);
             write_err = 1;
-//            while ((_tx_context.bytes_remaining != 0) && (write_err > 0)) { // @todo: change to do...while
             do {
                 write_err = _serial->write(&(_tx_context.buffer[_tx_context.offset]), _tx_context.bytes_remaining);
                 MBED_ASSERT(write_err >= 0);
@@ -915,7 +912,7 @@ uint32_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHa
     }
     
     switch (_tx_context.tx_state) {
-        int              ret_wait;
+        int ret_wait;
         case TX_IDLE:
             /* Construct the frame, start the tx sequence, and suspend the call thread upon write sequence success. */  
             sabm_request_construct(dlci_id);
@@ -930,6 +927,7 @@ uint32_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHa
                 *obj = file_handle_get(dlci_id);
                 MBED_ASSERT(*obj != NULL);
             }
+            
             break;
         case TX_INTERNAL_RESP:
         case TX_NORETRANSMIT:
@@ -939,22 +937,16 @@ uint32_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHa
             ret_wait = _semaphore.wait();
             MBED_ASSERT(ret_wait == 1);        
             status = static_cast<MuxEstablishStatus>(_establish_status);
-            switch (status) {
-                case MUX_ESTABLISH_SUCCESS:
-                    *obj = file_handle_get(dlci_id);
-                    MBED_ASSERT(*obj != NULL);                    
-                    break;
-                case MUX_ESTABLISH_MAX:
-                    /* DLCI ID is allready in use so self iniated DLCI establishment was not started, it is ok to 
-                       exit directly from here with appropriate error code.*/
-                    return 0;
-                default:
-                    /* No implementation required. */
-                    break;
+            if (status == MUX_ESTABLISH_SUCCESS) {
+                *obj = file_handle_get(dlci_id);
+                MBED_ASSERT(*obj != NULL);                                    
             }
+            
             break;            
         default:
+            /* Code that should never be reached. */
             MBED_ASSERT(false);
+            
             break;
     }    
     
@@ -1003,7 +995,8 @@ uint32_t Mux::mux_start(Mux::MuxEstablishStatus &status)
             status = static_cast<MuxEstablishStatus>(_establish_status);
             if (status == MUX_ESTABLISH_SUCCESS) {
                 _state.is_mux_open = 1u;                
-            }                                         
+            }   
+            
             break;
         case TX_INTERNAL_RESP:
             _state.is_mux_open_self_iniated_pending = 1u;
@@ -1014,11 +1007,12 @@ uint32_t Mux::mux_start(Mux::MuxEstablishStatus &status)
             if (status == MUX_ESTABLISH_SUCCESS) {
                 _state.is_mux_open = 1u;                
             }
+            
             break;
         default:
             /* Code that should never be reached. */
-            trace("tx_state: ", _tx_context.tx_state);
             MBED_ASSERT(false);
+            
             break;
     };
                 
@@ -1061,7 +1055,6 @@ ssize_t Mux::user_data_tx(uint8_t dlci_id, const void* buffer, size_t size)
 {
 // @todo: get mutex
 
-    // @todo: add MBED_ASSERT for max size
     MBED_ASSERT(size <= (MBED_CONF_BUFFER_SIZE - 6u)); // @todo: define magic
     if (size != 0) {
         MBED_ASSERT(buffer != NULL);
