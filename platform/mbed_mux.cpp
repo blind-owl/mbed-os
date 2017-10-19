@@ -274,7 +274,8 @@ void Mux::on_rx_frame_uih()
     const uint8_t dlci_id = _rx_context.buffer[1] >> 2;    // @todo: make dlci_id_from_rx_buffer_get()
     MuxDataService* obj   = file_handle_get(dlci_id);
     MBED_ASSERT(obj != NULL);
-    
+
+    _state.is_user_rx_ready = 1u;    
     obj->_sigio_cb(); 
 }
 
@@ -1128,13 +1129,18 @@ ssize_t Mux::user_data_rx(void* buffer, size_t size)
 {
 // @todo: get mutex
     
-    const ssize_t ret_value = (_rx_context.buffer[3] >> 1);
-    
-    memcpy(buffer, &(_rx_context.buffer[4]), ret_value);
-    
-    return ret_value;
-    
-// @todo: release mutex       
+    if (_state.is_user_rx_ready) {
+        _state.is_user_rx_ready = 0;
+        
+        const ssize_t ret_value = (_rx_context.buffer[3] >> 1);        
+        memcpy(buffer, &(_rx_context.buffer[4]), ret_value);
+        
+// @todo: release mutex               
+        return ret_value;
+    } else {
+// @todo: release mutex               
+        return -EAGAIN;
+    }         
 }
 
 

@@ -3867,10 +3867,14 @@ static void user_rx_single_read_callback()
 {
     ++m_user_rx_single_read_check_value;  
     
-    uint8_t buffer[1]      = {0};
-    const ssize_t read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
+    uint8_t buffer[1] = {0};
+    ssize_t read_ret  = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
     CHECK(read_ret == sizeof(buffer));
     CHECK(buffer[0] == 0xA5u);
+    
+    /* Verify failure after successfull read cycle. */
+    read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
+    CHECK(read_ret == -EAGAIN);    
 }
 
 
@@ -3879,10 +3883,13 @@ static void user_rx_single_read_callback()
  * - correct RX callback count
  * - correct user payload content
  * - correct user payload length
+ * - 2nd read request will return appropriate error to inform no data available for read
  * 
  * Test sequence:
  * 1. Establish 1 DLCI
  * 2. Generate user RX data
+ * 3. Issue 1st read in the callback
+ * 4. Issue 2nd read in the callback
  * 
  * Expected outcome:
  * - as specified in TC description
@@ -3923,6 +3930,47 @@ TEST(MultiplexerOpenTestGroup, user_rx_single_read)
     
     /* Validate proper callback callcount. */
     CHECK_EQUAL(1, m_user_rx_single_read_check_value);
+}
+
+
+static void user_rx_single_read_no_data_available_callback()
+{
+    FAIL("TC FAILURE IF CALLED");
+}
+
+
+/*
+ * TC - Ensure the following for a single complete user data read request:
+ * - read request will return appropriate error to inform no data available for read
+ * 
+ * Test sequence:
+ * 1. Establish 1 DLCI
+ * 2. Issue read request
+ * 
+ * Expected outcome:
+ * - as specified in TC description
+ */
+TEST(MultiplexerOpenTestGroup, user_rx_single_read_no_data_available)
+{    
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+    
+    m_file_handle[0] = dlci_self_iniated_establish(ROLE_INITIATOR, DLCI_ID_LOWER_BOUND);    
+    CHECK(m_file_handle[0] != NULL);
+    m_file_handle[0]->sigio(user_rx_single_read_no_data_available_callback);
+    
+    uint8_t buffer[1]      = {0};
+    const ssize_t read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
+    CHECK(read_ret == -EAGAIN);
 }
 
 
