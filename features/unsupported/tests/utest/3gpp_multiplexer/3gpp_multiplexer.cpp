@@ -2789,7 +2789,8 @@ TEST(MultiplexerOpenTestGroup, user_tx_size_lower_bound)
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = sizeof(write_byte);    
         
-    const ssize_t ret = f_handle->write(NULL, 0);
+    const uint8_t write_dummy = 0xA5u;    
+    const ssize_t ret         = f_handle->write(&write_dummy, 0);
     CHECK_EQUAL(0, ret);
 }
 
@@ -3074,8 +3075,9 @@ TEST(MultiplexerOpenTestGroup, user_tx_dlci_establish_during_user_tx)
     mock_write->input_param[1].param        = sizeof(write_byte_uih) - sizeof(write_byte_uih[0]);
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 0;            
-        
-    const ssize_t ret = f_handle->write(NULL, 0);
+
+    const uint8_t write_byte = 0xA5u;
+    const ssize_t ret = f_handle->write(&write_byte, 0);
     CHECK_EQUAL(0, ret);       
     
     /* 2. Start new DLCI establishment while user TX in progress, put pending. */
