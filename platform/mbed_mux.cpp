@@ -84,6 +84,7 @@ void Mux::module_init()
     _state.is_user_thread_context            = 0;
     _state.is_tx_callback_context            = 0;
     _state.is_user_tx_pending                = 0;
+    _state.is_user_rx_ready                  = 0;
    
     _rx_context.offset               = 0;
     _rx_context.frame_trailer_length = 0;        
@@ -263,7 +264,18 @@ void Mux::on_rx_frame_disc()
 
 void Mux::on_rx_frame_uih()
 {
+#if 0    
     MBED_ASSERT(false);        
+#endif // 0
+    // - disable RX path
+    // - look-up correct file file
+    // - dispatch callback
+    
+    const uint8_t dlci_id = _rx_context.buffer[1] >> 2;    // @todo: make dlci_id_from_rx_buffer_get()
+    MuxDataService* obj   = file_handle_get(dlci_id);
+    MBED_ASSERT(obj != NULL);
+    
+    obj->_sigio_cb(); 
 }
 
 
@@ -634,8 +646,9 @@ ssize_t Mux::on_rx_read_state_header_read()
            field, enforce this with MBED_ASSERT. */
 
         MBED_ASSERT((_rx_context.buffer[_rx_context.offset - 1u] & 1u) == 1u);
-        _rx_context.frame_trailer_length = (_rx_context.buffer[_rx_context.offset - 1u] & ~1u) + FRAME_TRAILER_LEN;
-//trace("_rx_context.frame_trailer_length", _rx_context.frame_trailer_length);        
+        _rx_context.frame_trailer_length = (_rx_context.buffer[_rx_context.offset - 1u] >> 1) + FRAME_TRAILER_LEN;
+//trace("_rx_context.frame_trailer_length", _rx_context.frame_trailer_length);
+
         _rx_context.rx_state             = RX_TRAILER_READ;
     }
 
@@ -672,6 +685,7 @@ ssize_t Mux::on_rx_read_state_trailer_read()
         const rx_frame_decoder_func_t func       = rx_frame_decoder_func[frame_type];
         func();      
    
+        // @todo: set below in rx_decode_func above as context specific where to transit next
         _rx_context.offset   = 1u;            
         _rx_context.rx_state = RX_HEADER_READ;        
         
@@ -868,9 +882,9 @@ void Mux::dlci_id_append(uint8_t dlci_id)
 }
 
 
-FileHandle * Mux::file_handle_get(uint8_t dlci_id)
+MuxDataService * Mux::file_handle_get(uint8_t dlci_id)
 {
-    FileHandle *obj   = NULL;
+    MuxDataService* obj = NULL;
     const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);
     for (uint8_t i = 0; i != end; ++i) {   
         if (_mux_objects[i].dlci == dlci_id) {
@@ -1104,9 +1118,23 @@ ssize_t Mux::user_data_tx(uint8_t dlci_id, const void* buffer, size_t size)
             break;
     }
         
-// @todo: release mutex   
+
 
     return write_ret;
+}
+
+
+ssize_t Mux::user_data_rx(void* buffer, size_t size)
+{
+// @todo: get mutex
+    
+    const ssize_t ret_value = (_rx_context.buffer[3] >> 1);
+    
+    memcpy(buffer, &(_rx_context.buffer[4]), ret_value);
+    
+    return ret_value;
+    
+// @todo: release mutex       
 }
 
 

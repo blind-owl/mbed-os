@@ -332,9 +332,9 @@ private:
      * 
      *  @param dlci_id  ID of the DLCI used as the key
      * 
-     *  @return Valid File handle or NULL if not found.
+     *  @return Valid object reference or NULL if not found.
      */                        
-    static FileHandle* file_handle_get(uint8_t dlci_id);
+    static MuxDataService* file_handle_get(uint8_t dlci_id);
     
     /** Evaluate is DLCI ID in use. 
      * 
@@ -373,6 +373,16 @@ private:
      *  @return         The number of bytes written, negative error on failure.
      */    
     static ssize_t user_data_tx(uint8_t dlci_id, const void* buffer, size_t size);
+    
+    /** Read user data into a buffer.
+     *
+     *  @note: This is API is only meant to be used for the multiplexer (user) data service rx. 
+     *
+     *  @param buffer   The buffer to read in to.
+     *  @param size     The number of bytes to read.
+     *  @return         The number of bytes read, -EAGAIN if no data availabe for read.
+     */
+    static ssize_t user_data_rx(void* buffer, size_t size);
        
     static void tx_callback_pending_bit_clear(uint8_t bit);
     static void tx_callback_pending_bit_set(uint8_t dlci_id);
@@ -436,7 +446,9 @@ private:
         uint16_t is_user_thread_context            : 1;
         
         uint16_t is_tx_callback_context            : 1;
-        uint16_t is_user_tx_pending                : 1;       
+        uint16_t is_user_tx_pending                : 1; 
+        
+        uint16_t is_user_rx_ready                  : 1;
     } state_t;
     
     static FileHandle      *_serial;                                /* Serial used. */  

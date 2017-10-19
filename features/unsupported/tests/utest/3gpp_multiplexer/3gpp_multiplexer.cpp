@@ -199,7 +199,7 @@ typedef enum
 /* Read complete response frame from the peer
  */
 void self_iniated_response_rx(const uint8_t            *rx_buf, 
-                              uint8_t                   rx_buf_len, 
+                              uint8_t                   rx_buf_len, // @todo remove me
                               const uint8_t            *write_byte,
                               FlagSequenceOctetReadType read_type,
                               StripFlagFieldType        strip_flag_field_type)
@@ -3820,6 +3820,109 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_tx_to_different_dlci_not_wit
     
     /* Validate proper TX callback callcount. */
     CHECK_EQUAL(2u, m_user_tx_callback_tx_to_different_dlci_not_within_current_context_check_value);
+}
+
+
+void single_complete_read_cycle(const uint8_t *read_byte, 
+                                uint8_t        length)
+{
+    mock_t * mock_call = mock_free_get("call");
+    CHECK(mock_call != NULL);           
+    mock_call->return_value                             = 1;        
+    const mbed::FileHandleMock::io_control_t io_control = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};
+    mbed::FileHandleMock::io_control(io_control);
+   
+    /* Phase 1: read header length. */
+    uint8_t rx_count = 0;
+    mock_t * mock_read = mock_free_get("read");
+    CHECK(mock_read != NULL); 
+    mock_read->output_param[0].param       = &(read_byte[rx_count]);
+    mock_read->input_param[0].param        = FRAME_HEADER_READ_LEN;
+    mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;    
+    mock_read->output_param[0].len         = mock_read->input_param[0].param;
+    mock_read->return_value                = mock_read->output_param[0].len;
+        
+    /* Phase 2: read remainder of the frame. */
+    rx_count += mock_read->return_value;
+    mock_read = mock_free_get("read");
+    CHECK(mock_read != NULL); 
+    mock_read->output_param[0].param       = &(read_byte[rx_count]);
+    mock_read->input_param[0].param        = (length - rx_count);   
+    mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;    
+    mock_read->output_param[0].len         = mock_read->input_param[0].param;
+    mock_read->return_value                = mock_read->output_param[0].len;
+    
+    /* Verify internal logic. */
+    rx_count += mock_read->return_value;
+    CHECK_EQUAL(rx_count, length);
+
+    /* Trigger deferred call to execute the programmed mocks above. */
+    const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
+    mbed::EventQueueMock::io_control(eq_io_control);    
+}
+
+
+static uint8_t m_user_rx_single_read_check_value = 0;
+static void user_rx_single_read_callback()
+{
+    ++m_user_rx_single_read_check_value;  
+    
+    uint8_t buffer[1]      = {0};
+    const ssize_t read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
+    CHECK(read_ret == sizeof(buffer));
+    CHECK(buffer[0] == 0xA5u);
+}
+
+
+/*
+ * TC - Ensure the following for a single complete user data read cycle:
+ * - correct RX callback count
+ * - correct user payload content
+ * - correct user payload length
+ * 
+ * Test sequence:
+ * 1. Establish 1 DLCI
+ * 2. Generate user RX data
+ * 
+ * Expected outcome:
+ * - as specified in TC description
+ */
+TEST(MultiplexerOpenTestGroup, user_rx_single_read)
+{
+    m_user_rx_single_read_check_value = 0;
+    
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+    
+    m_file_handle[0] = dlci_self_iniated_establish(ROLE_INITIATOR, DLCI_ID_LOWER_BOUND);    
+    CHECK(m_file_handle[0] != NULL);
+    m_file_handle[0]->sigio(user_rx_single_read_callback);
+    
+    /* Start read cycle for the DLCI. */
+    const uint8_t user_data    = 0xA5u;
+    const uint8_t read_byte[6] = 
+    {
+        3u | (DLCI_ID_LOWER_BOUND << 2),        
+        FRAME_TYPE_UIH, 
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&read_byte[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };      
+    
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+    
+    /* Validate proper callback callcount. */
+    CHECK_EQUAL(1, m_user_rx_single_read_check_value);
 }
 
 

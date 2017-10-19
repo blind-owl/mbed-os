@@ -10,7 +10,7 @@ ssize_t MuxDataService::write(const void* buffer, size_t size)
 
 ssize_t MuxDataService::read(void *buffer, size_t size)
 {
-    return 0;
+    return Mux::user_data_rx(buffer, size);
 }
     
     
