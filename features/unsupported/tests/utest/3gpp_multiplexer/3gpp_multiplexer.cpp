@@ -2776,7 +2776,7 @@ TEST(MultiplexerOpenTestGroup, user_tx_size_lower_bound)
     {
         FLAG_SEQUENCE_OCTET,
         3u | (dlci_id << 2),        
-        (FRAME_TYPE_UIH | PF_BIT), 
+        FRAME_TYPE_UIH, 
         LENGTH_INDICATOR_OCTET,
         fcs_calculate(&write_byte[1], 3u),
         FLAG_SEQUENCE_OCTET
@@ -2830,7 +2830,7 @@ TEST(MultiplexerOpenTestGroup, user_tx_size_upper_bound)
     uint8_t write_byte[TX_BUFFER_SIZE] = {0};
     write_byte[0]                      = FLAG_SEQUENCE_OCTET;
     write_byte[1]                      = 3u | (dlci_id << 2);
-    write_byte[2]                      = (FRAME_TYPE_UIH | PF_BIT);
+    write_byte[2]                      = FRAME_TYPE_UIH;
     write_byte[3]                      = LENGTH_INDICATOR_OCTET | ((TX_BUFFER_SIZE - 6u) << 1);
     
     sequence_generate(&(write_byte[4]), TX_BUFFER_SIZE);
@@ -2884,7 +2884,7 @@ TEST(MultiplexerOpenTestGroup, user_tx_2_full_frame_writes)
     {
         FLAG_SEQUENCE_OCTET,
         3u | (dlci_id << 2),        
-        (FRAME_TYPE_UIH | PF_BIT), 
+        FRAME_TYPE_UIH, 
         LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
         user_data,
         fcs_calculate(&write_byte_1[1], 3u),
@@ -2907,7 +2907,7 @@ TEST(MultiplexerOpenTestGroup, user_tx_2_full_frame_writes)
     {
         FLAG_SEQUENCE_OCTET,
         3u | (dlci_id << 2),        
-        (FRAME_TYPE_UIH | PF_BIT), 
+        FRAME_TYPE_UIH, 
         LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
         user_data,
         fcs_calculate(&write_byte_2[1], 3u),
@@ -3054,7 +3054,7 @@ TEST(MultiplexerOpenTestGroup, user_tx_dlci_establish_during_user_tx)
     {
         FLAG_SEQUENCE_OCTET,
         3u | (DLCI_ID_LOWER_BOUND << 2),        
-        (FRAME_TYPE_UIH | PF_BIT), 
+        FRAME_TYPE_UIH, 
         LENGTH_INDICATOR_OCTET,
         fcs_calculate(&write_byte_uih[1], 3u),
         FLAG_SEQUENCE_OCTET
@@ -3104,7 +3104,7 @@ static void tx_callback_dispatch_triggered_tx_within_callback_tx_callback()
     {
         FLAG_SEQUENCE_OCTET,
         3u | (1u << 2),        
-        (FRAME_TYPE_UIH | PF_BIT), 
+        FRAME_TYPE_UIH, 
         LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
         user_data,
         fcs_calculate(&write_byte[1], 3u),
@@ -3179,7 +3179,7 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_triggered_tx_within_callback
     {
         FLAG_SEQUENCE_OCTET,
         3u | (dlci_id << 2),        
-        (FRAME_TYPE_UIH | PF_BIT), 
+        FRAME_TYPE_UIH, 
         LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
         user_data,
         fcs_calculate(&write_byte[1], 3u),
@@ -3258,7 +3258,7 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_set_pending_multiple_times_f
     {
         FLAG_SEQUENCE_OCTET,
         3u | (dlci_id << 2),        
-        (FRAME_TYPE_UIH | PF_BIT), 
+        FRAME_TYPE_UIH, 
         LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
         user_data,
         fcs_calculate(&write_byte[1], 3u),
@@ -3358,7 +3358,7 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_set_pending_for_all_dlcis)
     {
         FLAG_SEQUENCE_OCTET,
         3u | (dlci_id << 2),        
-        (FRAME_TYPE_UIH | PF_BIT), 
+        FRAME_TYPE_UIH, 
         LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
         user_data,
         fcs_calculate(&write_byte[1], 3u),
@@ -3415,7 +3415,7 @@ static void tx_callback_dispatch_rollover_tx_pending_bitmask_tx_callback()
         {
             FLAG_SEQUENCE_OCTET,
             3u | (DLCI_ID_LOWER_BOUND << 2),        
-            (FRAME_TYPE_UIH | PF_BIT), 
+            FRAME_TYPE_UIH, 
             LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
             user_data,
             fcs_calculate(&write_byte[1], 3u),
@@ -3486,7 +3486,7 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_rollover_tx_pending_bitmask)
     {
         FLAG_SEQUENCE_OCTET,
         3u | (dlci_id << 2),        
-        (FRAME_TYPE_UIH | PF_BIT), 
+        FRAME_TYPE_UIH, 
         LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
         user_data,
         fcs_calculate(&write_byte[1], 3u),
@@ -3538,7 +3538,7 @@ static void tx_callback_dispatch_tx_to_different_dlci_tx_callback()
     {
         FLAG_SEQUENCE_OCTET,
         3u | ((DLCI_ID_LOWER_BOUND +1u) << 2),        
-        (FRAME_TYPE_UIH | PF_BIT), 
+        FRAME_TYPE_UIH, 
         LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
         user_data,
         fcs_calculate(&write_byte[1], 3u),
@@ -3630,7 +3630,7 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_tx_to_different_dlci_within_
     {
         FLAG_SEQUENCE_OCTET,
         3u | (dlci_id << 2),        
-        (FRAME_TYPE_UIH | PF_BIT), 
+        FRAME_TYPE_UIH, 
         LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
         user_data,
         fcs_calculate(&write_byte[1], 3u),
@@ -3682,7 +3682,7 @@ static void tx_callback_dispatch_tx_to_different_dlci_not_within_current_context
     /* Needs to be static as referenced after this function returns. */
     m_write_byte[0] = FLAG_SEQUENCE_OCTET;
     m_write_byte[1] = 3u | ((DLCI_ID_LOWER_BOUND +1u) << 2);        
-    m_write_byte[2] = (FRAME_TYPE_UIH | PF_BIT);
+    m_write_byte[2] = FRAME_TYPE_UIH;
     m_write_byte[3] = LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1);
     m_write_byte[4] = user_data;
     m_write_byte[5] = fcs_calculate(&m_write_byte[1], 3u);
@@ -3780,7 +3780,7 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_tx_to_different_dlci_not_wit
     {
         FLAG_SEQUENCE_OCTET,
         3u | (dlci_id << 2),        
-        (FRAME_TYPE_UIH | PF_BIT), 
+        FRAME_TYPE_UIH, 
         LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
         user_data,
         fcs_calculate(&write_byte[1], 3u),

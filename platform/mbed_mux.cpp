@@ -1026,9 +1026,9 @@ void Mux::user_information_construct(uint8_t dlci_id, const void* buffer, size_t
 {
     frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::_tx_context.buffer[0]));
     
-    frame_hdr->flag_seq = FLAG_SEQUENCE_OCTET;
-    frame_hdr->address  = (/*_state.is_initiator ? */3u/* : 1u*/) | (dlci_id << 2);                 
-    frame_hdr->control  = (FRAME_TYPE_UIH | PF_BIT);           
+    frame_hdr->flag_seq = FLAG_SEQUENCE_OCTET; // @todo set this @ _init as always fixed
+    frame_hdr->address  = 3u | (dlci_id << 2);                 
+    frame_hdr->control  = FRAME_TYPE_UIH;           
     frame_hdr->length   = (1u | (size << 1));
     
     memmove(&(frame_hdr->information[0]), buffer, size);
@@ -1038,7 +1038,7 @@ void Mux::user_information_construct(uint8_t dlci_id, const void* buffer, size_t
     *(++fcs_pos)     = FLAG_SEQUENCE_OCTET;
     
     _tx_context.bytes_remaining = UIH_FRAME_MIN_LEN + size;
-    _tx_context.offset          = 0;
+    _tx_context.offset          = 0; // @todo set this @ tx_id_state_exit
 }
 
 
