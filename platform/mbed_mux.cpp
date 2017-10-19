@@ -276,6 +276,7 @@ void Mux::on_rx_frame_uih()
     MBED_ASSERT(obj != NULL);
 
     _state.is_user_rx_ready = 1u;    
+    _rx_context.rx_state    = RX_SUSPEND;
     obj->_sigio_cb(); 
 }
 
@@ -680,17 +681,17 @@ ssize_t Mux::on_rx_read_state_trailer_read()
     } while ((_rx_context.frame_trailer_length != 0) && (read_err != -EAGAIN));
     
     if (_rx_context.frame_trailer_length == 0) {
-        /* Complete frame received, decode frame type and process it. */
+        /* Complete frame received, decode frame type and process it. Set default next state, can be overwritten by 
+           frame decoding function. */
 
+        _rx_context.rx_state                     = RX_HEADER_READ;               
         const Mux::FrameRxType        frame_type = frame_rx_type_resolve();
         const rx_frame_decoder_func_t func       = rx_frame_decoder_func[frame_type];
         func();      
    
-        // @todo: set below in rx_decode_func above as context specific where to transit next
-        _rx_context.offset   = 1u;            
-        _rx_context.rx_state = RX_HEADER_READ;        
-        
-        read_err = -EAGAIN;
+        // @todo: set below in rx_decode_func above as context specific where to transit next - NOT
+        _rx_context.offset   = 1u;        
+        read_err             = -EAGAIN;
     }
     
     return read_err;
@@ -698,9 +699,7 @@ ssize_t Mux::on_rx_read_state_trailer_read()
 
 
 ssize_t Mux::on_rx_read_state_suspend()
-{
-    MBED_ASSERT(false);
-    
+{   
     return -EAGAIN;
 }
 
@@ -1127,10 +1126,15 @@ ssize_t Mux::user_data_rx(void* buffer, size_t size)
 {
 // @todo: get mutex
     
+    MBED_ASSERT(buffer != NULL);
+    
     if (_state.is_user_rx_ready) {
         _state.is_user_rx_ready = 0;
         
         const ssize_t ret_value = (_rx_context.buffer[3] >> 1);        
+        
+        // @todo: TC use MIN(ret_value, size) for input to memcpy
+        
         memcpy(buffer, &(_rx_context.buffer[4]), ret_value);
         
 // @todo: release mutex               

@@ -3976,4 +3976,79 @@ TEST(MultiplexerOpenTestGroup, user_rx_single_read_no_data_available)
 }
 
 
+static uint8_t m_user_rx_2_user_rx_frames_rx_suspend_check_value = 0;
+static void user_rx_2_user_rx_frames_rx_suspend_started_callback()
+{
+    ++m_user_rx_2_user_rx_frames_rx_suspend_check_value;
+}
+
+
+/*
+ * TC - Ensure that Rx path procssing is suspended (no read cycle is started) upon reception of a valid user data frame.
+ * 
+ * Test sequence:
+ * 1. Establish 1 DLCI
+ * 2. Generate user RX data frame
+ * 3. Start Rx/Tx cycle
+ * 4. Verify read buffer
+ * 
+ * Expected outcome:
+ * - Rx path processing suspended (no read cycle is started) upon reception of a valid user data frame.
+ * - Correct callback count
+ * - Read buffer verified
+ */
+TEST(MultiplexerOpenTestGroup, user_rx_2_user_rx_frames_rx_suspend_started)
+{
+    m_user_rx_2_user_rx_frames_rx_suspend_check_value = 0;
+    
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+    
+    m_file_handle[0] = dlci_self_iniated_establish(ROLE_INITIATOR, DLCI_ID_LOWER_BOUND);    
+    CHECK(m_file_handle[0] != NULL);
+    m_file_handle[0]->sigio(user_rx_2_user_rx_frames_rx_suspend_started_callback);
+    
+    /* Start 1st read cycle for the DLCI. */
+    const uint8_t user_data    = 0xA5u;
+    const uint8_t read_byte[6] = 
+    {
+        3u | (DLCI_ID_LOWER_BOUND << 2),        
+        FRAME_TYPE_UIH, 
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&read_byte[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };      
+    
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+
+    /* Start 2nd Rx/Tx cycle, which omits the Rx part as Rx prcossing has been suspended by reception of valid user 
+       data frame above. Tx is omitted as there is no data in the Tx buffer. */
+    mock_t * mock_call = mock_free_get("call");
+    CHECK(mock_call != NULL);           
+    mock_call->return_value                             = 1;        
+    const mbed::FileHandleMock::io_control_t io_control = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};
+    mbed::FileHandleMock::io_control(io_control);    
+    const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
+    mbed::EventQueueMock::io_control(eq_io_control);        
+
+    /* Verify read buffer. */
+    uint8_t buffer[1]      = {0};
+    const ssize_t read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
+    CHECK(read_ret == sizeof(buffer));
+    CHECK(buffer[0] == user_data);    
+    
+    /* Validate proper callback callcount. */
+    CHECK_EQUAL(1, m_user_rx_2_user_rx_frames_rx_suspend_check_value);
+}
+
 } // namespace mbed
