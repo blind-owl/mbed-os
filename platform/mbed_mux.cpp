@@ -87,7 +87,7 @@ void Mux::module_init()
     _state.is_user_rx_ready                  = 0;
    
     _rx_context.offset               = 0;
-    _rx_context.frame_trailer_length = 0;        
+    _rx_context.read_length          = 0;        
     _rx_context.rx_state             = RX_FRAME_START;   
     
     _tx_context.tx_state            = TX_IDLE;    
@@ -264,9 +264,6 @@ void Mux::on_rx_frame_disc()
 
 void Mux::on_rx_frame_uih()
 {
-#if 0    
-    MBED_ASSERT(false);        
-#endif // 0
     // - disable RX path
     // - look-up correct file file
     // - dispatch callback
@@ -275,8 +272,8 @@ void Mux::on_rx_frame_uih()
     MuxDataService* obj   = file_handle_get(dlci_id);
     MBED_ASSERT(obj != NULL);
 
-    _state.is_user_rx_ready = 1u;    
-    _rx_context.rx_state    = RX_SUSPEND;
+    _state.is_user_rx_ready = 1u;
+    rx_state_change(RX_SUSPEND);
     obj->_sigio_cb(); 
 }
 
@@ -590,7 +587,14 @@ Mux::FrameTxType Mux::frame_tx_type_resolve()
 }
 
 
-#define FRAME_START_READ_LEN 1u    
+void Mux::rx_state_change(RxState new_state)
+{
+    _rx_context.rx_state = new_state;
+}
+
+
+#define FRAME_START_READ_LEN 1u
+#define FRAME_HEADER_READ_LEN 3u
 ssize_t Mux::on_rx_read_state_frame_start()
 {
 //trace("!RX-FRAME_START", 0);
@@ -603,27 +607,28 @@ ssize_t Mux::on_rx_read_state_frame_start()
     } while ((_rx_context.buffer[_rx_context.offset] != FLAG_SEQUENCE_OCTET) && (read_err != -EAGAIN));
     
     if (_rx_context.buffer[_rx_context.offset] == FLAG_SEQUENCE_OCTET) {        
-        _rx_context.offset  += FRAME_START_READ_LEN;
-        _rx_context.rx_state = RX_HEADER_READ;
+        _rx_context.offset     += FRAME_START_READ_LEN;
+        _rx_context.read_length = FRAME_HEADER_READ_LEN;
+
+        rx_state_change(RX_HEADER_READ);
     }
 
 //trace("!read_err", read_err);    
     return read_err;
 }
 
-#define FRAME_HEADER_READ_LEN 3u
+
 #define FRAME_TRAILER_LEN     2u
 ssize_t Mux::on_rx_read_state_header_read()
 {
 //trace("!RX-FRAME_HEADER", 0);
 
     ssize_t read_err;
-    // @todo:DEFECT we need counter for this(as we can enter this func multiple times) = > reuse frame_trailer_length? 
-    // Set init value in state transit time.
-    size_t read_len = FRAME_HEADER_READ_LEN;
+
+//trace("read_len", read_len);    
     do {
-//trace("read_len", read_len);
-        read_err = _serial->read(&(_rx_context.buffer[_rx_context.offset]), read_len);
+//trace("H-read_len", _rx_context.read_length);
+        read_err = _serial->read(&(_rx_context.buffer[_rx_context.offset]), _rx_context.read_length);
         if (read_err != -EAGAIN) {
             if ((_rx_context.offset == 1u) && (_rx_context.buffer[_rx_context.offset] == FLAG_SEQUENCE_OCTET)) {
                 /* Overlapping block move 1-index possible trailing data after the flag sequence octet. */
@@ -632,26 +637,26 @@ ssize_t Mux::on_rx_read_state_header_read()
                         &(_rx_context.buffer[_rx_context.offset + 1u]),
                         (read_err - 1u));
                 
-                _rx_context.offset += (read_err - 1u);
-                read_len           -= (read_err - 1u);                
+                _rx_context.offset      += (read_err - 1u);
+                _rx_context.read_length -= (read_err - 1u);                
 
                 //@todo: proper TCs needed for this branch??
             } else {
-                _rx_context.offset += read_err;
-                read_len           -= read_err;                
+                _rx_context.offset      += read_err;
+                _rx_context.read_length -= read_err;                
             }
         }
-    } while ((read_len != 0) && (read_err != -EAGAIN));
+    } while ((_rx_context.read_length != 0) && (read_err != -EAGAIN));
     
     if (_rx_context.offset == (FRAME_HEADER_READ_LEN + FRAME_START_READ_LEN)) {       
         /* Decode remaining frame read length and change state. Current implementation supports only 1-byte length 
            field, enforce this with MBED_ASSERT. */
 
         MBED_ASSERT((_rx_context.buffer[_rx_context.offset - 1u] & 1u) == 1u);
-        _rx_context.frame_trailer_length = (_rx_context.buffer[_rx_context.offset - 1u] >> 1) + FRAME_TRAILER_LEN;
-//trace("_rx_context.frame_trailer_length", _rx_context.frame_trailer_length);
+        _rx_context.read_length = (_rx_context.buffer[_rx_context.offset - 1u] >> 1) + FRAME_TRAILER_LEN;
+//trace("_rx_context.read_length", _rx_context.read_length);
 
-        _rx_context.rx_state             = RX_TRAILER_READ;
+        rx_state_change(RX_TRAILER_READ);        
     }
 
     return read_err;
@@ -674,17 +679,22 @@ ssize_t Mux::on_rx_read_state_trailer_read()
     
     ssize_t read_err;
     do {
-        read_err = _serial->read(&(_rx_context.buffer[_rx_context.offset]), _rx_context.frame_trailer_length);
+//trace("T-read_len", _rx_context.read_length);        
+        read_err = _serial->read(&(_rx_context.buffer[_rx_context.offset]), _rx_context.read_length);
         if (read_err != -EAGAIN) {
-            _rx_context.frame_trailer_length -= read_err;
+            _rx_context.offset      += read_err;            
+            _rx_context.read_length -= read_err;
         }
-    } while ((_rx_context.frame_trailer_length != 0) && (read_err != -EAGAIN));
+    } while ((_rx_context.read_length != 0) && (read_err != -EAGAIN));
     
-    if (_rx_context.frame_trailer_length == 0) {
+    if (_rx_context.read_length == 0) {
         /* Complete frame received, decode frame type and process it. Set default next state, can be overwritten by 
            frame decoding function. */
 
-        _rx_context.rx_state                     = RX_HEADER_READ;               
+        _rx_context.read_length                  = FRAME_HEADER_READ_LEN; //@todo: DEFECT for user data RX?
+
+        rx_state_change(RX_HEADER_READ);
+        
         const Mux::FrameRxType        frame_type = frame_rx_type_resolve();
         const rx_frame_decoder_func_t func       = rx_frame_decoder_func[frame_type];
         func();      
@@ -727,7 +737,8 @@ void Mux::rx_event_do(RxEvent event)
             break;
         case RX_RESUME:
             if (_rx_context.rx_state == RX_SUSPEND) {
-                _rx_context.rx_state = RX_HEADER_READ;
+
+                rx_state_change(RX_HEADER_READ);
                 
                 // @todo: schedule system thread
                 MBED_ASSERT(false);
@@ -1134,7 +1145,11 @@ ssize_t Mux::user_data_rx(void* buffer, size_t size)
         const ssize_t ret_value = (_rx_context.buffer[3] >> 1);        
         
         // @todo: TC use MIN(ret_value, size) for input to memcpy
-        
+#if 0        
+for (uint8_t i = 0; i != 7u; ++i) {
+    trace("FRAME: ", _rx_context.buffer[i]);
+}
+#endif // 0
         memcpy(buffer, &(_rx_context.buffer[4]), ret_value);
         
 // @todo: release mutex               

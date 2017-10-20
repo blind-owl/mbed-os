@@ -3904,4 +3904,153 @@ TEST(MultiplexerOpenTestGroup, user_rx_2_user_rx_frames_rx_suspend_started)
     CHECK_EQUAL(1, m_user_rx_2_user_rx_frames_rx_suspend_check_value);
 }
 
+void single_byte_read_cycle(const uint8_t *read_byte, 
+                            uint8_t        length)
+{
+    CHECK(length >= 6); //@todo: MAGIC: 6 min size for UIH as payload min size is 1     
+    
+    const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};    
+    const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE}; 
+  
+    mock_t * mock_call;
+    mock_t * mock_read;
+    uint8_t current_read_len;      
+    uint8_t rx_count = 0;    
+
+    /* Phase 1: read header length. */    
+    do {        
+        mock_call = mock_free_get("call");
+        CHECK(mock_call != NULL);           
+        mock_call->return_value = 1;          
+        /* Trigger sigio from underlying FileHandle to run programmed mock above. */
+        mbed::FileHandleMock::io_control(io_control);
+        
+        mock_read = mock_free_get("read");
+        CHECK(mock_read != NULL); 
+        mock_read->output_param[0].param       = &(read_byte[rx_count]);
+        mock_read->input_param[0].param        = (FRAME_HEADER_READ_LEN - rx_count);
+        mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;    
+        mock_read->output_param[0].len         = 1u;
+        mock_read->return_value                = mock_read->output_param[0].len;        
+        
+        if ((rx_count + 1u) != FRAME_HEADER_READ_LEN) {
+            current_read_len = (FRAME_HEADER_READ_LEN - (rx_count + 1u));
+        } else {
+            /* We have entered phase 2 of the read cycle. */
+            current_read_len = (length - (rx_count + 1u));
+        }
+            
+        /* Stop the read cycle. */ 
+        mock_read = mock_free_get("read");
+        CHECK(mock_read != NULL); 
+        mock_read->output_param[0].param       = NULL;
+        mock_read->input_param[0].param        = current_read_len;
+        mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;    
+        mock_read->output_param[0].len         = 0;
+        // @todo: when -EAGAIN mock_read->output_param[0].param==NULL
+        mock_read->return_value                = -EAGAIN;
+        
+        /* Trigger deferred call to execute the programmed mocks above. */
+        mbed::EventQueueMock::io_control(eq_io_control);            
+        
+        ++rx_count;
+    } while (rx_count != FRAME_HEADER_READ_LEN);
+    
+    /* Phase 2: read remainder of the frame. */
+    do {
+        mock_call = mock_free_get("call");
+        CHECK(mock_call != NULL);           
+        mock_call->return_value = 1;          
+        /* Trigger sigio from underlying FileHandle to run programmed mock above. */
+        mbed::FileHandleMock::io_control(io_control);
+
+        mock_read = mock_free_get("read");
+        CHECK(mock_read != NULL); 
+        mock_read->output_param[0].param       = &(read_byte[rx_count]);
+        mock_read->input_param[0].param        = (length - rx_count);
+        mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;    
+        mock_read->output_param[0].len         = 1u;
+        mock_read->return_value                = mock_read->output_param[0].len;                
+
+        if ((rx_count + 1u) != length) {
+            /* Stop the read cycle. */ 
+            mock_read = mock_free_get("read");
+            CHECK(mock_read != NULL); 
+            mock_read->output_param[0].param       = NULL;
+            mock_read->input_param[0].param        = (length - (rx_count + 1u));
+            mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;    
+            mock_read->output_param[0].len         = 0;
+            mock_read->return_value                = -EAGAIN;            
+        }
+            
+        /* Trigger deferred call to execute the programmed mocks above. */
+        mbed::EventQueueMock::io_control(eq_io_control);
+       
+        ++rx_count;
+    } while (rx_count != length);
+}
+
+
+static uint8_t m_user_rx_read_1_byte_per_run_context_check_value = 0;
+static void user_rx_read_1_byte_per_run_context_callback()
+{
+    ++m_user_rx_read_1_byte_per_run_context_check_value;   
+}
+
+
+/*
+ * TC - Ensure that Rx frame read works correctly when only 1 byte can be read from lower layer within run context.
+ * 
+ * Test sequence:
+ * 1. Establish 1 DLCI
+ * 2. Generate user RX data frame
+ * 3. Generate read cycles which only supply 1 byte at a time from lower layer
+ * 4. Verify read buffer upon frame read complete
+ * 
+ * Expected outcome:
+ * - Read buffer verified
+ * - Correct callback count
+ */
+TEST(MultiplexerOpenTestGroup, user_rx_read_1_byte_per_run_context)
+{
+    m_user_rx_read_1_byte_per_run_context_check_value = 0;
+    
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    mux_self_iniated_open();
+    m_file_handle[0] = dlci_self_iniated_establish(ROLE_INITIATOR, DLCI_ID_LOWER_BOUND);    
+    CHECK(m_file_handle[0] != NULL);
+    m_file_handle[0]->sigio(user_rx_read_1_byte_per_run_context_callback);
+    
+    /* Start read cycle for the DLCI. */
+    const uint8_t user_data    = 0xA5u;
+    const uint8_t read_byte[6] = 
+    {
+        3u | (DLCI_ID_LOWER_BOUND << 2),        
+        FRAME_TYPE_UIH, 
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&read_byte[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    single_byte_read_cycle(&(read_byte[0]), sizeof(read_byte));
+    
+    /* Verify read buffer. */
+    uint8_t buffer[1]      = {0};
+    const ssize_t read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
+    CHECK_EQUAL(sizeof(buffer), read_ret);
+    CHECK_EQUAL(user_data, buffer[0]);        
+    
+    /* Validate proper callback callcount. */
+    CHECK_EQUAL(1, m_user_rx_read_1_byte_per_run_context_check_value);
+}
+
+
 } // namespace mbed

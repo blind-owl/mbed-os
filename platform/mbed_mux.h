@@ -199,6 +199,16 @@ private:
         TX_STATE_MAX
     } TxState;
     
+    /* Definition for Rx state machine. */
+    typedef enum 
+    {
+        RX_FRAME_START = 0,
+        RX_HEADER_READ,
+        RX_TRAILER_READ,        
+        RX_SUSPEND,
+        RX_STATE_MAX
+    } RxState;
+    
     /* Definition for frame type within rx path. */
     typedef enum 
     {
@@ -312,12 +322,19 @@ private:
     static void tx_idle_exit_run();
     typedef void (*tx_state_exit_func_t)();       
     
-    /** Change frame decoder state machine state. 
+    /** Change Tx state machine state. 
      * 
      *  @param new_state    State to transit.
      *  @param entry_func   State entry function.
      */                
     static void tx_state_change(TxState new_state, tx_state_entry_func_t entry_func, tx_state_exit_func_t exit_func);
+    
+    /** Change Rx state machine state. 
+     * 
+     *  @param new_state    State to transit.
+     */                
+    static void rx_state_change(RxState new_state);   
+ 
     
     /** Begin DM frame transmit sequence. */    
     static void dm_response_send();
@@ -414,23 +431,13 @@ private:
         uint8_t tx_callback_context;  // @todo: set me in init()          
        
     } tx_context_t;
-       
-    /* Definition for Rx state machine. */
-    typedef enum 
-    {
-        RX_FRAME_START = 0,
-        RX_HEADER_READ,
-        RX_TRAILER_READ,        
-        RX_SUSPEND,
-        RX_STATE_MAX
-    } RxState;
-    
+          
     /* Definition for Rx context type. */
     typedef struct 
     {        
         RxState rx_state;                       /* Rx state machine current state. */
         uint8_t offset;                         /* Offset in the buffer where to read to. */
-        uint8_t frame_trailer_length;           /* Length of the frame trailer to read in number of bytes. */        
+        uint8_t read_length;                    /* Amount to read in number of bytes. */        
         uint8_t buffer[MBED_CONF_BUFFER_SIZE];  /* Rx buffer. */
        
     } rx_context_t;    
