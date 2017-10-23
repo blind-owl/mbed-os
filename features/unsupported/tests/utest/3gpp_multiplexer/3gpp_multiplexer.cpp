@@ -3827,7 +3827,7 @@ static void user_rx_single_read_callback()
     uint8_t buffer[1] = {0};
     ssize_t read_ret  = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
     CHECK(read_ret == sizeof(buffer));
-    CHECK(buffer[0] == 0xA5u);
+    CHECK_EQUAL(0xA5u, buffer[0]);
     
     /* Verify failure after successfull read cycle. */
     read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
@@ -3999,7 +3999,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_2_user_rx_frames_rx_suspend_started)
     /* Verify read buffer. */
     uint8_t buffer[1]      = {0};
     const ssize_t read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
-    CHECK(read_ret == sizeof(buffer));
+    CHECK_EQUAL(sizeof(buffer), read_ret);
     CHECK(buffer[0] == user_data);    
     
     /* Validate proper callback callcount. */

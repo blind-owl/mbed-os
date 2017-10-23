@@ -409,6 +409,8 @@ private:
     static void tx_callback_dispatch(uint8_t bit);
     static MuxDataService& tx_callback_lookup(uint8_t bit);
     
+    static size_t min(uint8_t size_1, size_t size_2);
+    
     /* Deny object creation. */    
     Mux();
     

@@ -275,7 +275,10 @@ void Mux::on_rx_frame_uih()
         MuxDataService* obj   = file_handle_get(dlci_id);
         MBED_ASSERT(obj != NULL);
 
-        _state.is_user_rx_ready = 1u;
+        _state.is_user_rx_ready  = 1u;
+        _rx_context.offset       = 0;
+        _rx_context.read_length  = length;
+        
         rx_state_change(RX_SUSPEND);
         obj->_sigio_cb(); 
     }
@@ -696,15 +699,15 @@ ssize_t Mux::on_rx_read_state_trailer_read()
            frame decoding function. */
 
         _rx_context.read_length                  = FRAME_HEADER_READ_LEN; //@todo: DEFECT for user data RX?
-
+        // @todo: set below in rx_decode_func above as context specific where to transit next - NOT
+        _rx_context.offset   = 1u;        
+        
         rx_state_change(RX_HEADER_READ);
         
         const Mux::FrameRxType        frame_type = frame_rx_type_resolve();
         const rx_frame_decoder_func_t func       = rx_frame_decoder_func[frame_type];
         func();      
-   
-        // @todo: set below in rx_decode_func above as context specific where to transit next - NOT
-        _rx_context.offset   = 1u;        
+  
         read_err             = -EAGAIN;
     }
     
@@ -1142,8 +1145,37 @@ ssize_t Mux::user_data_tx(uint8_t dlci_id, const void* buffer, size_t size)
 }
 
 
-ssize_t Mux::user_data_rx(void* buffer, size_t size)
+size_t Mux::min(uint8_t size_1, size_t size_2)
 {
+    return (size_1 < size_2) ? size_1 : size_2;
+}
+
+
+ssize_t Mux::user_data_rx(void* buffer, size_t size)
+{    
+    MBED_ASSERT(buffer != NULL);
+    
+// @todo: get mutex    
+    if (_state.is_user_rx_ready) {
+               
+        const size_t read_length = min((_rx_context.read_length - _rx_context.offset), size);
+        memcpy(buffer, &(_rx_context.buffer[4u + _rx_context.offset]), read_length);
+        _rx_context.offset += read_length;        
+        
+        if (_rx_context.offset == _rx_context.read_length) {
+            _state.is_user_rx_ready = 0;
+            
+            // @todo: do RX_RESUME
+        }
+        
+// @todo: release mutex               
+        return static_cast<ssize_t>(read_length);
+    } else {
+// @todo: release mutex               
+        return -EAGAIN;
+    }
+    
+#if 0    
 // @todo: get mutex
     
     MBED_ASSERT(buffer != NULL);
@@ -1166,8 +1198,11 @@ for (uint8_t i = 0; i != 7u; ++i) {
     } else {
 // @todo: release mutex               
         return -EAGAIN;
-    }         
+    }
+#endif // 0    
 }
 
+// _rx_context.read_length
+// _rx_context.offset
 
 } // namespace mbed
