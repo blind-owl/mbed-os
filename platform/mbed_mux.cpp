@@ -164,7 +164,9 @@ void Mux::dm_response_construct()
 
 void Mux::on_rx_frame_sabm()
 {    
-    /* No implementation required. */
+    /* Peer iniated open/establishment is not supported. */
+    
+    rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);    
 }
 
 
@@ -195,6 +197,8 @@ void Mux::on_rx_frame_ua()
             MBED_ASSERT(false);
             break;
     }
+    
+    rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);    
 }
 
 
@@ -217,6 +221,8 @@ void Mux::on_rx_frame_dm()
             MBED_ASSERT(false);
             break;
     }
+    
+    rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);    
 }
 
 
@@ -259,6 +265,8 @@ void Mux::on_rx_frame_disc()
             MBED_ASSERT(false);       
             break;            
     }
+    
+    rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);    
 }
 
 
@@ -279,8 +287,10 @@ void Mux::on_rx_frame_uih()
         _rx_context.offset       = 0;
         _rx_context.read_length  = length;
         
-        rx_state_change(RX_SUSPEND);
+        rx_state_change(RX_SUSPEND, null_action);
         obj->_sigio_cb(); 
+    } else {
+        rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);            
     }
 }
 
@@ -594,14 +604,28 @@ Mux::FrameTxType Mux::frame_tx_type_resolve()
 }
 
 
-void Mux::rx_state_change(RxState new_state)
+void Mux::null_action()
 {
+        
+}
+    
+
+#define FRAME_HEADER_READ_LEN 3u
+void Mux::rx_header_read_entry_run()
+{
+    _rx_context.offset      = 1u;                
+    _rx_context.read_length = FRAME_HEADER_READ_LEN;
+}
+
+
+void Mux::rx_state_change(RxState new_state, rx_state_entry_func_t entry_func)
+{
+    entry_func();
     _rx_context.rx_state = new_state;
 }
 
 
 #define FRAME_START_READ_LEN 1u
-#define FRAME_HEADER_READ_LEN 3u
 ssize_t Mux::on_rx_read_state_frame_start()
 {
 //trace("!RX-FRAME_START", 0);
@@ -617,7 +641,7 @@ ssize_t Mux::on_rx_read_state_frame_start()
         _rx_context.offset     += FRAME_START_READ_LEN;
         _rx_context.read_length = FRAME_HEADER_READ_LEN;
 
-        rx_state_change(RX_HEADER_READ);
+        rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);
     }
 
 //trace("!read_err", read_err);    
@@ -663,7 +687,7 @@ ssize_t Mux::on_rx_read_state_header_read()
         _rx_context.read_length = (_rx_context.buffer[_rx_context.offset - 1u] >> 1) + FRAME_TRAILER_LEN;
 //trace("_rx_context.read_length", _rx_context.read_length);
 
-        rx_state_change(RX_TRAILER_READ);        
+        rx_state_change(RX_TRAILER_READ, null_action);        
     }
 
     return read_err;
@@ -695,17 +719,10 @@ ssize_t Mux::on_rx_read_state_trailer_read()
     } while ((_rx_context.read_length != 0) && (read_err != -EAGAIN));
     
     if (_rx_context.read_length == 0) {
-        /* Complete frame received, decode frame type and process it. Set default next state, can be overwritten by 
-           frame decoding function. */
-
-        _rx_context.read_length                  = FRAME_HEADER_READ_LEN; //@todo: DEFECT for user data RX?
-        // @todo: set below in rx_decode_func above as context specific where to transit next - NOT
-        _rx_context.offset   = 1u;        
+        /* Complete frame received, decode frame type and process it. */
         
-        rx_state_change(RX_HEADER_READ);
-        
-        const Mux::FrameRxType        frame_type = frame_rx_type_resolve();
-        const rx_frame_decoder_func_t func       = rx_frame_decoder_func[frame_type];
+        const Mux::FrameRxType frame_type  = frame_rx_type_resolve();
+        const rx_frame_decoder_func_t func = rx_frame_decoder_func[frame_type];
         func();      
   
         read_err             = -EAGAIN;
@@ -745,7 +762,7 @@ void Mux::rx_event_do(RxEvent event)
         case RX_RESUME:
             if (_rx_context.rx_state == RX_SUSPEND) {
 
-                rx_state_change(RX_HEADER_READ);
+                rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);
                 
                 // @todo: schedule system thread
                 MBED_ASSERT(false);
@@ -942,7 +959,7 @@ uint32_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHa
 // @todo: add mutex_free                        
         return 3u;                
     }
-    
+       
     switch (_tx_context.tx_state) {
         int ret_wait;
         case TX_IDLE:

@@ -329,11 +329,16 @@ private:
      */                
     static void tx_state_change(TxState new_state, tx_state_entry_func_t entry_func, tx_state_exit_func_t exit_func);
     
+    static void rx_header_read_entry_run();
+    typedef void (*rx_state_entry_func_t)();       
+    
+    static void null_action();
+    
     /** Change Rx state machine state. 
      * 
      *  @param new_state    State to transit.
      */                
-    static void rx_state_change(RxState new_state);   
+    static void rx_state_change(RxState new_state, rx_state_entry_func_t entry_func);   
  
     
     /** Begin DM frame transmit sequence. */    
