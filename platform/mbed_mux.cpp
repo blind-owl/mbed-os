@@ -1078,10 +1078,14 @@ void Mux::tx_noretransmit_entry_run()
 
 ssize_t Mux::user_data_tx(uint8_t dlci_id, const void* buffer, size_t size)
 {
-// @todo: get mutex
-
     MBED_ASSERT(size <= (MBED_CONF_BUFFER_SIZE - 6u)); // @todo: define magic
     MBED_ASSERT(buffer != NULL);
+
+    if (0 == size) {
+        return 0;
+    }
+    
+// @todo: get mutex
     
     ssize_t write_ret;
     switch (_tx_context.tx_state) {        
@@ -1128,6 +1132,7 @@ ssize_t Mux::user_data_tx(uint8_t dlci_id, const void* buffer, size_t size)
     }
         
 
+// @todo: release mutex
 
     return write_ret;
 }

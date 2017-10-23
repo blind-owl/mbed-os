@@ -49,8 +49,8 @@ TEST(MultiplexerOpenTestGroup, FirstTest)
                                                                     bytes. */
 #define SABM_FRAME_LEN               6u                          /* Length of the SABM frame in number of bytes. */
 #define DM_FRAME_LEN                 6u                          /* Length of the DM frame in number of bytes. */
-#define UA_FRAME_LEN                 6u                          /* Length of the DM frame in number of bytes. */
-#define UIH_FRAME_LEN                6u                          /* Length of the DM frame in number of bytes. */
+#define UA_FRAME_LEN                 6u                          /* Length of the UA frame in number of bytes. */
+#define UIH_FRAME_LEN                7u                          /* Length of the minium UIH frame in number of bytes.*/
 #define WRITE_LEN                    1u                          /* Length of single write call in number of bytes. */  
 #define READ_LEN                     1u                          /* Length of single read call in number of bytes. */
 #define FLAG_SEQUENCE_OCTET          0xF9u                       /* Flag field used in the basic option mode. */
@@ -2600,6 +2600,47 @@ TEST(MultiplexerOpenTestGroup, mux_not_open_dm_tx_full_frame_write_in_loop)
 }
 
 
+static void user_tx_0_length_user_payload_callback()
+{
+    FAIL("TC FAILURE IF CALLED");    
+}
+
+
+/*
+ * TC - Ensure that No Tx cycle is started when 0 leng write is issued
+ * 
+ * Test sequence:
+ * 1. Establish 1 DLCI
+ * 2. Issue 0 length write request
+ *
+ * Expected outcome:
+ * - No Tx is started
+ * - No callback called
+ */
+TEST(MultiplexerOpenTestGroup, user_tx_0_length_user_payload)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+   
+    const uint8_t dlci_id = 1u;
+    FileHandle* f_handle  = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);   
+    f_handle->sigio(user_tx_0_length_user_payload_callback);
+        
+    const uint8_t write_dummy = 0xA5u;    
+    const ssize_t ret         = f_handle->write(&write_dummy, 0);
+    CHECK_EQUAL(0, ret);    
+}
+
+
 static void user_tx_size_lower_bound_tx_callback()
 {
     FAIL("TC FAILURE IF CALLED");
@@ -2607,7 +2648,7 @@ static void user_tx_size_lower_bound_tx_callback()
 
 
 /*
- * TC - 0 length UIH frame TX in 1 write call: lower bound test
+ * TC - 1 byte length UIH frame TX in 1 write call: lower bound test
  */
 TEST(MultiplexerOpenTestGroup, user_tx_size_lower_bound)
 {
@@ -2628,12 +2669,14 @@ TEST(MultiplexerOpenTestGroup, user_tx_size_lower_bound)
     f_handle->sigio(user_tx_size_lower_bound_tx_callback);
     
     /* Program write cycle. */
-    const uint8_t write_byte[6] = 
+    uint8_t user_data           = 0xA5u;    
+    const uint8_t write_byte[7] = 
     {
         FLAG_SEQUENCE_OCTET,
         3u | (dlci_id << 2),        
         FRAME_TYPE_UIH, 
-        LENGTH_INDICATOR_OCTET,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
         fcs_calculate(&write_byte[1], 3u),
         FLAG_SEQUENCE_OCTET
     };               
@@ -2644,10 +2687,9 @@ TEST(MultiplexerOpenTestGroup, user_tx_size_lower_bound)
     mock_write->input_param[1].param        = sizeof(write_byte);
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = sizeof(write_byte);    
-        
-    const uint8_t write_dummy = 0xA5u;    
-    const ssize_t ret         = f_handle->write(&write_dummy, 0);
-    CHECK_EQUAL(0, ret);
+       
+    const ssize_t write_ret = f_handle->write(&user_data, sizeof(user_data));
+    CHECK_EQUAL(sizeof(user_data), write_ret);    
 }
 
 
@@ -2908,12 +2950,14 @@ TEST(MultiplexerOpenTestGroup, user_tx_dlci_establish_during_user_tx)
     f_handle->sigio(user_tx_dlci_establish_during_user_tx_tx_callback);
     
     /* 1. Start user TX write cycle, not finished. */
-    const uint8_t write_byte_uih[6] = 
+    const uint8_t user_data         = 0xA5u;    
+    const uint8_t write_byte_uih[7] = 
     {
         FLAG_SEQUENCE_OCTET,
         3u | (DLCI_ID_LOWER_BOUND << 2),        
         FRAME_TYPE_UIH, 
-        LENGTH_INDICATOR_OCTET,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
         fcs_calculate(&write_byte_uih[1], 3u),
         FLAG_SEQUENCE_OCTET
     };               
@@ -2933,9 +2977,8 @@ TEST(MultiplexerOpenTestGroup, user_tx_dlci_establish_during_user_tx)
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 0;            
 
-    const uint8_t write_byte = 0xA5u;
-    const ssize_t ret = f_handle->write(&write_byte, 0);
-    CHECK_EQUAL(0, ret);       
+    const ssize_t write_ret  = f_handle->write(&user_data, sizeof(user_data));
+    CHECK_EQUAL(sizeof(user_data), write_ret);
     
     /* 2. Start new DLCI establishment while user TX in progress, put pending. */
     mock_t * mock_wait = mock_free_get("wait");
