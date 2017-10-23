@@ -74,7 +74,8 @@ TEST(MultiplexerOpenTestGroup, FirstTest)
 #define PF_BIT                       (1u << 4)                   /* P/F bit position in the frame control field. */     
 #define DLCI_ID_LOWER_BOUND          1u                          /* Lower bound DLCI id value. */ 
 #define DLCI_ID_UPPER_BOUND          63u                         /* Upper bound DLCI id value. */ 
-#define TX_BUFFER_SIZE               31u                         /* Size of the TX buffer in nbumber of bytes. */ 
+#define TX_BUFFER_SIZE               31u                         /* Size of the TX buffer in number of bytes. */ 
+#define RX_BUFFER_SIZE               TX_BUFFER_SIZE              /* Size of the RX buffer in number of bytes. */ 
 
 
 static const uint8_t crctable[CRC_TABLE_LEN] = {
@@ -2732,7 +2733,7 @@ TEST(MultiplexerOpenTestGroup, user_tx_size_upper_bound)
     write_byte[2]                      = FRAME_TYPE_UIH;
     write_byte[3]                      = LENGTH_INDICATOR_OCTET | ((TX_BUFFER_SIZE - 6u) << 1);
     
-    sequence_generate(&(write_byte[4]), TX_BUFFER_SIZE);
+    sequence_generate(&(write_byte[4]), (sizeof(write_byte) - 6u));
     
     write_byte[TX_BUFFER_SIZE - 2]     = fcs_calculate(&write_byte[1], 3u);
     write_byte[TX_BUFFER_SIZE - 1]     = FLAG_SEQUENCE_OCTET;
@@ -4152,5 +4153,67 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_1_byte_per_run_context)
     CHECK_EQUAL(1, m_user_rx_read_1_byte_per_run_context_check_value);
 }
 
+
+static uint8_t m_user_rx_read_max_size_user_payload_in_1_read_call_check_value = 0;
+static void user_rx_read_max_size_user_payload_in_1_read_call_callback()
+{
+    ++m_user_rx_read_max_size_user_payload_in_1_read_call_check_value;
+}
+
+
+/*
+ * TC - Ensure that Rx frame read works correctly when max amount of user data is received.
+ * 
+ * Test sequence:
+ * 1. Establish 1 DLCI
+ * 2. Generate user RX data frame
+ * 4. Verify read buffer upon frame read complete
+ * 
+ * Expected outcome:
+ * - Read buffer verified
+ * - Correct callback count
+ */
+TEST(MultiplexerOpenTestGroup, user_rx_read_max_size_user_payload_in_1_read_call)
+{
+    m_user_rx_read_max_size_user_payload_in_1_read_call_check_value = 0;
+    
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    mux_self_iniated_open();
+    m_file_handle[0] = dlci_self_iniated_establish(ROLE_INITIATOR, DLCI_ID_LOWER_BOUND);    
+    CHECK(m_file_handle[0] != NULL);
+    m_file_handle[0]->sigio(user_rx_read_max_size_user_payload_in_1_read_call_callback);
+    
+    /* Program read cycle. */
+    uint8_t read_byte[RX_BUFFER_SIZE - 1u] = {0};
+    read_byte[0]                           = 3u | (DLCI_ID_LOWER_BOUND << 2);
+    read_byte[1]                           = FRAME_TYPE_UIH;
+    read_byte[2]                           = LENGTH_INDICATOR_OCTET | ((sizeof(read_byte) - 5u) << 1);
+    
+    sequence_generate(&(read_byte[3]), (sizeof(read_byte) - 5u));
+    
+    read_byte[sizeof(read_byte) - 2] = fcs_calculate(&read_byte[0], 3u);
+    read_byte[sizeof(read_byte) - 1] = FLAG_SEQUENCE_OCTET;    
+    
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));    
+    
+    /* Verify read buffer. */
+    uint8_t buffer[RX_BUFFER_SIZE - 6u] = {0};
+    CHECK_EQUAL(sizeof(buffer), (sizeof(read_byte) - 5u));               
+    const ssize_t read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
+    CHECK_EQUAL(sizeof(buffer), read_ret);    
+    const int buffer_compare = memcmp(&(buffer[0]), &(read_byte[3]), sizeof(buffer));
+    CHECK_EQUAL(0, buffer_compare);            
+    
+    /* Validate proper callback callcount. */
+    CHECK_EQUAL(1, m_user_rx_read_max_size_user_payload_in_1_read_call_check_value);
+}
 
 } // namespace mbed

@@ -1151,7 +1151,7 @@ ssize_t Mux::user_data_rx(void* buffer, size_t size)
     if (_state.is_user_rx_ready) {
         _state.is_user_rx_ready = 0;
         
-        const ssize_t ret_value = (_rx_context.buffer[3] >> 1);        
+        const size_t length = (_rx_context.buffer[3] >> 1);        
         
         // @todo: TC use MIN(ret_value, size) for input to memcpy
 #if 0        
@@ -1159,10 +1159,10 @@ for (uint8_t i = 0; i != 7u; ++i) {
     trace("FRAME: ", _rx_context.buffer[i]);
 }
 #endif // 0
-        memcpy(buffer, &(_rx_context.buffer[4]), ret_value);
+        memcpy(buffer, &(_rx_context.buffer[4]), length);
         
 // @todo: release mutex               
-        return ret_value;
+        return static_cast<ssize_t>(length);
     } else {
 // @todo: release mutex               
         return -EAGAIN;
