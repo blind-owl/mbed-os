@@ -3764,6 +3764,60 @@ void single_complete_read_cycle(const uint8_t *read_byte,
 }
 
 
+static void user_rx_0_length_user_payload_callback()
+{
+    FAIL("TC FAILURE IF CALLED");        
+}
+
+
+/*
+ * TC - Ensure read failure for 0 user data length Rx cycle
+ * 
+ * Test sequence:
+ * 1. Establish 1 DLCI
+ * 2. Generate user RX data with 0 length user data
+ * 
+ * Expected outcome:
+ * - User read return -EAGAIN
+ * - No callback called
+ */
+TEST(MultiplexerOpenTestGroup, user_rx_0_length_user_payload)
+{    
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+    
+    m_file_handle[0] = dlci_self_iniated_establish(ROLE_INITIATOR, DLCI_ID_LOWER_BOUND);    
+    CHECK(m_file_handle[0] != NULL);
+    m_file_handle[0]->sigio(user_rx_0_length_user_payload_callback);    
+    
+    /* Start read cycle for the DLCI. */
+    const uint8_t read_byte[5] = 
+    {
+        3u | (DLCI_ID_LOWER_BOUND << 2),        
+        FRAME_TYPE_UIH, 
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };      
+    
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+    
+    /* Verify read failure after successfull read cycle. */
+    uint8_t buffer[1]      = {0};
+    const ssize_t read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
+    CHECK_EQUAL(-EAGAIN, read_ret);        
+}
+
+
 static uint8_t m_user_rx_single_read_check_value = 0;
 static void user_rx_single_read_callback()
 {

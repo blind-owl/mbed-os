@@ -267,14 +267,18 @@ void Mux::on_rx_frame_uih()
     // - disable RX path
     // - look-up correct file file
     // - dispatch callback
-    
-    const uint8_t dlci_id = _rx_context.buffer[1] >> 2;    // @todo: make dlci_id_from_rx_buffer_get()
-    MuxDataService* obj   = file_handle_get(dlci_id);
-    MBED_ASSERT(obj != NULL);
 
-    _state.is_user_rx_ready = 1u;
-    rx_state_change(RX_SUSPEND);
-    obj->_sigio_cb(); 
+    const uint8_t length = (_rx_context.buffer[3] >> 1);
+    if (length != 0) {
+        
+        const uint8_t dlci_id = _rx_context.buffer[1] >> 2;    // @todo: make dlci_id_from_rx_buffer_get()
+        MuxDataService* obj   = file_handle_get(dlci_id);
+        MBED_ASSERT(obj != NULL);
+
+        _state.is_user_rx_ready = 1u;
+        rx_state_change(RX_SUSPEND);
+        obj->_sigio_cb(); 
+    }
 }
 
 
