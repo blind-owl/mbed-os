@@ -144,6 +144,7 @@ void self_iniated_request_tx(const uint8_t *tx_buf, uint8_t tx_buf_len, uint8_t 
         mock_t * mock_read = mock_free_get("read");
         CHECK(mock_read != NULL);
         mock_read->output_param[0].param       = NULL;
+        mock_read->output_param[0].len         = 0;        
         mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_read->input_param[0].param        = read_len;
         mock_read->return_value                = -EAGAIN;                         
@@ -722,6 +723,7 @@ void peer_iniated_response_tx(const uint8_t *buf,
         mock_t * mock_read = mock_free_get("read");
         CHECK(mock_read != NULL);
         mock_read->output_param[0].param       = NULL;
+        mock_read->output_param[0].len         = 0;        
         mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_read->input_param[0].param        = FRAME_HEADER_READ_LEN;
         mock_read->return_value                = -EAGAIN;                                 
@@ -818,6 +820,7 @@ void peer_iniated_response_tx_no_pending_tx(const uint8_t *buf,
         mock_t * mock_read = mock_free_get("read");
         CHECK(mock_read != NULL);
         mock_read->output_param[0].param       = NULL;
+        mock_read->output_param[0].len         = 0;        
         mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_read->input_param[0].param        = FRAME_HEADER_READ_LEN;
         mock_read->return_value                = -EAGAIN;                                 
@@ -2794,8 +2797,9 @@ void single_complete_write_cycle(const uint8_t *write_byte,
     mock_t * mock_read = mock_free_get("read");
     CHECK(mock_read != NULL);
     mock_read->output_param[0].param       = NULL;
+    mock_read->output_param[0].len         = 0;    
     mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_read->input_param[0].param        = FRAME_HEADER_READ_LEN;
+    mock_read->input_param[0].param        = FRAME_HEADER_READ_LEN;    
     mock_read->return_value                = -EAGAIN;                         
     
     /* Complete the 1st write request which is in progress. */
@@ -3947,7 +3951,6 @@ void single_byte_read_cycle(const uint8_t *read_byte,
         mock_read->input_param[0].param        = current_read_len;
         mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;    
         mock_read->output_param[0].len         = 0;
-        // @todo: when -EAGAIN mock_read->output_param[0].param==NULL
         mock_read->return_value                = -EAGAIN;
         
         /* Trigger deferred call to execute the programmed mocks above. */
