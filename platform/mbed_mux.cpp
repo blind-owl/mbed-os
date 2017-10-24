@@ -749,6 +749,7 @@ void Mux::rx_event_do(RxEvent event)
     };
       
     switch (event) {
+        int            id;
         ssize_t        read_err;
         rx_read_func_t func;
         case RX_READ:            
@@ -760,16 +761,12 @@ void Mux::rx_event_do(RxEvent event)
             
             break;
         case RX_RESUME:
-            if (_rx_context.rx_state == RX_SUSPEND) {
-
-                rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);
-                
-                // @todo: schedule system thread
-                MBED_ASSERT(false);
-            } else {
-                /* No implementation required. */
-            }
+            MBED_ASSERT(_rx_context.rx_state == RX_SUSPEND);
             
+            rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);                
+            // @todo: make dedicated function for this below
+            id = _event_q->call(Mux::on_deferred_call);
+            MBED_ASSERT(id != 0);
             break;
         default:
             /* Code that should never be reached. */
@@ -814,7 +811,7 @@ void Mux::write_do()
             
             break;
         default:
-            /* No implementattion required. */
+            /* No implementation required. */
             break;
     }
 }
@@ -869,12 +866,8 @@ void Mux::sabm_request_construct(uint8_t dlci_id)
 {
     frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::_tx_context.buffer[0]));
     
-    frame_hdr->flag_seq = FLAG_SEQUENCE_OCTET;
-    if (dlci_id == 0) {
-        frame_hdr->address = 3 | (dlci_id << 2);                  
-    } else {
-        frame_hdr->address = (/*_state.is_initiator ? */3/* : 1*/) | (dlci_id << 2);                  
-    }
+    frame_hdr->flag_seq       = FLAG_SEQUENCE_OCTET;
+    frame_hdr->address        = 3u | (dlci_id << 2);
     frame_hdr->control        = (FRAME_TYPE_SABM | PF_BIT);         
     frame_hdr->length         = 1u;
     frame_hdr->information[0] = fcs_calculate(&(Mux::_tx_context.buffer[1]), FCS_INPUT_LEN);    
@@ -1177,11 +1170,12 @@ ssize_t Mux::user_data_rx(void* buffer, size_t size)
         const size_t read_length = min((_rx_context.read_length - _rx_context.offset), size);        
         memcpy(buffer, &(_rx_context.buffer[4u + _rx_context.offset]), read_length);
         _rx_context.offset += read_length;        
-        
+               
         if (_rx_context.offset == _rx_context.read_length) {
-            _state.is_user_rx_ready = 0;
+            /* Current Rx buffer consumed, disable user reading and resume the Rx path. */
             
-            // @todo: do RX_RESUME
+            _state.is_user_rx_ready = 0;
+            rx_event_do(RX_RESUME);
         }
         
 // @todo: release mutex               

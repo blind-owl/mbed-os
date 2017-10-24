@@ -3824,14 +3824,17 @@ static void user_rx_single_read_callback()
 {
     ++m_user_rx_single_read_check_value;  
     
-    uint8_t buffer[1] = {0};
-    ssize_t read_ret  = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
+    mock_t * mock_call = mock_free_get("call");
+    CHECK(mock_call != NULL);           
+    mock_call->return_value = 1;            
+    uint8_t buffer[1]       = {0};
+    ssize_t read_ret        = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
     CHECK(read_ret == sizeof(buffer));
     CHECK_EQUAL(0xA5u, buffer[0]);
     
     /* Verify failure after successfull read cycle. */
     read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
-    CHECK(read_ret == -EAGAIN);    
+    CHECK_EQUAL(-EAGAIN, read_ret);    
 }
 
 
@@ -3931,30 +3934,33 @@ TEST(MultiplexerOpenTestGroup, user_rx_single_read_no_data_available)
 }
 
 
-static uint8_t m_user_rx_2_user_rx_frames_rx_suspend_check_value = 0;
-static void user_rx_2_user_rx_frames_rx_suspend_started_callback()
+static uint8_t m_user_rx_rx_suspend_rx_resume_cycle_check_value = 0;
+static void user_rx_rx_suspend_rx_resume_cycle_callback()
 {
-    ++m_user_rx_2_user_rx_frames_rx_suspend_check_value;
+    ++m_user_rx_rx_suspend_rx_resume_cycle_check_value ;
 }
 
 
 /*
- * TC - Ensure that Rx path procssing is suspended (no read cycle is started) upon reception of a valid user data frame.
+ * TC - Ensure the following: 
+ * - Rx path procssing is suspended (no read cycle is started) upon reception of a valid user data frame.
+ * - Rx path processing is resumed after valid user data frame has been consumed by the application 
  * 
  * Test sequence:
  * 1. Establish 1 DLCI
  * 2. Generate user RX data frame
  * 3. Start Rx/Tx cycle
- * 4. Verify read buffer
+ * 5. Verify read buffer
  * 
  * Expected outcome:
  * - Rx path processing suspended (no read cycle is started) upon reception of a valid user data frame.
+ * - Rx path processing enabled after valid user data frame has been consumed by the application 
  * - Correct callback count
  * - Read buffer verified
  */
-TEST(MultiplexerOpenTestGroup, user_rx_2_user_rx_frames_rx_suspend_started)
+TEST(MultiplexerOpenTestGroup, user_rx_rx_suspend_rx_resume_cycle)
 {
-    m_user_rx_2_user_rx_frames_rx_suspend_check_value = 0;
+    m_user_rx_rx_suspend_rx_resume_cycle_check_value = 0;
     
     mbed::FileHandleMock fh_mock;   
     mbed::EventQueueMock eq_mock;
@@ -3970,11 +3976,11 @@ TEST(MultiplexerOpenTestGroup, user_rx_2_user_rx_frames_rx_suspend_started)
     
     m_file_handle[0] = dlci_self_iniated_establish(ROLE_INITIATOR, DLCI_ID_LOWER_BOUND);    
     CHECK(m_file_handle[0] != NULL);
-    m_file_handle[0]->sigio(user_rx_2_user_rx_frames_rx_suspend_started_callback);
+    m_file_handle[0]->sigio(user_rx_rx_suspend_rx_resume_cycle_callback);
     
     /* Start 1st read cycle for the DLCI. */
-    const uint8_t user_data    = 0xA5u;
-    const uint8_t read_byte[6] = 
+    uint8_t user_data    = 0xA5u;
+    uint8_t read_byte[6] = 
     {
         3u | (DLCI_ID_LOWER_BOUND << 2),        
         FRAME_TYPE_UIH, 
@@ -3982,10 +3988,12 @@ TEST(MultiplexerOpenTestGroup, user_rx_2_user_rx_frames_rx_suspend_started)
         user_data,
         fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
-    };      
-    
+    };         
     single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
 
+    /* Validate proper callback callcount. */
+    CHECK_EQUAL(1, m_user_rx_rx_suspend_rx_resume_cycle_check_value );
+    
     /* Start 2nd Rx/Tx cycle, which omits the Rx part as Rx prcossing has been suspended by reception of valid user 
        data frame above. Tx is omitted as there is no data in the Tx buffer. */
     mock_t * mock_call = mock_free_get("call");
@@ -3995,16 +4003,50 @@ TEST(MultiplexerOpenTestGroup, user_rx_2_user_rx_frames_rx_suspend_started)
     mbed::FileHandleMock::io_control(io_control);    
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
     mbed::EventQueueMock::io_control(eq_io_control);        
-
-    /* Verify read buffer. */
-    uint8_t buffer[1]      = {0};
-    const ssize_t read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
+    
+    /* Verify read buffer: consumption of the read buffer triggers enqueue to event Q. */
+    mock_call = mock_free_get("call");
+    CHECK(mock_call != NULL);           
+    mock_call->return_value = 1;      
+    uint8_t buffer[1]       = {0};
+    ssize_t read_ret        = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
     CHECK_EQUAL(sizeof(buffer), read_ret);
     CHECK(buffer[0] == user_data);    
+    read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
+    CHECK_EQUAL(-EAGAIN, read_ret);    
+       
+    /* Verify that Rx processing has been resumed after read buffer has been consumed above. */
+    
+    /* Start 2nd read cycle for the DLCI. */
+    user_data    = 0x5Au;
+    read_byte[3] = user_data;
+    read_byte[4] = fcs_calculate(&read_byte[0], 3u);
+    
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));   
     
     /* Validate proper callback callcount. */
-    CHECK_EQUAL(1, m_user_rx_2_user_rx_frames_rx_suspend_check_value);
+    CHECK_EQUAL(2, m_user_rx_rx_suspend_rx_resume_cycle_check_value );    
+    
+    /* Start 2nd Rx/Tx cycle, which omits the Rx part as Rx processing has been suspended by reception of valid user 
+       data frame above. Tx is omitted as there is no data in the Tx buffer. */
+    mock_call = mock_free_get("call");
+    CHECK(mock_call != NULL);           
+    mock_call->return_value = 1;       
+    mbed::FileHandleMock::io_control(io_control);   
+    mbed::EventQueueMock::io_control(eq_io_control);        
+    
+    /* Verify read buffer: consumption of the read buffer triggers enqueue to event Q. */
+    mock_call = mock_free_get("call");
+    CHECK(mock_call != NULL);           
+    mock_call->return_value = 1;          
+    buffer[0]               = 0;
+    read_ret                = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
+    CHECK_EQUAL(sizeof(buffer), read_ret);
+    CHECK(buffer[0] == user_data);
+    read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
+    CHECK_EQUAL(-EAGAIN, read_ret);
 }
+
 
 void single_byte_read_cycle(const uint8_t *read_byte, 
                             uint8_t        length)
@@ -4144,8 +4186,11 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_1_byte_per_run_context)
     single_byte_read_cycle(&(read_byte[0]), sizeof(read_byte));
     
     /* Verify read buffer. */
-    uint8_t buffer[1]      = {0};
-    const ssize_t read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
+    mock_t * mock_call = mock_free_get("call");
+    CHECK(mock_call != NULL);           
+    mock_call->return_value = 1;            
+    uint8_t buffer[1]       = {0};
+    const ssize_t read_ret  = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
     CHECK_EQUAL(sizeof(buffer), read_ret);
     CHECK_EQUAL(user_data, buffer[0]);        
     
@@ -4205,6 +4250,9 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_max_size_user_payload_in_1_read_call
     single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));    
     
     /* Verify read buffer. */
+    mock_t * mock_call = mock_free_get("call");
+    CHECK(mock_call != NULL);           
+    mock_call->return_value             = 1;            
     uint8_t buffer[RX_BUFFER_SIZE - 6u] = {0};
     CHECK_EQUAL(sizeof(buffer), (sizeof(read_byte) - 5u));               
     const ssize_t read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
@@ -4269,10 +4317,17 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_1_byte_per_read_call_max_size_user_p
     single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));    
     
     /* Verify read buffer: do reads 1 byte a time until all of the data is read. */
-    ssize_t read_ret;
-    uint8_t test_buffer[sizeof(read_byte) - 5u] = {0};    
-    uint8_t read_count = 0;
+    mock_t * mock_call;
+    ssize_t  read_ret;
+    uint8_t  test_buffer[sizeof(read_byte) - 5u] = {0};    
+    uint8_t  read_count = 0;
     do {
+        if ((read_count + 1u) == sizeof(test_buffer)) {
+            mock_call = mock_free_get("call");
+            CHECK(mock_call != NULL);           
+            mock_call->return_value = 1;                        
+        }
+        
         read_ret = m_file_handle[0]->read(&(test_buffer[read_count]), 1u);
         CHECK_EQUAL(read_byte[3u + read_count], test_buffer[read_count]);
         
