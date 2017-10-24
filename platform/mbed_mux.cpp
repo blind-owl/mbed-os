@@ -725,7 +725,7 @@ ssize_t Mux::on_rx_read_state_trailer_read()
         const rx_frame_decoder_func_t func = rx_frame_decoder_func[frame_type];
         func();      
   
-        read_err             = -EAGAIN;
+        read_err = -EAGAIN;
     }
     
     return read_err;

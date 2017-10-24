@@ -3803,7 +3803,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_0_length_user_payload)
     /* Start read cycle for the DLCI. */
     const uint8_t read_byte[5] = 
     {
-        3u | (DLCI_ID_LOWER_BOUND << 2),        
+        1u | (DLCI_ID_LOWER_BOUND << 2),        
         FRAME_TYPE_UIH, 
         LENGTH_INDICATOR_OCTET,
         fcs_calculate(&read_byte[0], 3u),
@@ -3878,7 +3878,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_single_read)
     const uint8_t user_data    = 0xA5u;
     const uint8_t read_byte[6] = 
     {
-        3u | (DLCI_ID_LOWER_BOUND << 2),        
+        1u | (DLCI_ID_LOWER_BOUND << 2),        
         FRAME_TYPE_UIH, 
         LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
         user_data,
@@ -3982,7 +3982,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_rx_suspend_rx_resume_cycle)
     uint8_t user_data    = 0xA5u;
     uint8_t read_byte[6] = 
     {
-        3u | (DLCI_ID_LOWER_BOUND << 2),        
+        1u | (DLCI_ID_LOWER_BOUND << 2),        
         FRAME_TYPE_UIH, 
         LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
         user_data,
@@ -4176,7 +4176,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_1_byte_per_run_context)
     const uint8_t user_data    = 0xA5u;
     const uint8_t read_byte[6] = 
     {
-        3u | (DLCI_ID_LOWER_BOUND << 2),        
+        1u | (DLCI_ID_LOWER_BOUND << 2),        
         FRAME_TYPE_UIH, 
         LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
         user_data,
@@ -4238,7 +4238,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_max_size_user_payload_in_1_read_call
     
     /* Program read cycle. */
     uint8_t read_byte[RX_BUFFER_SIZE - 1u] = {0};
-    read_byte[0]                           = 3u | (DLCI_ID_LOWER_BOUND << 2);
+    read_byte[0]                           = 1u | (DLCI_ID_LOWER_BOUND << 2);
     read_byte[1]                           = FRAME_TYPE_UIH;
     read_byte[2]                           = LENGTH_INDICATOR_OCTET | ((sizeof(read_byte) - 5u) << 1);
     
@@ -4305,7 +4305,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_1_byte_per_read_call_max_size_user_p
     
     /* Program read cycle. */
     uint8_t read_byte[RX_BUFFER_SIZE - 1u] = {0};
-    read_byte[0]                           = 3u | (DLCI_ID_LOWER_BOUND << 2);
+    read_byte[0]                           = 1u | (DLCI_ID_LOWER_BOUND << 2);
     read_byte[1]                           = FRAME_TYPE_UIH;
     read_byte[2]                           = LENGTH_INDICATOR_OCTET | ((sizeof(read_byte) - 5u) << 1);
     
