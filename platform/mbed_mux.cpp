@@ -272,25 +272,26 @@ void Mux::on_rx_frame_disc()
 
 void Mux::on_rx_frame_uih()
 {
-    // - disable RX path
-    // - look-up correct file file
-    // - dispatch callback
-
     const uint8_t length = (_rx_context.buffer[3] >> 1);
     if (length != 0) {
+        /* Proceed with processing for non 0 length user data frames. */
         
         const uint8_t dlci_id = _rx_context.buffer[1] >> 2;    // @todo: make dlci_id_from_rx_buffer_get()
         MuxDataService* obj   = file_handle_get(dlci_id);
-        MBED_ASSERT(obj != NULL);
-
-        _state.is_user_rx_ready  = 1u;
-        _rx_context.offset       = 0;
-        _rx_context.read_length  = length;
-        
-        rx_state_change(RX_SUSPEND, null_action);
-        obj->_sigio_cb(); 
+        if (obj != NULL) {
+            /* Established DLCI exists, proceed with processing. */
+            
+            _state.is_user_rx_ready  = 1u;
+            _rx_context.offset       = 0;
+            _rx_context.read_length  = length;
+            
+            rx_state_change(RX_SUSPEND, null_action);
+            obj->_sigio_cb(); 
+        } else {
+            rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);
+        }
     } else {
-        rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);            
+        rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);
     }
 }
 

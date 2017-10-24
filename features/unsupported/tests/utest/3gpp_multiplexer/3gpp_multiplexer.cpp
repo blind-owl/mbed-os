@@ -2947,7 +2947,7 @@ TEST(MultiplexerOpenTestGroup, user_tx_dlci_establish_during_user_tx)
     
     mux_self_iniated_open();
   
-    FileHandle* f_handle  = dlci_self_iniated_establish(ROLE_INITIATOR, DLCI_ID_LOWER_BOUND);   
+    FileHandle* f_handle = dlci_self_iniated_establish(ROLE_INITIATOR, DLCI_ID_LOWER_BOUND);   
     f_handle->sigio(user_tx_dlci_establish_during_user_tx_tx_callback);
     
     /* 1. Start user TX write cycle, not finished. */
@@ -4279,7 +4279,7 @@ static void rx_read_1_byte_per_read_call_max_size_user_payload_available_callbac
  * Test sequence:
  * 1. Establish 1 DLCI
  * 2. Generate user RX data frame
- * 4. Verify read buffer upon frame read complete
+ * 3. Verify read buffer upon frame read complete
  * 
  * Expected outcome:
  * - Read buffer verified
@@ -4329,6 +4329,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_1_byte_per_read_call_max_size_user_p
         }
         
         read_ret = m_file_handle[0]->read(&(test_buffer[read_count]), 1u);
+        CHECK_EQUAL(1, read_ret);
         CHECK_EQUAL(read_byte[3u + read_count], test_buffer[read_count]);
         
         ++read_count;
@@ -4340,6 +4341,97 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_1_byte_per_read_call_max_size_user_p
     
     /* Validate proper callback callcount. */
     CHECK_EQUAL(1, m_user_rx_read_1_byte_per_read_call_max_size_user_payload_available_check_value);    
+}
+
+
+static uint8_t m_user_rx_dlci_not_established_check_value = 0;
+static void user_rx_dlci_not_established_callback()
+{
+    ++m_user_rx_dlci_not_established_check_value;
+}
+
+
+/*
+ * TC - Ensure proper behaviour when user data Rx frame received to DLCI ID, which is not established.
+ * 
+ * Test sequence:
+ * 1. Mux open
+ * 2. Iterate through max amount of supported DLCI IDs following sequence:
+ * - start read cycle for the not established DLCI 
+ * - start read cycle for the established DLCI
+ * 
+ * Expected outcome:
+ * - The Rx frame is dropped by the implementation for the not established DLCI
+ * - The Rx frame is accepted by the implementation for the not established DLCI 
+ * - Validate proper callback callcount
+ * - Validate read buffer
+ */
+TEST(MultiplexerOpenTestGroup, user_rx_dlci_not_established)
+{    
+    m_user_rx_dlci_not_established_check_value = 0;
+
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+
+
+    uint8_t dlci_id      = DLCI_ID_LOWER_BOUND;    
+    uint8_t user_data    = 0xA5u;
+    uint8_t read_byte[6] = 
+    {
+        1u | (dlci_id << 2),        
+        FRAME_TYPE_UIH, 
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&read_byte[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };         
+    
+    mock_t * mock_call;
+    ssize_t  read_ret;
+    uint8_t  test_buffer[1] = {0};    
+    for (uint8_t i = 0; i!= MAX_DLCI_COUNT; ++i) {
+        
+        /* Start read cycle for the not established DLCI. */
+        single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+        
+        /* Establish the DLCI. */
+        m_file_handle[i] = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);             
+        CHECK(m_file_handle[i] != NULL);
+        m_file_handle[i]->sigio(user_rx_dlci_not_established_callback);
+        
+        /* Validate proper callback callcount. */
+        CHECK_EQUAL(i, m_user_rx_dlci_not_established_check_value);                
+        
+        /* Start read cycle for the established DLCI. */
+        single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+
+        /* Validate proper callback callcount. */
+        CHECK_EQUAL((i + 1), m_user_rx_dlci_not_established_check_value);                
+        
+        /* Validate read buffer. */
+        mock_call = mock_free_get("call");
+        CHECK(mock_call != NULL);           
+        mock_call->return_value = 1;                    
+        read_ret = m_file_handle[i]->read(&(test_buffer[0]), 1u);
+        CHECK_EQUAL(1, read_ret);
+        CHECK_EQUAL(user_data, test_buffer[0]);        
+        read_ret = m_file_handle[i]->read(&(test_buffer[0]), 1u);
+        CHECK_EQUAL(-EAGAIN, read_ret);
+        
+        /* Construct new buffer for the next iteration. */       
+        read_byte[0] = 1u | (++dlci_id << 2);
+        read_byte[3] = ++user_data;
+        read_byte[4] = fcs_calculate(&read_byte[0], 3u);
+    }
 }
 
 
