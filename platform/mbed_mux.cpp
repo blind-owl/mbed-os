@@ -137,8 +137,7 @@ void Mux::on_timeout()
                 MBED_ASSERT(os_status == osOK);    
                 tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);
                 // @todo: need to be carefull of call order between the thread release and state change.
-            }
-            
+            }            
             break;
         default:
             /* No implementation required. */
@@ -178,6 +177,12 @@ void Mux::on_rx_frame_sabm()
 }
 
 
+uint8_t Mux::rx_dlci_id_get()
+{
+    return (_rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX]) >> 2;
+}
+
+
 void Mux::on_rx_frame_ua()
 {
     // @todo: verify that we have issued the start/establishment request in the 1st place?
@@ -190,7 +195,7 @@ void Mux::on_rx_frame_ua()
         case TX_RETRANSMIT_DONE:
             _event_q->cancel(_tx_context.timer_id);           
             _establish_status = Mux::MUX_ESTABLISH_SUCCESS;
-            dlci_id           = _rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] >> 2;            
+            dlci_id           = rx_dlci_id_get();
             if (dlci_id != 0) {
                 dlci_id_append(dlci_id);
             } 
@@ -250,14 +255,14 @@ void Mux::dm_response_send()
 
 
 void Mux::on_rx_frame_disc()
-{
-    const uint8_t dlci_id = _rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] >> 2;   // @todo: make func 
-   
+{   
     switch (_tx_context.tx_state) {
+        uint8_t dlci_id;
         case TX_IDLE:                      
             if (!_state.is_mux_open) {
                 dm_response_send();
             } else {
+                dlci_id = rx_dlci_id_get();
                 if (dlci_id != 0) {
                     if (!is_dlci_in_use(dlci_id)) {
                         dm_response_send();
@@ -285,9 +290,8 @@ void Mux::on_rx_frame_uih()
     const uint8_t length = (_rx_context.buffer[FRAME_LENGTH_FIELD_INDEX] >> 1);
     if (length != 0) {
         /* Proceed with processing for non 0 length user data frames. */
-        
-        const uint8_t dlci_id = _rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] >> 2;    
-        // @todo: make dlci_id_from_rx_buffer_get()
+
+        const uint8_t dlci_id = rx_dlci_id_get();
         MuxDataService* obj   = file_handle_get(dlci_id);
         if (obj != NULL) {
             /* Established DLCI exists, proceed with processing. */
@@ -399,7 +403,7 @@ void Mux::pending_self_iniated_mux_open_start()
 
     sabm_request_construct(0);
     tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
-    _tx_context.retransmit_counter = RETRANSMIT_COUNT; // @todo: set in 1 place         
+    _tx_context.retransmit_counter = RETRANSMIT_COUNT; // @todo: set in 1 place - NOT?         
 }
 
 
@@ -411,7 +415,7 @@ void Mux::pending_self_iniated_dlci_open_start()
 
     sabm_request_construct(_dlci_id);
     tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
-    _tx_context.retransmit_counter = RETRANSMIT_COUNT; // @todo: set in 1 place
+    _tx_context.retransmit_counter = RETRANSMIT_COUNT; // @todo: set in 1 place - NOT ?
 }
 
 
@@ -514,7 +518,7 @@ trace("tx_idle_entry_run: ", _state.is_dlci_open_peer_iniated_pending);
         /* No implementation required. */
     }
 
-//@todo: SHOULD TX CALLBACK DISPATCH BE IN else clause above or even the first one??
+//@todo: SHOULD TX CALLBACK DISPATCH BE IN else clause above or even the first one?? - MAKE SEPRATE FUNC PUT TO ELSE
 
     /* TX callback processing block below could be entered recursively within same thread context. Protection bit is 
      * used to prevent that. */

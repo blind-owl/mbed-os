@@ -416,6 +416,12 @@ private:
     
     static size_t min(uint8_t size_1, size_t size_2);
     
+    /** Get DLCI ID from the Rx buffer.
+     *
+     *  @return DLCI ID from the Rx buffer.
+     */    
+    static uint8_t rx_dlci_id_get();
+    
     /* Deny object creation. */    
     Mux();
     
