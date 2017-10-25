@@ -945,31 +945,31 @@ MuxDataService * Mux::file_handle_get(uint8_t dlci_id)
 }
     
     
-uint32_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHandle **obj)
+Mux::MuxReturnStatus Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHandle **obj)
 {       
     if ((dlci_id < DLCI_ID_LOWER_BOUND) || (dlci_id > DLCI_ID_UPPER_BOUND)) {
-        return 2u;
+        return MUX_STATUS_INVALID_RANGE;
     }
 // @todo: add mutex_lock    
     if (!_state.is_mux_open) {
 // @todo: add mutex_free                
-        return 1u;
+        return MUX_STATUS_MUX_NOT_OPEN;
     }
     if (is_dlci_q_full()) {
 // @todo: add mutex_free                        
-        return 0;
+        return MUX_STATUS_NO_RESOURCE;
     }
     if (is_dlci_in_use(dlci_id)) {
 // @todo: add mutex_free                        
-        return 0;
+        return MUX_STATUS_NO_RESOURCE;
     }
     if (_state.is_dlci_open_self_iniated_pending) {
 // @todo: add mutex_free                        
-        return 3u;        
+        return MUX_STATUS_INPROGRESS;        
     }
     if (_state.is_dlci_open_self_iniated_running) {
 // @todo: add mutex_free                        
-        return 3u;                
+        return MUX_STATUS_INPROGRESS;                
     }
        
     switch (_tx_context.tx_state) {
@@ -1013,7 +1013,7 @@ uint32_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHa
     
     _state.is_dlci_open_self_iniated_running = 0;            
 
-    return 4u;
+    return MUX_STATUS_SUCCESS;
 }
 
 
@@ -1025,21 +1025,21 @@ void Mux::tx_retransmit_enqueu_entry_run()
 }
 
     
-uint32_t Mux::mux_start(Mux::MuxEstablishStatus &status)
+Mux::MuxReturnStatus Mux::mux_start(Mux::MuxEstablishStatus &status)
 {
 // @todo: add mutex_lock
        
     if (_state.is_mux_open) { 
 // @todo: add mutex_free        
-        return 0;
+        return MUX_STATUS_NO_RESOURCE;
     }
     if (_state.is_mux_open_self_iniated_pending) { 
 // @todo: add mutex_free                
-        return 1u;
+        return MUX_STATUS_INPROGRESS;
     }
     if (_state.is_mux_open_self_iniated_running) {
 // @todo: add mutex_free                
-        return 1u;        
+        return MUX_STATUS_INPROGRESS;        
     }
 
     switch (_tx_context.tx_state) {
@@ -1079,7 +1079,7 @@ uint32_t Mux::mux_start(Mux::MuxEstablishStatus &status)
                 
     _state.is_mux_open_self_iniated_running = 0;
    
-    return 2u;   
+    return MUX_STATUS_SUCCESS;   
 }
 
 

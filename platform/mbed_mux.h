@@ -123,6 +123,16 @@ typedef enum
     MUX_ESTABLISH_MAX          /* Enumeration upper bound. */
 } MuxEstablishStatus;
 
+typedef enum
+{
+    MUX_STATUS_SUCCESS = 0,    
+    MUX_STATUS_INPROGRESS,     
+    MUX_STATUS_INVALID_RANGE, 
+    MUX_STATUS_MUX_NOT_OPEN,
+    MUX_STATUS_NO_RESOURCE,
+    MUX_STATUS_MAX
+} MuxReturnStatus;
+
     // @todo: update me
     static void module_init();
     
@@ -133,11 +143,11 @@ typedef enum
      *
      *  @param status Operation completion code.
      *
-     *  @return 2   Operation completed, check @ref status for completion code.
-     *  @return 1   Operation not started, control channel open allready in progress.     
-     *  @return 0   Operation not started, multiplexer control channel allready open.    
+     *  @return MUX_STATUS_SUCCESS     Operation completed, check @ref status for completion code.
+     *  @return MUX_STATUS_INPROGRESS  Operation not started, control channel open allready in progress.     
+     *  @return MUX_STATUS_NO_RESOURCE Operation not started, multiplexer control channel allready open.    
      */
-    static uint32_t mux_start(MuxEstablishStatus &status);
+    static MuxReturnStatus mux_start(MuxEstablishStatus &status);
         
     /** Establish a DLCI.
      *
@@ -150,13 +160,14 @@ typedef enum
      *  @param status   Operation completion code.     
      *  @param obj      Valid object upon @ref status having @ref MUX_ESTABLISH_SUCCESS, NULL upon failure.     
      *
-     *  @return 4   Operation completed, check @ref status for completion code.
-     *  @return 3   Operation not started, DLCI establishment allready in progress.     
-     *  @return 2   Operation not started, DLCI ID not in valid range.
-     *  @return 1   Operation not started, no established multiplexer control channel exists.
-     *  @return 0   Operation not started, @ref dlci_id, or all available DLCI ID resources, allready in use.
+     *  @return MUX_STATUS_SUCCESS       Operation completed, check @ref status for completion code.
+     *  @return MUX_STATUS_INPROGRESS    Operation not started, DLCI establishment allready in progress.     
+     *  @return MUX_STATUS_INVALID_RANGE Operation not started, DLCI ID not in valid range.
+     *  @return MUX_STATUS_MUX_NOT_OPEN  Operation not started, no established multiplexer control channel exists.
+     *  @return MUX_STATUS_NO_RESOURCE   Operation not started, @ref dlci_id, or all available DLCI ID resources, 
+     *                                   allready in use.
      */        
-    static uint32_t dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHandle **obj);
+    static MuxReturnStatus dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHandle **obj);
         
     /** Attach serial interface to the object.
      *
