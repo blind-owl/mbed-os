@@ -360,10 +360,17 @@ void Mux::tx_state_change(TxState new_state, tx_state_entry_func_t entry_func, t
 }
 
 
+void Mux::event_queue_enqueue()
+{
+    const int id = _event_q->call(Mux::on_deferred_call);
+    MBED_ASSERT(id != 0);
+}
+
+
 void Mux::tx_retransmit_done_entry_run()
 {
     _tx_context.timer_id = _event_q->call_in(T1_TIMER_VALUE, Mux::on_timeout);
-    MBED_ASSERT(_tx_context.timer_id != 0);                
+    MBED_ASSERT(_tx_context.timer_id != 0);               
 }
  
 
@@ -782,9 +789,7 @@ void Mux::rx_event_do(RxEvent event)
             MBED_ASSERT(_rx_context.rx_state == RX_SUSPEND);
             
             rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);                
-            // @todo: make dedicated function for this below
-            id = _event_q->call(Mux::on_deferred_call);
-            MBED_ASSERT(id != 0);
+            event_queue_enqueue();
             break;
         default:
             /* Code that should never be reached. */
@@ -844,8 +849,7 @@ void Mux::on_deferred_call()
 
 void Mux::on_sigio()
 {
-    const int id = _event_q->call(Mux::on_deferred_call);
-    MBED_ASSERT(id != 0);
+    event_queue_enqueue();
 }
 
 

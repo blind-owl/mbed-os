@@ -422,6 +422,10 @@ private:
      */    
     static uint8_t rx_dlci_id_get();
     
+    /** Enqueue callback to event queue.
+     */        
+    static void event_queue_enqueue();
+    
     /* Deny object creation. */    
     Mux();
     
