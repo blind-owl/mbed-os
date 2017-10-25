@@ -5,28 +5,36 @@
 
 namespace mbed {
 
-#define FLAG_SEQUENCE_OCTET                 0xF9u         /* Flag field used in the basic option mode. */    
-#define ADDRESS_MUX_START_REQ_OCTET         0x03u         /* Address field of the start multiplexer request frame. */   
-/* Address field value of the start multiplexer response frame. */        
-#define ADDRESS_MUX_START_RESP_OCTET        ADDRESS_MUX_START_REQ_OCTET
-#define FCS_INPUT_LEN                       3u            /* Length of the input for FCS calculation in number of 
-                                                             bytes. Consisting of address, control and length fields. */
-#define SABM_FRAME_LEN                      6u            /* Length of the SABM frame in number of bytes. */
-#define UA_FRAME_LEN                        6u            /* Length of the UA frame in number of bytes. */
-#define DM_FRAME_LEN                        6u            /* Length of the DM frame in number of bytes. */
-#define UIH_FRAME_MIN_LEN                   6u            /* Minimum length of user frame. */
-#define T1_TIMER_VALUE                      300u          /* T1 timer value. */
-#define RETRANSMIT_COUNT                    3u            /* Retransmission count for the tx frames requiring a
-                                                             response. */
-#define FRAME_TYPE_SABM                     0x2Fu         /* SABM frame type coding in the frame control field. */
-#define FRAME_TYPE_UA                       0x63u         /* UA frame type coding in the frame control field. */
-#define FRAME_TYPE_DM                       0x0Fu         /* DM frame type coding in the frame control field. */
-#define FRAME_TYPE_DISC                     0x43u         /* DISC frame type coding in the frame control field. */
-#define FRAME_TYPE_UIH                      0xEFu         /* UIH frame type coding in the frame control field. */
-#define PF_BIT                              (1u << 4)     /* P/F bit position in the frame control field. */
-#define CR_BIT                              (1u << 1)     /* C/R bit position in the frame address field. */
-#define DLCI_ID_LOWER_BOUND                 1u            /* Lower bound value of DLCI id.*/
-#define DLCI_ID_UPPER_BOUND                 63u           /* Upper bound value of DLCI id.*/  
+#define FLAG_SEQUENCE_OCTET                 0xF9u     /* Flag field used in the basic option mode. */    
+#define ADDRESS_MUX_START_REQ_OCTET         0x03u     /* Address field of the start multiplexer request frame. */
+#define ADDRESS_MUX_START_RESP_OCTET        0x03u     /* Address field value of the start multiplexer response frame. */
+
+#define FCS_INPUT_LEN                       3u        /* Length of the input for FCS calculation in number of bytes. */
+#define SABM_FRAME_LEN                      6u        /* Length of the SABM frame in number of bytes. */
+#define UA_FRAME_LEN                        6u        /* Length of the UA frame in number of bytes. */
+#define DM_FRAME_LEN                        6u        /* Length of the DM frame in number of bytes. */
+#define UIH_FRAME_MIN_LEN                   6u        /* Minimum length of user frame. */
+
+#define T1_TIMER_VALUE                      300u      /* T1 timer value. */
+#define RETRANSMIT_COUNT                    3u        /* Retransmission count for the tx frames requiring a response. */
+                                                             
+#define FRAME_TYPE_SABM                     0x2Fu     /* SABM frame type coding in the frame control field. */
+#define FRAME_TYPE_UA                       0x63u     /* UA frame type coding in the frame control field. */
+#define FRAME_TYPE_DM                       0x0Fu     /* DM frame type coding in the frame control field. */
+#define FRAME_TYPE_DISC                     0x43u     /* DISC frame type coding in the frame control field. */
+#define FRAME_TYPE_UIH                      0xEFu     /* UIH frame type coding in the frame control field. */
+
+#define PF_BIT                              (1u << 4) /* P/F bit position in the frame control field. */
+#define CR_BIT                              (1u << 1) /* C/R bit position in the frame address field. */
+
+#define DLCI_ID_LOWER_BOUND                 1u        /* Lower bound value of DLCI id.*/
+#define DLCI_ID_UPPER_BOUND                 63u       /* Upper bound value of DLCI id.*/  
+
+#define FRAME_FLAG_SEQUENCE_FIELD_INDEX     0         /* Index of the frame flag sequence field. */    
+#define FRAME_ADDRESS_FIELD_INDEX           1u        /* Index of the frame address field. */
+#define FRAME_CONTROL_FIELD_INDEX           2u        /* Index of the frame control field. */
+#define FRAME_LENGTH_FIELD_INDEX            3u        /* Index of the frame length indicator field. */    
+#define FRAME_INFORMATION_FIELD_INDEX       4u        /* Index of the frame information field. */
     
 /* Definition for frame header type. */
 typedef struct
@@ -145,14 +153,14 @@ void Mux::dm_response_construct()
     
     // @todo: combine common functionality with other response function.
     
-    frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::_tx_context.buffer[0]));
+    frame_hdr_t* frame_hdr = 
+        reinterpret_cast<frame_hdr_t *>(&(Mux::_tx_context.buffer[FRAME_FLAG_SEQUENCE_FIELD_INDEX]));
     
     frame_hdr->flag_seq       = FLAG_SEQUENCE_OCTET;
-    /* As multiplexer is not open we allways invert the C/R bit from the request frame. NOT!!*/
-    frame_hdr->address        = _rx_context.buffer[1] /*^ CR_BIT*/;
+    frame_hdr->address        = _rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX];
     frame_hdr->control        = (FRAME_TYPE_DM | PF_BIT);    
     frame_hdr->length         = 1u;    
-    frame_hdr->information[0] = fcs_calculate(&(Mux::_tx_context.buffer[1]), FCS_INPUT_LEN);    
+    frame_hdr->information[0] = fcs_calculate(&(Mux::_tx_context.buffer[FRAME_ADDRESS_FIELD_INDEX]), FCS_INPUT_LEN);    
     (++frame_hdr)->flag_seq   = FLAG_SEQUENCE_OCTET;
     
     // @todo: make XXX_FRAME_LEN define
@@ -173,6 +181,7 @@ void Mux::on_rx_frame_sabm()
 void Mux::on_rx_frame_ua()
 {
     // @todo: verify that we have issued the start/establishment request in the 1st place?
+    // - NOT as TX_RETRANSMIT_DONE manages
     // @todo: DEFECT we should do request-response DLCI ID matching
 
     switch (_tx_context.tx_state) {
@@ -181,7 +190,7 @@ void Mux::on_rx_frame_ua()
         case TX_RETRANSMIT_DONE:
             _event_q->cancel(_tx_context.timer_id);           
             _establish_status = Mux::MUX_ESTABLISH_SUCCESS;
-            dlci_id           = _rx_context.buffer[1] >> 2;            
+            dlci_id           = _rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] >> 2;            
             if (dlci_id != 0) {
                 dlci_id_append(dlci_id);
             } 
@@ -204,14 +213,15 @@ void Mux::on_rx_frame_ua()
 
 void Mux::on_rx_frame_dm()
 {
-    // @todo: verify that we have issued the start request
+    // @todo: verify that we have issued the start request - NOT as TX_RETRANSMIT_DONE manages
+    // @todo: DEFECT we should do request-response DLCI ID matching    
 
     switch (_tx_context.tx_state) {
         osStatus os_status;
         case TX_RETRANSMIT_DONE:
             _event_q->cancel(_tx_context.timer_id);           
             _establish_status = Mux::MUX_ESTABLISH_REJECT;
-            os_status = _semaphore.release();
+            os_status         = _semaphore.release();
             MBED_ASSERT(os_status == osOK);        
             // @todo: need to verify correct call order for sm change and Semaphore release.
             tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);            
@@ -241,7 +251,7 @@ void Mux::dm_response_send()
 
 void Mux::on_rx_frame_disc()
 {
-    const uint8_t dlci_id = _rx_context.buffer[1] >> 2;    
+    const uint8_t dlci_id = _rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] >> 2;   // @todo: make func 
    
     switch (_tx_context.tx_state) {
         case TX_IDLE:                      
@@ -272,11 +282,12 @@ void Mux::on_rx_frame_disc()
 
 void Mux::on_rx_frame_uih()
 {
-    const uint8_t length = (_rx_context.buffer[3] >> 1);
+    const uint8_t length = (_rx_context.buffer[FRAME_LENGTH_FIELD_INDEX] >> 1);
     if (length != 0) {
         /* Proceed with processing for non 0 length user data frames. */
         
-        const uint8_t dlci_id = _rx_context.buffer[1] >> 2;    // @todo: make dlci_id_from_rx_buffer_get()
+        const uint8_t dlci_id = _rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] >> 2;    
+        // @todo: make dlci_id_from_rx_buffer_get()
         MuxDataService* obj   = file_handle_get(dlci_id);
         if (obj != NULL) {
             /* Established DLCI exists, proceed with processing. */
@@ -287,6 +298,8 @@ void Mux::on_rx_frame_uih()
             
             rx_state_change(RX_SUSPEND, null_action);
             obj->_sigio_cb(); 
+            
+            // @todo add return here to remove branches
         } else {
             rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);
         }
@@ -299,7 +312,7 @@ void Mux::on_rx_frame_uih()
 void Mux::on_rx_frame_not_supported()
 {
     // @todo: test me
-    trace("rx_frame_not_supported_do: ", _rx_context.buffer[2]);        
+    trace("rx_frame_not_supported_do: ", _rx_context.buffer[FRAME_CONTROL_FIELD_INDEX]);        
     
     MBED_ASSERT(false);    
 }
@@ -307,9 +320,9 @@ void Mux::on_rx_frame_not_supported()
 
 Mux::FrameRxType Mux::frame_rx_type_resolve()
 {
-//trace("frame_type_resolve ", _rx_context.buffer[2]);    
+//trace("frame_type_resolve ", _rx_context.buffer[FRAME_CONTROL_FIELD_INDEX]);    
 
-    const uint8_t frame_type = (_rx_context.buffer[2] & ~PF_BIT);
+    const uint8_t frame_type = (_rx_context.buffer[FRAME_CONTROL_FIELD_INDEX] & ~PF_BIT);
     
     if (frame_type == FRAME_TYPE_SABM) {
         return FRAME_RX_TYPE_SABM;
@@ -589,7 +602,7 @@ void Mux::on_post_tx_frame_uih()
 
 Mux::FrameTxType Mux::frame_tx_type_resolve()
 {
-    const uint8_t frame_type = (_tx_context.buffer[2] & ~PF_BIT);
+    const uint8_t frame_type = (_tx_context.buffer[FRAME_CONTROL_FIELD_INDEX] & ~PF_BIT);
     
     if (frame_type == FRAME_TYPE_SABM) {
         return FRAME_TX_TYPE_SABM;
@@ -865,13 +878,14 @@ uint8_t Mux::fcs_calculate(const uint8_t *buffer,  uint8_t input_len)
 
 void Mux::sabm_request_construct(uint8_t dlci_id)
 {
-    frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::_tx_context.buffer[0]));
+    frame_hdr_t *frame_hdr = 
+        reinterpret_cast<frame_hdr_t *>(&(Mux::_tx_context.buffer[FRAME_FLAG_SEQUENCE_FIELD_INDEX]));
     
     frame_hdr->flag_seq       = FLAG_SEQUENCE_OCTET;
     frame_hdr->address        = 3u | (dlci_id << 2);
     frame_hdr->control        = (FRAME_TYPE_SABM | PF_BIT);         
     frame_hdr->length         = 1u;
-    frame_hdr->information[0] = fcs_calculate(&(Mux::_tx_context.buffer[1]), FCS_INPUT_LEN);    
+    frame_hdr->information[0] = fcs_calculate(&(Mux::_tx_context.buffer[FRAME_ADDRESS_FIELD_INDEX]), FCS_INPUT_LEN);    
     (++frame_hdr)->flag_seq   = FLAG_SEQUENCE_OCTET;
     
     _tx_context.bytes_remaining = SABM_FRAME_LEN;
@@ -1067,7 +1081,8 @@ uint32_t Mux::mux_start(Mux::MuxEstablishStatus &status)
 
 void Mux::user_information_construct(uint8_t dlci_id, const void* buffer, size_t size)
 {
-    frame_hdr_t *frame_hdr = reinterpret_cast<frame_hdr_t *>(&(Mux::_tx_context.buffer[0]));
+    frame_hdr_t *frame_hdr = 
+        reinterpret_cast<frame_hdr_t *>(&(Mux::_tx_context.buffer[FRAME_FLAG_SEQUENCE_FIELD_INDEX]));
     
     frame_hdr->flag_seq = FLAG_SEQUENCE_OCTET; // @todo set this @ _init as always fixed
     frame_hdr->address  = 3u | (dlci_id << 2);                 
@@ -1077,7 +1092,7 @@ void Mux::user_information_construct(uint8_t dlci_id, const void* buffer, size_t
     memmove(&(frame_hdr->information[0]), buffer, size);
     
     uint8_t* fcs_pos = (&(frame_hdr->information[0]) + size);
-    *fcs_pos         = fcs_calculate(&(Mux::_tx_context.buffer[1]), FCS_INPUT_LEN);    
+    *fcs_pos         = fcs_calculate(&(Mux::_tx_context.buffer[FRAME_ADDRESS_FIELD_INDEX]), FCS_INPUT_LEN);    
     *(++fcs_pos)     = FLAG_SEQUENCE_OCTET;
     
     _tx_context.bytes_remaining = UIH_FRAME_MIN_LEN + size;
@@ -1169,7 +1184,7 @@ ssize_t Mux::user_data_rx(void* buffer, size_t size)
 // @todo: get mutex    
     if (_state.is_user_rx_ready) {               
         const size_t read_length = min((_rx_context.read_length - _rx_context.offset), size);        
-        memcpy(buffer, &(_rx_context.buffer[4u + _rx_context.offset]), read_length);
+        memcpy(buffer, &(_rx_context.buffer[FRAME_INFORMATION_FIELD_INDEX + _rx_context.offset]), read_length);
         _rx_context.offset += read_length;        
                
         if (_rx_context.offset == _rx_context.read_length) {
@@ -1184,36 +1199,8 @@ ssize_t Mux::user_data_rx(void* buffer, size_t size)
     } else {
 // @todo: release mutex               
         return -EAGAIN;
-    }
-    
-#if 0    
-// @todo: get mutex
-    
-    MBED_ASSERT(buffer != NULL);
-    
-    if (_state.is_user_rx_ready) {
-        _state.is_user_rx_ready = 0;
-        
-        const size_t length = (_rx_context.buffer[3] >> 1);        
-        
-        // @todo: TC use MIN(ret_value, size) for input to memcpy
-#if 0        
-for (uint8_t i = 0; i != 7u; ++i) {
-    trace("FRAME: ", _rx_context.buffer[i]);
-}
-#endif // 0
-        memcpy(buffer, &(_rx_context.buffer[4]), length);
-        
-// @todo: release mutex               
-        return static_cast<ssize_t>(length);
-    } else {
-// @todo: release mutex               
-        return -EAGAIN;
-    }
-#endif // 0    
+    }   
 }
 
-// _rx_context.read_length
-// _rx_context.offset
 
 } // namespace mbed
