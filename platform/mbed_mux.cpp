@@ -511,6 +511,47 @@ void Mux::tx_callback_dispatch(uint8_t bit)
 }
 
 
+void Mux::tx_callbacks_run()
+{
+    uint8_t current_tx_index;              
+    uint8_t tx_callback_pending_mask = tx_callback_pending_mask_get();        
+//trace("E_LOOP_2", tx_callback_pending_mask);                                       
+    while (tx_callback_pending_mask != 0) {            
+        /* Locate 1st pending TX callback. */           
+        do {
+            current_tx_index = tx_callback_index_advance();
+        } while ((current_tx_index & tx_callback_pending_mask) == 0);
+            
+        /* Clear pending bit and dispatch TX callback. */
+        tx_callback_pending_bit_clear(current_tx_index);
+//trace("TX_PEND-DISPATCH", current_tx_index);                   
+        tx_callback_dispatch(current_tx_index);
+            
+        /* No valid use case exists for TX cycle activation within TX callback as per design user TX is started within 
+           this while loop using @ref is_user_tx_pending bit and per system design DLCI establishment is not allowed 
+           within callback context as this would leave to system thread context dead lock as DLCI establishment includes
+           semaphore wait. We will enforce this by MBED_ASSERT below. Note that @ref dlci_establish will have 
+           MBED_ASSERT to enforce calling that API from system thread context thus the assert below is not absolutely 
+           necessary. */
+        MBED_ASSERT(_tx_context.tx_state == TX_IDLE);
+                                          
+        if (_state.is_user_tx_pending) {
+            /* User TX was requested within callback context dispatched above. */
+//trace("TX_PEND-RUN", 0);                                           
+            /* TX buffer was constructed within @ref user_data_tx, now start the TX cycle. */
+            _state.is_user_tx_pending = 0;                                             
+            tx_state_change(TX_NORETRANSMIT, tx_noretransmit_entry_run, tx_idle_exit_run);
+            if (_tx_context.tx_state != TX_IDLE) {
+                /* TX cycle not finished within current context, stop callback processing as we will continue when TX 
+                   cycle finishes and this function is re-entered. */                            
+                break;
+            }
+        }
+        tx_callback_pending_mask = tx_callback_pending_mask_get();            
+    }
+}
+
+
 void Mux::tx_idle_entry_run()
 {
 #if 0    
@@ -522,61 +563,17 @@ trace("tx_idle_entry_run: ", _state.is_dlci_open_peer_iniated_pending);
     } else if (_state.is_dlci_open_self_iniated_pending) {
         pending_self_iniated_dlci_open_start();
     } else {
-        /* No implementation required. */
-    }
-
-//@todo: SHOULD TX CALLBACK DISPATCH BE IN else clause above or even the first one?? - MAKE SEPRATE FUNC PUT TO ELSE
-
-    /* TX callback processing block below could be entered recursively within same thread context. Protection bit is 
-     * used to prevent that. */
-    if (!_state.is_tx_callback_context) {
-        /* Lock this code block from multiple entries within same thread context by using a protection bit. Check and 
-           process possible pending user TX callback request as long there is something pending. Round robin 
-           shceduling used for dispatching pending TX callback in order to prevent starvation of pending callbacks. */
-        
-        _state.is_tx_callback_context = 1u;
-      
-        uint8_t current_tx_index;              
-        uint8_t tx_callback_pending_mask = tx_callback_pending_mask_get();        
-//trace("E_LOOP_2", tx_callback_pending_mask);                                       
-        while (tx_callback_pending_mask != 0) {
-            
-            /* Locate 1st pending TX callback. */            
-            do {
-                current_tx_index = tx_callback_index_advance();
-            } while ((current_tx_index & tx_callback_pending_mask) == 0);
-            
-            /* Clear pending bit and dispatch TX callback. */
-            tx_callback_pending_bit_clear(current_tx_index);
-//trace("TX_PEND-DISPATCH", current_tx_index);                   
-            tx_callback_dispatch(current_tx_index);
-            
-            /* No valid use case exists for TX cycle activation within TX callback as per design user TX is started 
-               within this while loop using @ref is_user_tx_pending bit and per system design DLCI establishment is not 
-               allowed within callback context as this would leave to system thread context dead lock as DLCI 
-               establishment includes semaphore wait. We will enforce this by MBED_ASSERT below. Note that @ref 
-               dlci_establish will have MBED_ASSERT to enforce calling that API from system thread context thus the 
-               assert below is not absolutely necessary. */
-            MBED_ASSERT(_tx_context.tx_state == TX_IDLE);
-                                          
-            if (_state.is_user_tx_pending) {
-                /* User TX was requested within callback context dispatched above. */
-//trace("TX_PEND-RUN", 0);                                           
-                /* TX buffer was constructed within @ref user_data_tx, now start the TX cycle. */
-                _state.is_user_tx_pending = 0;                                             
-                tx_state_change(TX_NORETRANSMIT, tx_noretransmit_entry_run, tx_idle_exit_run);
-                if (_tx_context.tx_state != TX_IDLE) {
-                    /* TX cycle not finished within current context, stop callback processing as we will continue when 
-                       TX cycle finishes and this function is re-entered. */ 
-                            
-                    break;
-                }
-            }
-
-            tx_callback_pending_mask = tx_callback_pending_mask_get();            
+        /* TX callback processing block below could be entered recursively within same thread context. Protection bit 
+           is used to prevent that. */        
+        if (!_state.is_tx_callback_context) {
+            /* Lock this code block from multiple entries within same thread context by using a protection bit. Check 
+               and process possible pending user TX callback request as long there is something pending. Round robin 
+               shceduling used for dispatching pending TX callback in order to prevent starvation of pending callbacks. 
+            */            
+            _state.is_tx_callback_context = 1u;
+            tx_callbacks_run();
+            _state.is_tx_callback_context = 0;            
         }
-        
-        _state.is_tx_callback_context = 0;        
     }
 }
  
@@ -774,7 +771,6 @@ void Mux::rx_event_do(RxEvent event)
     };
       
     switch (event) {
-        int            id;
         ssize_t        read_err;
         rx_read_func_t func;
         case RX_READ:            
@@ -981,7 +977,7 @@ uint32_t Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHa
         case TX_IDLE:
             /* Construct the frame, start the tx sequence, and suspend the call thread upon write sequence success. */  
             sabm_request_construct(dlci_id);
-            _tx_context.retransmit_counter = RETRANSMIT_COUNT; // @todo: set to tx_idle_exit           
+            _tx_context.retransmit_counter = RETRANSMIT_COUNT; // @todo: set to tx_idle_exit - NOT?           
             tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
             _state.is_dlci_open_self_iniated_running = 1u;              
 // @todo: add mutex_free here               
@@ -1092,7 +1088,7 @@ void Mux::user_information_construct(uint8_t dlci_id, const void* buffer, size_t
     frame_hdr_t *frame_hdr = 
         reinterpret_cast<frame_hdr_t *>(&(Mux::_tx_context.buffer[FRAME_FLAG_SEQUENCE_FIELD_INDEX]));
     
-    frame_hdr->flag_seq = FLAG_SEQUENCE_OCTET; // @todo set this @ _init as always fixed
+    frame_hdr->flag_seq = FLAG_SEQUENCE_OCTET; // @todo set this @ _init as always fixed??
     frame_hdr->address  = 3u | (dlci_id << 2);                 
     frame_hdr->control  = FRAME_TYPE_UIH;           
     frame_hdr->length   = (1u | (size << 1));

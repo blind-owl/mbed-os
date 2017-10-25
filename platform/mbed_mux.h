@@ -412,6 +412,7 @@ private:
     static uint8_t tx_callback_index_advance();
     static uint8_t tx_callback_pending_mask_get();
     static void tx_callback_dispatch(uint8_t bit);
+    static void tx_callbacks_run();
     static MuxDataService& tx_callback_lookup(uint8_t bit);
     
     static size_t min(uint8_t size_1, size_t size_2);
