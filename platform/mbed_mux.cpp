@@ -84,19 +84,19 @@ extern void trace(char *string, int data);
 
 void Mux::module_init()
 {
-    _state.is_mux_open                       = 0;
-    _state.is_mux_open_self_iniated_pending  = 0;
-    _state.is_mux_open_self_iniated_running  = 0;    
-    _state.is_dlci_open_self_iniated_pending = 0;
-    _state.is_dlci_open_self_iniated_running = 0;
-    _state.is_user_thread_context            = 0;
-    _state.is_tx_callback_context            = 0;
-    _state.is_user_tx_pending                = 0;
-    _state.is_user_rx_ready                  = 0;
+    _state.is_mux_open            = 0;
+    _state.is_mux_open_pending    = 0;
+    _state.is_mux_open_running    = 0;    
+    _state.is_dlci_open_pending   = 0;
+    _state.is_dlci_open_running   = 0;
+    _state.is_user_thread_context = 0;
+    _state.is_tx_callback_context = 0;
+    _state.is_user_tx_pending     = 0;
+    _state.is_user_rx_ready       = 0;
    
-    _rx_context.offset               = 0;
-    _rx_context.read_length          = 0;        
-    _rx_context.rx_state             = RX_FRAME_START;   
+    _rx_context.offset      = 0;
+    _rx_context.read_length = 0;        
+    _rx_context.rx_state    = RX_FRAME_START;   
     
     _tx_context.tx_state            = TX_IDLE;    
     _tx_context.tx_callback_context = 0;
@@ -405,8 +405,8 @@ void Mux::on_post_tx_frame_sabm()
 void Mux::pending_self_iniated_mux_open_start()
 {
     /* Construct the frame, start the tx sequence, set and reset relevant state contexts. */
-    _state.is_mux_open_self_iniated_running = 1u;       
-    _state.is_mux_open_self_iniated_pending = 0;
+    _state.is_mux_open_running = 1u;       
+    _state.is_mux_open_pending = 0;
 
     sabm_request_construct(0);
     tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
@@ -417,8 +417,8 @@ void Mux::pending_self_iniated_mux_open_start()
 void Mux::pending_self_iniated_dlci_open_start()
 {
     /* Construct the frame, start the tx sequence, set and reset relevant state contexts. */    
-    _state.is_dlci_open_self_iniated_running = 1u;
-    _state.is_dlci_open_self_iniated_pending = 0;
+    _state.is_dlci_open_running = 1u;
+    _state.is_dlci_open_pending = 0;
 
     sabm_request_construct(_dlci_id);
     tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
@@ -558,9 +558,9 @@ void Mux::tx_idle_entry_run()
 trace("tx_idle_entry_run: ", _state.is_dlci_open_peer_iniated_pending);
 #endif // 0
 
-    if (_state.is_mux_open_self_iniated_pending) {
+    if (_state.is_mux_open_pending) {
         pending_self_iniated_mux_open_start();
-    } else if (_state.is_dlci_open_self_iniated_pending) {
+    } else if (_state.is_dlci_open_pending) {
         pending_self_iniated_dlci_open_start();
     } else {
         /* TX callback processing block below could be entered recursively within same thread context. Protection bit 
@@ -963,11 +963,11 @@ Mux::MuxReturnStatus Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &st
 // @todo: add mutex_free                        
         return MUX_STATUS_NO_RESOURCE;
     }
-    if (_state.is_dlci_open_self_iniated_pending) {
+    if (_state.is_dlci_open_pending) {
 // @todo: add mutex_free                        
         return MUX_STATUS_INPROGRESS;        
     }
-    if (_state.is_dlci_open_self_iniated_running) {
+    if (_state.is_dlci_open_running) {
 // @todo: add mutex_free                        
         return MUX_STATUS_INPROGRESS;                
     }
@@ -979,7 +979,7 @@ Mux::MuxReturnStatus Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &st
             sabm_request_construct(dlci_id);
             _tx_context.retransmit_counter = RETRANSMIT_COUNT; // @todo: set to tx_idle_exit - NOT?           
             tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
-            _state.is_dlci_open_self_iniated_running = 1u;              
+            _state.is_dlci_open_running = 1u;              
 // @todo: add mutex_free here               
             ret_wait = _semaphore.wait();
             MBED_ASSERT(ret_wait == 1);
@@ -992,7 +992,7 @@ Mux::MuxReturnStatus Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &st
             break;
         case TX_INTERNAL_RESP:
         case TX_NORETRANSMIT:
-            _state.is_dlci_open_self_iniated_pending = 1u;
+            _state.is_dlci_open_pending = 1u;
             _dlci_id                                 = dlci_id;
 // @todo: add mutex_free               
             ret_wait = _semaphore.wait();
@@ -1011,7 +1011,7 @@ Mux::MuxReturnStatus Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &st
             break;
     }    
     
-    _state.is_dlci_open_self_iniated_running = 0;            
+    _state.is_dlci_open_running = 0;            
 
     return MUX_STATUS_SUCCESS;
 }
@@ -1033,11 +1033,11 @@ Mux::MuxReturnStatus Mux::mux_start(Mux::MuxEstablishStatus &status)
 // @todo: add mutex_free        
         return MUX_STATUS_NO_RESOURCE;
     }
-    if (_state.is_mux_open_self_iniated_pending) { 
+    if (_state.is_mux_open_pending) { 
 // @todo: add mutex_free                
         return MUX_STATUS_INPROGRESS;
     }
-    if (_state.is_mux_open_self_iniated_running) {
+    if (_state.is_mux_open_running ) {
 // @todo: add mutex_free                
         return MUX_STATUS_INPROGRESS;        
     }
@@ -1049,7 +1049,7 @@ Mux::MuxReturnStatus Mux::mux_start(Mux::MuxEstablishStatus &status)
             sabm_request_construct(0);
             _tx_context.retransmit_counter = RETRANSMIT_COUNT;            
             tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
-            _state.is_mux_open_self_iniated_running = 1u;              
+            _state.is_mux_open_running = 1u;              
 // @todo: add mutex_free here               
             ret_wait = _semaphore.wait();
             MBED_ASSERT(ret_wait == 1);
@@ -1060,7 +1060,7 @@ Mux::MuxReturnStatus Mux::mux_start(Mux::MuxEstablishStatus &status)
             
             break;
         case TX_INTERNAL_RESP:
-            _state.is_mux_open_self_iniated_pending = 1u;
+            _state.is_mux_open_pending = 1u;
 // @todo: add mutex_free               
             ret_wait = _semaphore.wait();
             MBED_ASSERT(ret_wait == 1);        
@@ -1077,7 +1077,7 @@ Mux::MuxReturnStatus Mux::mux_start(Mux::MuxEstablishStatus &status)
             break;
     };
                 
-    _state.is_mux_open_self_iniated_running = 0;
+    _state.is_mux_open_running = 0;
    
     return MUX_STATUS_SUCCESS;   
 }

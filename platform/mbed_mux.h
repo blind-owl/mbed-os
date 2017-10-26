@@ -57,9 +57,9 @@ public:
      *  @note: This is API is only meant to be used for the multiplexer (user) data service tx. Supplied buffer can be 
      *         reused/freed upon call return.
      * 
-     *  @param buffer   Begin of the user data.
-     *  @param size     The number of bytes to write.
-     *  @return         The number of bytes written.
+     *  @param buffer Begin of the user data.
+     *  @param size   The number of bytes to write.
+     *  @return       The number of bytes written.
      */
     virtual ssize_t write(const void* buffer, size_t size);
        
@@ -67,9 +67,9 @@ public:
      *
      *  @note: This is API is only meant to be used for the multiplexer (user) data service rx. 
      *
-     *  @param buffer   The buffer to read in to.
-     *  @param size     The number of bytes to read.
-     *  @return         The number of bytes read, -EAGAIN if no data availabe for read.
+     *  @param buffer The buffer to read in to.
+     *  @param size   The number of bytes to read.
+     *  @return       The number of bytes read, -EAGAIN if no data availabe for read.
      */
     virtual ssize_t read(void *buffer, size_t size); 
     
@@ -123,6 +123,7 @@ typedef enum
     MUX_ESTABLISH_MAX          /* Enumeration upper bound. */
 } MuxEstablishStatus;
 
+/* Definition for multiplexer establishment return code type. */
 typedef enum
 {
     MUX_STATUS_SUCCESS = 0,    
@@ -133,7 +134,7 @@ typedef enum
     MUX_STATUS_MAX
 } MuxReturnStatus;
 
-    // @todo: update me
+    /** Module init. */
     static void module_init();
     
     /** Establish the multiplexer control channel.
@@ -156,9 +157,9 @@ typedef enum
      * 
      *  @warning: Not allowed to be called from callback context.
      *
-     *  @param dlci_id  ID of the DLCI to establish. Valid range 1 - 63. 
-     *  @param status   Operation completion code.     
-     *  @param obj      Valid object upon @ref status having @ref MUX_ESTABLISH_SUCCESS, NULL upon failure.     
+     *  @param dlci_id ID of the DLCI to establish. Valid range 1 - 63. 
+     *  @param status  Operation completion code.     
+     *  @param obj     Valid object upon @ref status having @ref MUX_ESTABLISH_SUCCESS, NULL upon failure.     
      *
      *  @return MUX_STATUS_SUCCESS       Operation completed, check @ref status for completion code.
      *  @return MUX_STATUS_INPROGRESS    Operation not started, DLCI establishment allready in progress.     
@@ -180,17 +181,9 @@ typedef enum
      *  @param event_queue Event queue interface to be used.
      */            
     static void eventqueue_attach(EventQueueMock *event_queue);
-    
-    // @todo make these private if possible as not meant to be called by user
-    /** Registered time-out expiration event. */
-    static void on_timeout();    
-    /** Registered deferred call event in safe (thread context) supplied in @ref eventqueue_attach. */
-    static void on_deferred_call();    
-    /** Registered sigio callback from FileHandle. */    
-    static void on_sigio();
-
+   
 private:
-  
+     
     /* Definition for Rx event type. */
     typedef enum 
     {
@@ -241,10 +234,19 @@ private:
         FRAME_TX_TYPE_MAX
     } FrameTxType;        
 
+    /** Registered time-out expiration event. */
+    static void on_timeout();    
+    
+    /** Registered deferred call event in safe (thread context) supplied in @ref eventqueue_attach. */
+    static void on_deferred_call();    
+    
+    /** Registered sigio callback from FileHandle. */    
+    static void on_sigio();
+    
     /** Calculate fcs.
      * 
-     *  @param buffer       Input buffer.
-     *  @param input_len    Input length in number of bytes.
+     *  @param buffer    Input buffer.
+     *  @param input_len Input length in number of bytes.
      * 
      *  @return Calculated fcs.
      */    
@@ -252,7 +254,7 @@ private:
 
     /** Construct sabm request message.
      * 
-     *  @param dlci_id  ID of the DLCI to establish
+     *  @param dlci_id ID of the DLCI to establish
      */    
     static void sabm_request_construct(uint8_t dlci);
     
@@ -262,18 +264,42 @@ private:
        
     /** Construct user information frame.
      * 
-     *  @param dlci_id  ID of the DLCI to establish
+     *  @param dlci_id ID of the DLCI to establish
      */                
     static void user_information_construct(uint8_t dlci_id, const void *buffer, size_t size);
     
     /** Do write operation if pending data available.
      */
     static void write_do();
+    
+    /** Generate Rx event.
+     * 
+     *  @param event Rx event
+     */                    
     static void rx_event_do(RxEvent event);
     
+    /** Rx event frame start read state.
+     * 
+     *  @return Number of bytes read, -EAGAIN if no data available.
+     */
     static ssize_t on_rx_read_state_frame_start();
+    
+    /** Rx event header read state.
+     * 
+     *  @return Number of bytes read, -EAGAIN if no data available.
+     */
     static ssize_t on_rx_read_state_header_read();
+    
+    /** Rx event trailer read state.
+     * 
+     *  @return Number of bytes read, -EAGAIN if no data available.
+     */        
     static ssize_t on_rx_read_state_trailer_read();
+    
+    /** Rx event suspend read state.
+     * 
+     *  @return Number of bytes read, -EAGAIN if no data available.
+     */            
     static ssize_t on_rx_read_state_suspend();
    
     /** Process received SABM frame. */    
@@ -329,41 +355,44 @@ private:
     static void tx_noretransmit_entry_run();
     typedef void (*tx_state_entry_func_t)();       
     
-    /** TX state exit functions. */    
+    /** TX state exit function. */    
     static void tx_idle_exit_run();
     typedef void (*tx_state_exit_func_t)();       
     
     /** Change Tx state machine state. 
      * 
-     *  @param new_state    State to transit.
-     *  @param entry_func   State entry function.
+     *  @param new_state  State to transit.
+     *  @param entry_func State entry function.
+     *  @param exit_func  State exit function.
      */                
     static void tx_state_change(TxState new_state, tx_state_entry_func_t entry_func, tx_state_exit_func_t exit_func);
     
+    /** RX state entry functions. */
     static void rx_header_read_entry_run();
     typedef void (*rx_state_entry_func_t)();       
     
+    /** Null action function. */    
     static void null_action();
     
     /** Change Rx state machine state. 
      * 
-     *  @param new_state    State to transit.
+     *  @param new_state  State to transit.
+     *  @param entry_func State entry function.
      */                
     static void rx_state_change(RxState new_state, rx_state_entry_func_t entry_func);   
- 
     
     /** Begin DM frame transmit sequence. */    
     static void dm_response_send();
       
     /** Append DLCI ID to storage. 
      * 
-     *  @param dlci_id  ID of the DLCI to append.
+     *  @param dlci_id ID of the DLCI to append.
      */                    
     static void dlci_id_append(uint8_t dlci_id);
     
     /** Get file handle based on DLCI ID. 
      * 
-     *  @param dlci_id  ID of the DLCI used as the key
+     *  @param dlci_id ID of the DLCI used as the key
      * 
      *  @return Valid object reference or NULL if not found.
      */                        
@@ -371,7 +400,7 @@ private:
     
     /** Evaluate is DLCI ID in use. 
      * 
-     *  @param dlci_id  ID of the DLCI yo evaluate
+     *  @param dlci_id ID of the DLCI yo evaluate
      * 
      *  @return True if in use, false otherwise.
      */                            
@@ -391,7 +420,7 @@ private:
     
     /** Begin pending peer iniated DLCI establishment sequence. 
      * 
-     *  @param dlci_id  ID of the DLCI to establish.
+     *  @param dlci_id ID of the DLCI to establish.
      */                
     static void pending_peer_iniated_dlci_open_start(uint8_t dlci_id);
 
@@ -400,10 +429,10 @@ private:
      *  @note: This is API is only meant to be used for the multiplexer (user) data service tx. Supplied buffer can be 
      *         reused/freed upon call return.
      * 
-     *  @param dlci_id  ID of the DLCI to use.
-     *  @param buffer   Begin of the user data.
-     *  @param size     The number of bytes to write.
-     *  @return         The number of bytes written, negative error on failure.
+     *  @param dlci_id ID of the DLCI to use.
+     *  @param buffer  Begin of the user data.
+     *  @param size    The number of bytes to write.
+     *  @return        The number of bytes written, negative error on failure.
      */    
     static ssize_t user_data_tx(uint8_t dlci_id, const void* buffer, size_t size);
     
@@ -411,21 +440,59 @@ private:
      *
      *  @note: This is API is only meant to be used for the multiplexer (user) data service rx. 
      *
-     *  @param buffer   The buffer to read in to.
-     *  @param size     The number of bytes to read.
-     *  @return         The number of bytes read, -EAGAIN if no data availabe for read.
+     *  @param buffer The buffer to read in to.
+     *  @param size   The number of bytes to read.
+     *  @return       The number of bytes read, -EAGAIN if no data availabe for read.
      */
     static ssize_t user_data_rx(void* buffer, size_t size);
        
+    /** Clear TX callback pending bit. 
+     * 
+     *  @param bit Bit to clear.
+     */                    
     static void tx_callback_pending_bit_clear(uint8_t bit);
+    
+    /** Set TX callback pending bit for supplied DLCI ID. 
+     * 
+     *  @param dlci_id DLCI ID for bit to set.
+     */                        
     static void tx_callback_pending_bit_set(uint8_t dlci_id);
 
+    /** Advance the current TX callback index bit. 
+     * 
+     *  @return The current TX callback index bit after advanced.
+     */                            
     static uint8_t tx_callback_index_advance();
+    
+    /** Get the TX callback pending bitmask. 
+     * 
+     *  @return TX callback pending bitmask.
+     */                                
     static uint8_t tx_callback_pending_mask_get();
+    
+    /** Dispatch TX callback based on supplied bit. 
+     * 
+     *  @param bit Bit indetifier of callback to dispatch.
+     */                            
     static void tx_callback_dispatch(uint8_t bit);
+    
+    /** Run main processing loop for resolving pending TX callbacks and dispatching them if they exists.
+     */                                
     static void tx_callbacks_run();
+   
+    /** Get data service object based on supplied bit id. 
+     * 
+     *  @param bit Bit indetifier of data service object to get.
+     *  @return Data service object reference.
+     */                                    
     static MuxDataService& tx_callback_lookup(uint8_t bit);
     
+    /** Get minimum of 2 supplied paramaters. 
+     * 
+     *  @param size_1 1st param for comparisation.
+     *  @param size_2 2nd param for comparisation.
+     *  @return       Minimum of supplied paramaters.
+     */                                        
     static size_t min(uint8_t size_1, size_t size_2);
     
     /** Get DLCI ID from the Rx buffer.
@@ -455,10 +522,10 @@ private:
         uint8_t retransmit_counter;             /* Frame retransmission counter. */
         uint8_t bytes_remaining;                /* Bytes remaining in the buffer to write. */
         uint8_t offset;                         /* Offset in the buffer where to write from. */
-        uint8_t buffer[MBED_CONF_BUFFER_SIZE];  /* Tx buffer. */
-        
-        uint8_t tx_callback_context;  // @todo: set me in init()          
-       
+        uint8_t buffer[MBED_CONF_BUFFER_SIZE];  /* Tx buffer. */        
+        uint8_t tx_callback_context;            /* Context for the TX callback dispatching logic as follows:
+                                                   - 4 LO bits contain the pending callback mask
+                                                   - 4 HI bits contain the current bit used for masking */       
     } tx_context_t;
           
     /* Definition for Rx context type. */
@@ -474,17 +541,17 @@ private:
     /* Definition for state type. */
     typedef struct
     {
-        uint16_t is_mux_open :                       1;         /* True when multiplexer is open. */
-        uint16_t is_mux_open_self_iniated_pending  : 1;
-        uint16_t is_mux_open_self_iniated_running  : 1;
-        uint16_t is_dlci_open_self_iniated_pending : 1;
-        uint16_t is_dlci_open_self_iniated_running : 1;
-        uint16_t is_user_thread_context            : 1;
+        uint16_t is_mux_open            : 1; /* True when multiplexer is open. */
+        uint16_t is_mux_open_pending    : 1; /* True when multiplexer open is pending. */
+        uint16_t is_mux_open_running    : 1; /* True when multiplexer open is running. */
+        uint16_t is_dlci_open_pending   : 1; /* True when DLCI open is pending. */
+        uint16_t is_dlci_open_running   : 1; /* True when DLCI open is running. */
         
-        uint16_t is_tx_callback_context            : 1;
-        uint16_t is_user_tx_pending                : 1; 
+        uint16_t is_user_thread_context : 1; /* @todo: change semantic/name. */
         
-        uint16_t is_user_rx_ready                  : 1;
+        uint16_t is_tx_callback_context : 1; /* True when current context is TX callback context. */
+        uint16_t is_user_tx_pending     : 1; /* True when user TX is pending. */       
+        uint16_t is_user_rx_ready       : 1; /* True when user RX is ready/available. */       
     } state_t;
     
     static FileHandle      *_serial;                                /* Serial used. */  
@@ -498,7 +565,7 @@ private:
     static state_t          _state;                                 /* General state context. */
     static const uint8_t    _crctable[MUX_CRC_TABLE_LEN];           /* CRC table used for frame FCS. */
     
-    static volatile uint8_t _establish_status;
+    static volatile uint8_t _establish_status; // @todo: => to static volatile uint8_t _shared_memory[1];
     static volatile uint8_t _dlci_id;   
 };
 
