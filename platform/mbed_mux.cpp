@@ -291,22 +291,26 @@ void Mux::on_rx_frame_uih()
     if (length != 0) {
         /* Proceed with processing for non 0 length user data frames. */
 
-        const uint8_t dlci_id = rx_dlci_id_get();
-        if (dlci_id != MUX_DLCI_INVALID_ID) {
-            /* Proceed with processing for non internal invalidate ID type. */
-            
-            MuxDataService* obj = file_handle_get(dlci_id);
-            if (obj != NULL) {
-                /* Established DLCI exists, proceed with processing. */
+        if ((_rx_context.buffer[FRAME_CONTROL_FIELD_INDEX] & PF_BIT) == 0) {
+            /* Proceed with processing upon P/F bit being clear. */
+        
+            const uint8_t dlci_id = rx_dlci_id_get();
+            if (dlci_id != MUX_DLCI_INVALID_ID) {
+                /* Proceed with processing for non internal invalidate ID type. */
                 
-                _state.is_user_rx_ready = 1u;
-                _rx_context.offset      = 0;
-                _rx_context.read_length = length;
-                
-                rx_state_change(RX_SUSPEND, null_action);
-                obj->_sigio_cb();
-                
-                return;
+                MuxDataService* obj = file_handle_get(dlci_id);
+                if (obj != NULL) {
+                    /* Established DLCI exists, proceed with processing. */
+                    
+                    _state.is_user_rx_ready = 1u;
+                    _rx_context.offset      = 0;
+                    _rx_context.read_length = length;
+                    
+                    rx_state_change(RX_SUSPEND, null_action);
+                    obj->_sigio_cb();
+                    
+                    return;
+                }
             }
         }
     }
