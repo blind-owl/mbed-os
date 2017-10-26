@@ -292,24 +292,27 @@ void Mux::on_rx_frame_uih()
         /* Proceed with processing for non 0 length user data frames. */
 
         const uint8_t dlci_id = rx_dlci_id_get();
-        MuxDataService* obj   = file_handle_get(dlci_id);
-        if (obj != NULL) {
-            /* Established DLCI exists, proceed with processing. */
+        if (dlci_id != MUX_DLCI_INVALID_ID) {
+            /* Proceed with processing for non internal invalidate ID type. */
             
-            _state.is_user_rx_ready  = 1u;
-            _rx_context.offset       = 0;
-            _rx_context.read_length  = length;
-            
-            rx_state_change(RX_SUSPEND, null_action);
-            obj->_sigio_cb(); 
-            
-            // @todo add return here to remove branches
-        } else {
-            rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);
+            MuxDataService* obj = file_handle_get(dlci_id);
+            if (obj != NULL) {
+                /* Established DLCI exists, proceed with processing. */
+                
+                _state.is_user_rx_ready = 1u;
+                _rx_context.offset      = 0;
+                _rx_context.read_length = length;
+                
+                rx_state_change(RX_SUSPEND, null_action);
+                obj->_sigio_cb();
+                
+                return;
+            }
         }
-    } else {
-        rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);
     }
+    
+    /* Default behaviour upon Rx of non valid user data frame. */
+    rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);
 }
 
 
@@ -707,6 +710,9 @@ ssize_t Mux::on_rx_read_state_header_read()
 
         MBED_ASSERT((_rx_context.buffer[_rx_context.offset - 1u] & 1u) == 1u);
         _rx_context.read_length = (_rx_context.buffer[_rx_context.offset - 1u] >> 1) + FRAME_TRAILER_LEN;
+        
+        // @todo: enforce buffer over write by MBED_ASSERT
+        
 //trace("_rx_context.read_length", _rx_context.read_length);
 
         rx_state_change(RX_TRAILER_READ, null_action);        

@@ -4364,7 +4364,7 @@ static void user_rx_dlci_not_established_callback()
  * 
  * Expected outcome:
  * - The Rx frame is dropped by the implementation for the not established DLCI
- * - The Rx frame is accepted by the implementation for the not established DLCI 
+ * - The Rx frame is accepted by the implementation for the established DLCI 
  * - Validate proper callback callcount
  * - Validate read buffer
  */
@@ -4433,6 +4433,102 @@ TEST(MultiplexerOpenTestGroup, user_rx_dlci_not_established)
         read_byte[3] = ++user_data;
         read_byte[4] = fcs_calculate(&read_byte[0], 3u);
     }
+}
+
+
+#define DLCI_INVALID_ID 0 /* Invalid DLCI ID. implementation uses to invalidate MuxDataService object. */
+
+static uint8_t m_user_rx_invalidate_dlci_id_used_check_value = 0;
+static void user_rx_invalidate_dlci_id_used_callback()
+{
+    ++m_user_rx_invalidate_dlci_id_used_check_value;
+}
+
+
+/*
+ * TC - Ensure proper behaviour when user data Rx frame received to DLCI ID value, which implementation uses internally
+ *      to invalidate a DLCI ID object.
+ * 
+ * Test sequence:
+ * 1. Mux open
+ * 2. Rx user data frame to invalidate ID DLCI: silently discarded by the implementation
+ * 3. Establish a DLCI
+ * 4. Rx user data frame to invalidate ID DLCI: silently discarded by the implementation
+ * 5. Rx user data frame to established DLCI: accepted by the implementation.
+ * 
+ * Expected outcome:
+ * - The invalidate ID DLCI Rx frame is dropped by the implementation
+ * - The Rx frame is accepted by the implementation for the established DLCI 
+ * - Validate proper callback callcount
+ * - Validate read buffer
+ */
+
+TEST(MultiplexerOpenTestGroup, user_rx_invalidate_dlci_id_used)
+{
+    m_user_rx_invalidate_dlci_id_used_check_value = 0;
+    
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();    
+    
+    /* Rx user data frame to invalidate ID DLCI: silently discarded by the implementation. */
+    
+    const uint8_t user_data = 0xA5u;
+    uint8_t dlci_id         = DLCI_INVALID_ID;   
+    uint8_t read_byte[6]    = 
+    {
+        1u | (dlci_id << 2),        
+        FRAME_TYPE_UIH, 
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&read_byte[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };             
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+
+    /* Establish a DLCI. */
+    
+    dlci_id          = DLCI_ID_LOWER_BOUND;
+    m_file_handle[0] = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);             
+    CHECK(m_file_handle[0] != NULL);
+    m_file_handle[0]->sigio(user_rx_invalidate_dlci_id_used_callback);    
+    
+    /* Rx user data frame to invalidate ID DLCI: silently discarded by the implementation. */    
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+    
+    /* Validate proper callback callcount. */
+    CHECK_EQUAL(0, m_user_rx_invalidate_dlci_id_used_check_value);                    
+    
+    /* Rx user data frame to established DLCI: accepted by the implementation. */
+    
+    read_byte[0] = 1u | (dlci_id << 2);
+    read_byte[4] = fcs_calculate(&read_byte[0], 3u);
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+    
+    /* Validate proper callback callcount. */
+    CHECK_EQUAL(1, m_user_rx_invalidate_dlci_id_used_check_value);
+    
+    /* Validate read buffer. */
+    mock_t * mock_call = mock_free_get("call");
+    CHECK(mock_call != NULL);           
+    mock_call->return_value = 1;                    
+    uint8_t test_buffer[1]  = {0};    
+    ssize_t read_ret        = m_file_handle[0]->read(&(test_buffer[0]), 1u);
+    CHECK_EQUAL(1, read_ret);
+    CHECK_EQUAL(user_data, test_buffer[0]);        
+    read_ret = m_file_handle[0]->read(&(test_buffer[0]), 1u);
+    CHECK_EQUAL(-EAGAIN, read_ret);     
+    
+    /* Validate proper callback callcount. */
+    CHECK_EQUAL(1, m_user_rx_invalidate_dlci_id_used_check_value);
 }
 
 

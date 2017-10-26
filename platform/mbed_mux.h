@@ -522,7 +522,10 @@ private:
         uint8_t retransmit_counter;             /* Frame retransmission counter. */
         uint8_t bytes_remaining;                /* Bytes remaining in the buffer to write. */
         uint8_t offset;                         /* Offset in the buffer where to write from. */
-        uint8_t buffer[MBED_CONF_BUFFER_SIZE];  /* Tx buffer. */        
+        uint8_t buffer[MBED_CONF_BUFFER_SIZE];  /* Tx buffer. */  
+        
+        // @todo: static assert needed to enforce this compared to MBED_CONF_MUX_DLCI_COUNT
+        
         uint8_t tx_callback_context;            /* Context for the TX callback dispatching logic as follows:
                                                    - 4 LO bits contain the pending callback mask
                                                    - 4 HI bits contain the current bit used for masking */       
