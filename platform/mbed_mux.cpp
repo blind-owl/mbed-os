@@ -191,7 +191,7 @@ void Mux::on_rx_frame_ua()
 
     switch (_tx_context.tx_state) {
         osStatus os_status;
-        uint8_t dlci_id;
+        uint8_t  dlci_id;
         case TX_RETRANSMIT_DONE:
             _event_q->cancel(_tx_context.timer_id);           
             _establish_status = Mux::MUX_ESTABLISH_SUCCESS;
@@ -229,8 +229,7 @@ void Mux::on_rx_frame_dm()
             tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);            
             break;
         default:
-            trace("on_rx_frame_dm: ", _tx_context.tx_state);                
-            MBED_ASSERT(false);
+            /* No implementation required. */
             break;
     }
     

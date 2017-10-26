@@ -4829,12 +4829,65 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_when_no_sabm_send)
     
     /* Rx frame type UA received, without pending SABM frame, to the established DLCI: silently discarded by the 
        implementation. */
-    
-    const uint8_t user_data = 0xA5u;
+   
     uint8_t read_byte[5]    = 
     {
         3u | (dlci_id << 2),        
         (FRAME_TYPE_UA | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };             
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));    
+   
+    /* Establish 2nd DLCI. */
+    
+    m_file_handle[1] = dlci_self_iniated_establish(ROLE_INITIATOR, (dlci_id + 1u));             
+    CHECK(m_file_handle[1] != NULL);    
+}
+
+
+/*
+ * TC - Ensure proper behaviour when Rx frame type DM received when no SABM has been send
+ * Test sequence:
+ * - Mux open
+ * - Establish 1st DLCI
+ * - Rx frame type DM received, without pending SABM frame, to the established DLCI: silently discarded by the 
+ *   implementation
+ * - Establish 2nd DLCI
+ *
+ * Expected outcome:
+ * - Rx frame type DM received is dropped by the implementation
+ * - Validate DLCI establishment
+ */
+TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_when_no_sabm_send)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();    
+    
+    /* Establish 1st DLCI. */
+    
+    const uint8_t dlci_id = DLCI_ID_LOWER_BOUND;
+    m_file_handle[0]      = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);             
+    CHECK(m_file_handle[0] != NULL);
+    m_file_handle[0]->sigio(NULL);                
+    
+    /* Rx frame type DM received, without pending SABM frame, to the established DLCI: silently discarded by the 
+       implementation. */
+   
+    uint8_t read_byte[5]    = 
+    {
+        3u | (dlci_id << 2),        
+        (FRAME_TYPE_DM | PF_BIT), 
         LENGTH_INDICATOR_OCTET,
         fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
