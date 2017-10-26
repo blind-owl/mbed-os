@@ -53,6 +53,7 @@ TEST(MultiplexerOpenTestGroup, FirstTest)
 #define UIH_FRAME_LEN                7u                          /* Length of the minium UIH frame in number of bytes.*/
 #define WRITE_LEN                    1u                          /* Length of single write call in number of bytes. */  
 #define READ_LEN                     1u                          /* Length of single read call in number of bytes. */
+
 #define FLAG_SEQUENCE_OCTET          0xF9u                       /* Flag field used in the basic option mode. */
 #define ADDRESS_MUX_START_REQ_OCTET  0x03u                       /* Address field value of the start multiplexer 
                                                                     request frame. */
@@ -64,6 +65,9 @@ TEST(MultiplexerOpenTestGroup, FirstTest)
 #define CRC_TABLE_LEN                256u                        /* CRC table length in number of bytes. */
 #define RETRANSMIT_COUNT             3u                          /* Retransmission count for the tx frames requiring a 
                                                                     response. */       
+#define PF_BIT                       (1u << 4)                   /* P/F bit position in the frame control field. */      
+                                                                   
+                                                                    
 #define FRAME_TYPE_SABM              0x2Fu                       /* SABM frame type coding in the frame control 
                                                                     field. */
 #define FRAME_TYPE_UA                0x63u                       /* UA frame type coding in the frame control field. */
@@ -71,9 +75,14 @@ TEST(MultiplexerOpenTestGroup, FirstTest)
 #define FRAME_TYPE_DISC              0x43u                       /* DISC frame type coding in the frame control 
                                                                     field. */
 #define FRAME_TYPE_UIH               0xEFu                       /* UIH frame type coding in the frame control field. */
-#define PF_BIT                       (1u << 4)                   /* P/F bit position in the frame control field. */     
+#define FRAME_TYPE_UNSUPPORTED       0                           /* Unsupported frame type in the frame control field. 
+                                                                    Used for testing purpose. */
+
 #define DLCI_ID_LOWER_BOUND          1u                          /* Lower bound DLCI id value. */ 
 #define DLCI_ID_UPPER_BOUND          63u                         /* Upper bound DLCI id value. */ 
+#define DLCI_INVALID_ID              0                           /* Invalid DLCI ID. Implementation uses to invalidate 
+                                                                    MuxDataService object. */
+
 #define TX_BUFFER_SIZE               31u                         /* Size of the TX buffer in number of bytes. */ 
 #define RX_BUFFER_SIZE               TX_BUFFER_SIZE              /* Size of the RX buffer in number of bytes. */ 
 
@@ -4436,8 +4445,6 @@ TEST(MultiplexerOpenTestGroup, user_rx_dlci_not_established)
 }
 
 
-#define DLCI_INVALID_ID 0 /* Invalid DLCI ID. implementation uses to invalidate MuxDataService object. */
-
 static uint8_t m_user_rx_invalidate_dlci_id_used_check_value = 0;
 static void user_rx_invalidate_dlci_id_used_callback()
 {
@@ -4702,6 +4709,93 @@ TEST(MultiplexerOpenTestGroup, user_rx_invalid_pf_bit)
     
     /* Validate proper callback callcount. */
     CHECK_EQUAL(1, m_user_rx_invalid_pf_bit_check_value);
+}
+
+
+static uint8_t m_rx_frame_type_not_supported_check_value = 0;
+static void rx_frame_type_not_supported_callback()
+{
+    ++m_rx_frame_type_not_supported_check_value;
+}
+
+
+/*
+ * TC - Ensure proper behaviour when Rx frame received with invalid frame type ID
+ * 
+ * Test sequence:
+ * - Mux open
+ * - Establish a DLCI
+ * - Rx frame with invalid frame type ID: silently discarded by the implementation
+ * - Rx frame with invalid frame type ID: accepted by the implementation.
+ * 
+ * Expected outcome:
+ * - The invalid frame type ID Rx frame is dropped by the implementation
+ * - The valid frame type ID Rx frame is accepted by the implementation
+ * - Validate proper callback callcount
+ * - Validate read buffer
+ */
+TEST(MultiplexerOpenTestGroup, rx_frame_type_not_supported)
+{
+    m_rx_frame_type_not_supported_check_value = 0;
+    
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();    
+    
+    /* Establish a DLCI. */
+    
+    const uint8_t dlci_id = DLCI_ID_LOWER_BOUND;
+    m_file_handle[0]      = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);             
+    CHECK(m_file_handle[0] != NULL);
+    m_file_handle[0]->sigio(rx_frame_type_not_supported_callback);            
+    
+    /* Rx user data frame with invalid P/F bit: silently discarded by the implementation. */
+    
+    const uint8_t user_data = 0xA5u;
+    uint8_t read_byte[6]    = 
+    {
+        1u | (dlci_id << 2),        
+        FRAME_TYPE_UNSUPPORTED, 
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&read_byte[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };             
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+
+    /* Validate proper callback callcount. */
+    CHECK_EQUAL(0, m_rx_frame_type_not_supported_check_value);    
+
+    /* Rx user data frame with valid P/F bit: accepted by the implementation. */
+   
+    read_byte[1] = FRAME_TYPE_UIH;
+    read_byte[4] = fcs_calculate(&read_byte[0], 3u);
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+    
+    /* Validate proper callback callcount. */
+    CHECK_EQUAL(1, m_rx_frame_type_not_supported_check_value);    
+
+    /* Validate read buffer. */
+    mock_t * mock_call = mock_free_get("call");
+    CHECK(mock_call != NULL);           
+    mock_call->return_value = 1;                    
+    uint8_t test_buffer[1]  = {0};    
+    ssize_t read_ret        = m_file_handle[0]->read(&(test_buffer[0]), 1u);
+    CHECK_EQUAL(1, read_ret);
+    CHECK_EQUAL(user_data, test_buffer[0]);        
+    read_ret = m_file_handle[0]->read(&(test_buffer[0]), 1u);
+    CHECK_EQUAL(-EAGAIN, read_ret);     
+    
+    /* Validate proper callback callcount. */
+    CHECK_EQUAL(1, m_rx_frame_type_not_supported_check_value);
 }
 
 

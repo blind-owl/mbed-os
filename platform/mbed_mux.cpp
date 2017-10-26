@@ -322,10 +322,7 @@ void Mux::on_rx_frame_uih()
 
 void Mux::on_rx_frame_not_supported()
 {
-    // @todo: test me
-    trace("rx_frame_not_supported_do: ", _rx_context.buffer[FRAME_CONTROL_FIELD_INDEX]);        
-    
-    MBED_ASSERT(false);    
+    rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);
 }
     
 
