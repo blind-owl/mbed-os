@@ -205,10 +205,7 @@ void Mux::on_rx_frame_ua()
             tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);          
             break;
         default:
-            /* Code that should never be reached. */
-            // @todo: just silently ignore?
-            trace("on_rx_frame_ua: ", _tx_context.tx_state);                
-            MBED_ASSERT(false);
+            /* No implementation required. */
             break;
     }
     

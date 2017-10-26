@@ -392,8 +392,7 @@ void self_iniated_response_rx(const uint8_t *rx_buf, uint8_t rx_buf_len, const u
  * - call read
  * - CALL RETURN 
  */
-void peer_iniated_request_rx(const uint8_t            *rx_buf, 
-                             uint8_t                   rx_buf_len, 
+void peer_iniated_request_rx(const uint8_t            *rx_buf,
                              FlagSequenceOctetReadType read_type,
                              const uint8_t            *resp_write_byte,
                              const uint8_t            *current_tx_write_byte,
@@ -1153,7 +1152,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_existing_open_pending_2)
         fcs_calculate(&write_byte[1], 3),
         FLAG_SEQUENCE_OCTET        
     };
-    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte),READ_FLAG_SEQUENCE_OCTET, &(write_byte[0]), NULL, 0);   
+    peer_iniated_request_rx(&(read_byte[0]), READ_FLAG_SEQUENCE_OCTET, &(write_byte[0]), NULL, 0);   
     
     /* Issue multiplexer start while DM is in progress. */
     mock_t * mock_wait = mock_free_get("wait");
@@ -1977,7 +1976,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_peer_initiated)
         FLAG_SEQUENCE_OCTET
     };    
 
-    peer_iniated_request_rx(&(read_byte[0]),sizeof(read_byte), READ_FLAG_SEQUENCE_OCTET, NULL, NULL, 0);
+    peer_iniated_request_rx(&(read_byte[0]), READ_FLAG_SEQUENCE_OCTET, NULL, NULL, 0);
 }
 
 
@@ -2010,7 +2009,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated)
         FLAG_SEQUENCE_OCTET
     };    
 
-    peer_iniated_request_rx(&(read_byte[0]), sizeof(read_byte), SKIP_FLAG_SEQUENCE_OCTET, NULL, NULL, 0);
+    peer_iniated_request_rx(&(read_byte[0]), SKIP_FLAG_SEQUENCE_OCTET, NULL, NULL, 0);
 }
 
 
@@ -2172,8 +2171,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_iniated_dm_tx_in_progress)
         fcs_calculate(&write_byte[1], 3u),
         FLAG_SEQUENCE_OCTET
     };   
-    peer_iniated_request_rx(&(read_byte[0]), 
-                            sizeof(read_byte), 
+    peer_iniated_request_rx(&(read_byte[0]),
                             READ_FLAG_SEQUENCE_OCTET,                            
                             &(write_byte[0]),   // TX response frame within the RX cycle.
                             NULL,               // No current frame in the TX pipeline.
@@ -2291,8 +2289,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_dm_tx_in_progress)
         fcs_calculate(&write_byte[1], 3u),
         FLAG_SEQUENCE_OCTET
     };          
-    peer_iniated_request_rx(&(read_byte[0]), 
-                            sizeof(read_byte), 
+    peer_iniated_request_rx(&(read_byte[0]),
                             SKIP_FLAG_SEQUENCE_OCTET,                            
                             &(write_byte[0]),   // TX response frame within the RX cycle.
                             NULL,               // No current frame in the TX pipeline.
@@ -2350,8 +2347,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_rx_disc_dlci_0)
     };               
     
     /* Generate DISC from peer which is ignored buy the implementation. */       
-    peer_iniated_request_rx(&(read_byte[0]), 
-                            sizeof(read_byte), 
+    peer_iniated_request_rx(&(read_byte[0]),
                             SKIP_FLAG_SEQUENCE_OCTET,                            
                             NULL,   // No TX response frame within the RX cycle.
                             NULL,   // No current frame in the TX pipeline.
@@ -2389,8 +2385,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_rx_disc_dlci_in_use)
         FLAG_SEQUENCE_OCTET
     };                     
     /* Generate DISC from peer which is ignored buy the implementation. */       
-    peer_iniated_request_rx(&(read_byte[0]), 
-                            sizeof(read_byte), 
+    peer_iniated_request_rx(&(read_byte[0]),
                             SKIP_FLAG_SEQUENCE_OCTET,                            
                             NULL,   // No TX response frame within the RX cycle.
                             NULL,   // No current frame in the TX pipeline.
@@ -4469,7 +4464,6 @@ static void user_rx_invalidate_dlci_id_used_callback()
  * - Validate proper callback callcount
  * - Validate read buffer
  */
-
 TEST(MultiplexerOpenTestGroup, user_rx_invalidate_dlci_id_used)
 {
     m_user_rx_invalidate_dlci_id_used_check_value = 0;
@@ -4796,6 +4790,61 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_not_supported)
     
     /* Validate proper callback callcount. */
     CHECK_EQUAL(1, m_rx_frame_type_not_supported_check_value);
+}
+
+
+/*
+ * TC - Ensure proper behaviour when Rx frame type UA received when no SABM has been send
+ * Test sequence:
+ * - Mux open
+ * - Establish 1st DLCI
+ * - Rx frame type UA received, without pending SABM frame, to the established DLCI: silently discarded by the 
+ *   implementation
+ * - Establish 2nd DLCI
+ *
+ * Expected outcome:
+ * - Rx frame type UA received is dropped by the implementation
+ * - Validate DLCI establishment
+ */
+TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_when_no_sabm_send)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();    
+    
+    /* Establish 1st DLCI. */
+    
+    const uint8_t dlci_id = DLCI_ID_LOWER_BOUND;
+    m_file_handle[0]      = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);             
+    CHECK(m_file_handle[0] != NULL);
+    m_file_handle[0]->sigio(NULL);                
+    
+    /* Rx frame type UA received, without pending SABM frame, to the established DLCI: silently discarded by the 
+       implementation. */
+    
+    const uint8_t user_data = 0xA5u;
+    uint8_t read_byte[5]    = 
+    {
+        3u | (dlci_id << 2),        
+        (FRAME_TYPE_UA | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };             
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));    
+   
+    /* Establish 2nd DLCI. */
+    
+    m_file_handle[1] = dlci_self_iniated_establish(ROLE_INITIATOR, (dlci_id + 1u));             
+    CHECK(m_file_handle[1] != NULL);    
 }
 
 
