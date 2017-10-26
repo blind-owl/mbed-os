@@ -505,6 +505,12 @@ private:
      */        
     static void event_queue_enqueue();
     
+    /** Verify is FCS valid in RX frame.
+     * 
+     *  @return True upon valid FCS, false otherwise.
+     */            
+    static bool is_rx_fcs_valid();
+    
     /* Deny object creation. */    
     Mux();
     

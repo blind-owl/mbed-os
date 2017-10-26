@@ -708,6 +708,7 @@ ssize_t Mux::on_rx_read_state_header_read()
         /* Decode remaining frame read length and change state. Current implementation supports only 1-byte length 
            field, enforce this with MBED_ASSERT. */
 
+        // @todo: instaed of -1 use #define
         MBED_ASSERT((_rx_context.buffer[_rx_context.offset - 1u] & 1u) == 1u);
         _rx_context.read_length = (_rx_context.buffer[_rx_context.offset - 1u] >> 1) + FRAME_TRAILER_LEN;
         
@@ -719,6 +720,16 @@ ssize_t Mux::on_rx_read_state_header_read()
     }
 
     return read_err;
+}
+
+
+bool Mux::is_rx_fcs_valid()
+{
+    const uint8_t expected_fcs = fcs_calculate(&(_rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX]), FCS_INPUT_LEN);
+    const uint8_t actual_fcs   = 
+        _rx_context.buffer[FRAME_INFORMATION_FIELD_INDEX + (_rx_context.buffer[FRAME_LENGTH_FIELD_INDEX] >> 1)];
+    
+    return (expected_fcs == actual_fcs);
 }
 
 
@@ -747,12 +758,21 @@ ssize_t Mux::on_rx_read_state_trailer_read()
     } while ((_rx_context.read_length != 0) && (read_err != -EAGAIN));
     
     if (_rx_context.read_length == 0) {
-        /* Complete frame received, decode frame type and process it. */
+        /* Complete frame received, verify FCS and if valid proceed with processing. */
         
-        const Mux::FrameRxType frame_type  = frame_rx_type_resolve();
-        const rx_frame_decoder_func_t func = rx_frame_decoder_func[frame_type];
-        func();      
+        if (is_rx_fcs_valid()) {
+            const Mux::FrameRxType frame_type  = frame_rx_type_resolve();
+            const rx_frame_decoder_func_t func = rx_frame_decoder_func[frame_type];
+            
+            func();      
+        } else {
+            rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);            
+        }
   
+        // @todo: DEFECT schedule system thread afte Rx complete to trigger new run, as decoder funcs make sm transit??
+        // as there can be new data pending in the buffer, we could use event_q_pending bit to avoid 1 extra enqeue here
+        // included in the enqeue func itself        
+        
         read_err = -EAGAIN;
     }
     

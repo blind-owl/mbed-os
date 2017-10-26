@@ -4532,4 +4532,91 @@ TEST(MultiplexerOpenTestGroup, user_rx_invalidate_dlci_id_used)
 }
 
 
+static uint8_t m_user_rx_invalid_fcs_check_value = 0;
+static void user_rx_invalid_fcs_callback()
+{
+    ++m_user_rx_invalid_fcs_check_value;
+}
+
+
+/*
+ * TC - Ensure proper behaviour when user data Rx frame received with invalid FCS
+ * 
+ * Test sequence:
+ * 1. Mux open
+ * 3. Establish a DLCI
+ * 4. Rx user data frame with invalid FCS: silently discarded by the implementation
+ * 5. Rx user data frame with valid FCS: accepted by the implementation.
+ * 
+ * Expected outcome:
+ * - The invalid FCS Rx frame is dropped by the implementation
+ * - The valid FCS Rx frame is accepted by the implementation
+ * - Validate proper callback callcount
+ * - Validate read buffer
+ */
+
+TEST(MultiplexerOpenTestGroup, user_rx_invalid_fcs)
+{
+    m_user_rx_invalid_fcs_check_value = 0;
+    
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();    
+    
+    /* Establish a DLCI. */
+    
+    const uint8_t dlci_id = DLCI_ID_LOWER_BOUND;
+    m_file_handle[0]      = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);             
+    CHECK(m_file_handle[0] != NULL);
+    m_file_handle[0]->sigio(user_rx_invalid_fcs_callback);            
+    
+    /* Rx user data frame with invalid FCS: silently discarded by the implementation. */
+    
+    const uint8_t user_data = 0xA5u;
+    uint8_t read_byte[6]    = 
+    {
+        1u | (dlci_id << 2),        
+        FRAME_TYPE_UIH, 
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&read_byte[0], 3u) + 1u,
+        FLAG_SEQUENCE_OCTET
+    };             
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+
+    /* Validate proper callback callcount. */
+    CHECK_EQUAL(0, m_user_rx_invalid_fcs_check_value);    
+
+    /* Rx user data frame with valid FCS: accepted by the implementation. */
+   
+    read_byte[4] = fcs_calculate(&read_byte[0], 3u);
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+    
+    /* Validate proper callback callcount. */
+    CHECK_EQUAL(1, m_user_rx_invalid_fcs_check_value);    
+
+    /* Validate read buffer. */
+    mock_t * mock_call = mock_free_get("call");
+    CHECK(mock_call != NULL);           
+    mock_call->return_value = 1;                    
+    uint8_t test_buffer[1]  = {0};    
+    ssize_t read_ret        = m_file_handle[0]->read(&(test_buffer[0]), 1u);
+    CHECK_EQUAL(1, read_ret);
+    CHECK_EQUAL(user_data, test_buffer[0]);        
+    read_ret = m_file_handle[0]->read(&(test_buffer[0]), 1u);
+    CHECK_EQUAL(-EAGAIN, read_ret);     
+    
+    /* Validate proper callback callcount. */
+    CHECK_EQUAL(1, m_user_rx_invalid_fcs_check_value);
+}
+
+
 } // namespace mbed
