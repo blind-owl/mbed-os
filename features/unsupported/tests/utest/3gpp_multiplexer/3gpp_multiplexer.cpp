@@ -1199,7 +1199,7 @@ void dlci_establish_self_initated_sem_wait(const void *context)
     
     const uint8_t read_byte[5]  = 
     {
-        (((cntx->role == ROLE_INITIATOR) ? 1 : 3) | (cntx->dlci_id << 2)),
+        (((cntx->role == ROLE_INITIATOR) ? 3 : 1) | (cntx->dlci_id << 2)), //@todo: remove the role concept compeltely?
         (FRAME_TYPE_UA | PF_BIT), 
         LENGTH_INDICATOR_OCTET,        
         fcs_calculate(&read_byte[0], 3),
@@ -3732,7 +3732,7 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_tx_to_different_dlci_not_wit
 }
 
 
-void single_complete_read_cycle(const uint8_t *read_byte, 
+void single_complete_read_cycle(const uint8_t *read_byte,  
                                 uint8_t        length)
 {
     mock_t * mock_call = mock_free_get("call");
@@ -4830,7 +4830,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_when_no_sabm_send)
     /* Rx frame type UA received, without pending SABM frame, to the established DLCI: silently discarded by the 
        implementation. */
    
-    uint8_t read_byte[5]    = 
+    const uint8_t read_byte[5] = 
     {
         3u | (dlci_id << 2),        
         (FRAME_TYPE_UA | PF_BIT), 
@@ -4884,7 +4884,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_when_no_sabm_send)
     /* Rx frame type DM received, without pending SABM frame, to the established DLCI: silently discarded by the 
        implementation. */
    
-    uint8_t read_byte[5]    = 
+    const uint8_t read_byte[5] = 
     {
         3u | (dlci_id << 2),        
         (FRAME_TYPE_DM | PF_BIT), 
@@ -4898,6 +4898,101 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_when_no_sabm_send)
     
     m_file_handle[1] = dlci_self_iniated_establish(ROLE_INITIATOR, (dlci_id + 1u));             
     CHECK(m_file_handle[1] != NULL);    
+}
+
+
+static void rx_frame_type_ua_invalid_cr_bit_sem_wait(const void* context)
+{    
+    uint8_t read_byte[5] = 
+    {
+        1u | (DLCI_ID_LOWER_BOUND << 2),        
+        (FRAME_TYPE_UA | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,        
+        fcs_calculate(&read_byte[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };    
+
+    /* Complete the DLCI establishment request frame write sequence. */
+    const uint8_t *write_byte = (const uint8_t *)context;       
+    self_iniated_request_tx(&(write_byte[0]), (SABM_FRAME_LEN - 1u), FRAME_HEADER_READ_LEN);
+
+    /* Rx frame type UA received with invalid C/R bit: silently discarded by the implementation. */
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));    
+    
+    /* Rx frame type UA received with valid C/R bit: DLCI established. */
+    read_byte[0] = 3u | (DLCI_ID_LOWER_BOUND << 2);
+    read_byte[3] = fcs_calculate(&read_byte[0], 3);
+    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+}
+
+
+/*
+ * TC - Ensure proper behaviour when Rx frame type UA received with invalid C/R bit
+ * Test sequence:
+ * - Mux open
+ * - Send DLCI establishment request
+ * - Rx frame type UA received with invalid C/R bit: silently discarded by the implementation
+ * - Rx frame type UA received with valid C/R bit: DLCI established
+ *
+ * Expected outcome:
+ * - Verify Rx frame type UA received with invalid C/R bit: silently discarded by the implementation
+ * - Validate DLCI establishment
+ */
+TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_invalid_cr_bit)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();        
+    
+    const uint8_t write_byte[6] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (DLCI_ID_LOWER_BOUND << 2), 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };    
+    
+    /* Set mock. */
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);        
+    mock_write->input_param[1].param        = sizeof(write_byte);    
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 1;    
+
+    /* Set mock. */    
+    mock_t * mock_wait = mock_free_get("wait");
+    CHECK(mock_wait != NULL);
+    mock_wait->return_value = 1;
+    mock_wait->func         = rx_frame_type_ua_invalid_cr_bit_sem_wait;
+    mock_wait->func_context = &(write_byte[1]);
+    
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[1]);        
+    mock_write->input_param[1].param        = sizeof(write_byte) - sizeof(write_byte[0]);        
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;                    
+
+    /* Start test sequence. Test set mocks. */
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX); 
+    FileHandle *obj                      = NULL;    
+    const mbed::Mux::MuxReturnStatus ret = mbed::Mux::dlci_establish(DLCI_ID_LOWER_BOUND, status, &obj);
+    CHECK_EQUAL(mbed::Mux::MUX_STATUS_SUCCESS, ret);
+    CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_SUCCESS, status);
+    CHECK(obj != NULL);    
 }
 
 
