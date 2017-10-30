@@ -4814,28 +4814,48 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_when_no_sabm_send)
 }
 
 
-static void rx_frame_type_ua_invalid_cr_bit_sem_wait(const void* context)
-{    
-    uint8_t read_byte[5] = 
+static void rx_frame_type_ua_invalid_cr_and_pf_bit_sem_wait(const void* context)
+{   
+    /* Complete the DLCI establishment request frame write sequence. */
+    const uint8_t* write_byte = (const uint8_t *)context;       
+    self_iniated_request_tx(&(write_byte[0]), (SABM_FRAME_LEN - 1u), FRAME_HEADER_READ_LEN);
+
+    /* Rx frame type UA received with invalid C/R bit: silently discarded by the implementation. */
+    const uint8_t read_byte_invalid_cr_bit[5] = 
     {
         1u | (DLCI_ID_LOWER_BOUND << 2),        
         (FRAME_TYPE_UA | PF_BIT), 
         LENGTH_INDICATOR_OCTET,        
-        fcs_calculate(&read_byte[0], 3),
+        fcs_calculate(&read_byte_invalid_cr_bit[0], 3),
         FLAG_SEQUENCE_OCTET
-    };    
-
-    /* Complete the DLCI establishment request frame write sequence. */
-    const uint8_t *write_byte = (const uint8_t *)context;       
-    self_iniated_request_tx(&(write_byte[0]), (SABM_FRAME_LEN - 1u), FRAME_HEADER_READ_LEN);
-
-    /* Rx frame type UA received with invalid C/R bit: silently discarded by the implementation. */
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));    
+    };        
+    single_complete_read_cycle(&(read_byte_invalid_cr_bit[0]), sizeof(read_byte_invalid_cr_bit));    
     
-    /* Rx frame type UA received with valid C/R bit: DLCI established. */
-    read_byte[0] = 3u | (DLCI_ID_LOWER_BOUND << 2);
-    read_byte[3] = fcs_calculate(&read_byte[0], 3);
-    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+    /* Rx frame type UA received with invalid P/F bit: silently discarded by the implementation. */ 
+    const uint8_t read_byte_invalid_pf_bit[5] = 
+    {
+        3u | (DLCI_ID_LOWER_BOUND << 2),        
+        FRAME_TYPE_UA, 
+        LENGTH_INDICATOR_OCTET,        
+        fcs_calculate(&read_byte_invalid_pf_bit[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };                
+    single_complete_read_cycle(&(read_byte_invalid_pf_bit[0]), sizeof(read_byte_invalid_pf_bit));
+    
+    /* Rx frame type UA, whic is valid: DLCI established. */
+    const uint8_t read_byte_valid[5] = 
+    {
+        3u | (DLCI_ID_LOWER_BOUND << 2),        
+        (FRAME_TYPE_UA | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,        
+        fcs_calculate(&read_byte_valid[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    self_iniated_response_rx(&(read_byte_valid[0]), 
+                             sizeof(read_byte_valid), 
+                             NULL, 
+                             SKIP_FLAG_SEQUENCE_OCTET,
+                             STRIP_FLAG_FIELD_NO);
 }
 
 
@@ -4845,13 +4865,14 @@ static void rx_frame_type_ua_invalid_cr_bit_sem_wait(const void* context)
  * - Mux open
  * - Send DLCI establishment request
  * - Rx frame type UA received with invalid C/R bit: silently discarded by the implementation
+ * - Rx frame type UA received with invalid P/F bit: silently discarded by the implementation. 
  * - Rx frame type UA received with valid C/R bit: DLCI established
  *
  * Expected outcome:
  * - Verify Rx frame type UA received with invalid C/R bit: silently discarded by the implementation
  * - Validate DLCI establishment
  */
-TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_invalid_cr_bit)
+TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_invalid_cr_and_pf_bit)
 {
     mbed::FileHandleMock fh_mock;   
     mbed::EventQueueMock eq_mock;
@@ -4888,7 +4909,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_invalid_cr_bit)
     mock_t * mock_wait = mock_free_get("wait");
     CHECK(mock_wait != NULL);
     mock_wait->return_value = 1;
-    mock_wait->func         = rx_frame_type_ua_invalid_cr_bit_sem_wait;
+    mock_wait->func         = rx_frame_type_ua_invalid_cr_and_pf_bit_sem_wait;
     mock_wait->func_context = &(write_byte[1]);
     
     mock_write = mock_free_get("write");

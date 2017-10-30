@@ -185,17 +185,19 @@ uint8_t Mux::rx_dlci_id_get()
 
 void Mux::on_rx_frame_ua()
 {
-    // @todo: verify that we have issued the start/establishment request in the 1st place?
-    // - NOT as TX_RETRANSMIT_DONE manages
     // @todo: DEFECT we should do request-response DLCI ID matching
 
     switch (_tx_context.tx_state) {
         osStatus os_status;
         uint8_t  dlci_id;
+        bool     is_cr_bit_set;
+        bool     is_pf_bit_set;
         case TX_RETRANSMIT_DONE:
 //trace("!A", _rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX]);
       
-            if (_rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] & CR_BIT) {
+            is_cr_bit_set = _rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] & CR_BIT;
+            is_pf_bit_set = _rx_context.buffer[FRAME_CONTROL_FIELD_INDEX] & PF_BIT;
+            if (is_cr_bit_set && is_pf_bit_set) {
                 _event_q->cancel(_tx_context.timer_id);           
                 _establish_status = Mux::MUX_ESTABLISH_SUCCESS;
                 dlci_id           = rx_dlci_id_get();
@@ -1119,9 +1121,9 @@ void Mux::user_information_construct(uint8_t dlci_id, const void* buffer, size_t
         reinterpret_cast<frame_hdr_t *>(&(Mux::_tx_context.buffer[FRAME_FLAG_SEQUENCE_FIELD_INDEX]));
     
     frame_hdr->flag_seq = FLAG_SEQUENCE_OCTET; // @todo set this @ _init as always fixed??
-    frame_hdr->address  = 3u | (dlci_id << 2);                 
+    frame_hdr->address  = 3u | (dlci_id << 2); // @todo: use make #defines for 3                
     frame_hdr->control  = FRAME_TYPE_UIH;           
-    frame_hdr->length   = (1u | (size << 1));
+    frame_hdr->length   = (1u | (size << 1));  // @todo: use make #defines for 1                
     
     memmove(&(frame_hdr->information[0]), buffer, size);
     
