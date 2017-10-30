@@ -4861,16 +4861,18 @@ static void rx_frame_type_ua_invalid_cr_and_pf_bit_sem_wait(const void* context)
 
 
 /*
- * TC - Ensure proper behaviour when Rx frame type UA received with invalid C/R bit
+ * TC - Ensure proper behaviour when Rx frame type UA received with invalid C/R and P/F bit
+ * 
  * Test sequence:
  * - Mux open
  * - Send DLCI establishment request
  * - Rx frame type UA received with invalid C/R bit: silently discarded by the implementation
  * - Rx frame type UA received with invalid P/F bit: silently discarded by the implementation. 
- * - Rx frame type UA received with valid C/R bit: DLCI established
+ * - Valid Rx frame type received: DLCI established
  *
  * Expected outcome:
  * - Verify Rx frame type UA received with invalid C/R bit: silently discarded by the implementation
+ * - Verify Rx frame type UA received with invalid P/F bit: silently discarded by the implementation
  * - Validate DLCI establishment
  */
 TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_invalid_cr_and_pf_bit)
@@ -5037,6 +5039,127 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_uih_invalid_cr_and_pf_bit)
     
     /* Validate proper callback callcount. */
     CHECK_EQUAL(1, m_rx_frame_type_uih_invalid_cr_and_pf_bit_check_value);
+}
+
+
+void rx_frame_type_dm_invalid_cr_and_pf_bit_sem_wait(const void *context)
+{    
+    /* Complete the request frame write. */
+    const uint8_t *write_byte = (const uint8_t *)context;
+    self_iniated_request_tx(&(write_byte[0]), (SABM_FRAME_LEN - 1u), FRAME_HEADER_READ_LEN);    
+
+    /* Rx frame type DM received with invalid C/R bit: silently discarded by the implementation */
+    const uint8_t read_byte_invalid_cr_bit[5] = 
+    {
+        1u | (DLCI_ID_LOWER_BOUND << 2),        
+        (FRAME_TYPE_DM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,        
+        fcs_calculate(&read_byte_invalid_cr_bit[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };        
+    single_complete_read_cycle(&(read_byte_invalid_cr_bit[0]), sizeof(read_byte_invalid_cr_bit));        
+
+    /* Rx frame type DM received with invalid P/F bit: silently discarded by the implementation. */
+    const uint8_t read_byte_invalid_pf_bit[5] = 
+    {
+        3u | (DLCI_ID_LOWER_BOUND << 2),        
+        FRAME_TYPE_DM, 
+        LENGTH_INDICATOR_OCTET,        
+        fcs_calculate(&read_byte_invalid_pf_bit[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };                
+    single_complete_read_cycle(&(read_byte_invalid_pf_bit[0]), sizeof(read_byte_invalid_pf_bit));    
+    
+    /* Valid Rx frame type DM received: starts expected processing within implementation */
+    const uint8_t read_byte_valid[5] = 
+    {
+        3u | (DLCI_ID_LOWER_BOUND << 2),        
+        (FRAME_TYPE_DM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,        
+        fcs_calculate(&read_byte_valid[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    self_iniated_response_rx(&(read_byte_valid[0]), 
+                             sizeof(read_byte_valid), 
+                             NULL, 
+                             SKIP_FLAG_SEQUENCE_OCTET,
+                             STRIP_FLAG_FIELD_NO);
+}
+
+
+/*
+ * TC - Ensure proper behaviour when DM frame received with invalid C/R and P/F bit
+ *
+ * Test sequence:
+ * - Mux open
+ * - Send DLCI establishment request
+ * - Rx frame type DM received with invalid C/R bit: silently discarded by the implementation
+ * - Rx frame type DM received with invalid P/F bit: silently discarded by the implementation. 
+ * - Valid Rx frame type DM received: starts expected processing within implementation
+ *
+ * Expected outcome:
+ * - Verify Rx frame type DM received with invalid C/R bit: silently discarded by the implementation
+ * - Verify Rx frame type UA received with invalid P/F bit: silently discarded by the implementation
+ * - Valid Rx frame type DM received: starts expected processing within implementation
+ */
+TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_invalid_cr_and_pf_bit)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+    
+    const uint8_t write_byte[6] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (DLCI_ID_LOWER_BOUND << 2), 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };    
+    
+    /* Set mock. */
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);        
+    mock_write->input_param[1].param        = SABM_FRAME_LEN;    
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 1;    
+
+    /* Set mock. */    
+    mock_t * mock_wait = mock_free_get("wait");
+    CHECK(mock_wait != NULL);
+    mock_wait->return_value = 1;
+    mock_wait->func         = rx_frame_type_dm_invalid_cr_and_pf_bit_sem_wait;
+    mock_wait->func_context = &(write_byte[1]);
+    
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[1]);        
+    mock_write->input_param[1].param        = (SABM_FRAME_LEN - 1u);        
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;                    
+
+    /* Start test sequence. Test set mocks. */
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX); 
+    FileHandle *obj                      = NULL;    
+    const mbed::Mux::MuxReturnStatus ret = mbed::Mux::dlci_establish(DLCI_ID_LOWER_BOUND, status, &obj);
+    CHECK_EQUAL(mbed::Mux::MUX_STATUS_SUCCESS, ret);
+    CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_REJECT, status);
+    CHECK_EQUAL(obj, NULL);
+    
+    /* 2nd time: establishment success. */
+    dlci_self_iniated_establish(ROLE_INITIATOR, 1);    
 }
 
 } // namespace mbed

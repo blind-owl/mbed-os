@@ -192,19 +192,19 @@ void Mux::on_rx_frame_ua()
         uint8_t  dlci_id;
         bool     is_cr_bit_set;
         bool     is_pf_bit_set;
-        case TX_RETRANSMIT_DONE:
-//trace("!A", _rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX]);
-      
+        case TX_RETRANSMIT_DONE:      
             is_cr_bit_set = _rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] & CR_BIT;
             is_pf_bit_set = _rx_context.buffer[FRAME_CONTROL_FIELD_INDEX] & PF_BIT;
+            
             if (is_cr_bit_set && is_pf_bit_set) {
                 _event_q->cancel(_tx_context.timer_id);           
                 _establish_status = Mux::MUX_ESTABLISH_SUCCESS;
                 dlci_id           = rx_dlci_id_get();
-//trace("!DLCI", dlci_id);                
+                
                 if (dlci_id != 0) {
                     dlci_id_append(dlci_id);
                 } 
+                
                 os_status = _semaphore.release();
                 MBED_ASSERT(os_status == osOK); 
                 // @todo: need to verify correct call order for sm change and Semaphore release.
@@ -222,18 +222,24 @@ void Mux::on_rx_frame_ua()
 
 void Mux::on_rx_frame_dm()
 {
-    // @todo: verify that we have issued the start request - NOT as TX_RETRANSMIT_DONE manages
     // @todo: DEFECT we should do request-response DLCI ID matching    
 
     switch (_tx_context.tx_state) {
         osStatus os_status;
+        bool     is_cr_bit_set;
+        bool     is_pf_bit_set;        
         case TX_RETRANSMIT_DONE:
-            _event_q->cancel(_tx_context.timer_id);           
-            _establish_status = Mux::MUX_ESTABLISH_REJECT;
-            os_status         = _semaphore.release();
-            MBED_ASSERT(os_status == osOK);        
-            // @todo: need to verify correct call order for sm change and Semaphore release.
-            tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);            
+            is_cr_bit_set = _rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] & CR_BIT;
+            is_pf_bit_set = _rx_context.buffer[FRAME_CONTROL_FIELD_INDEX] & PF_BIT;            
+            
+            if (is_cr_bit_set && is_pf_bit_set) {
+                _event_q->cancel(_tx_context.timer_id);           
+                _establish_status = Mux::MUX_ESTABLISH_REJECT;
+                os_status         = _semaphore.release();
+                MBED_ASSERT(os_status == osOK);        
+                // @todo: need to verify correct call order for sm change and Semaphore release.
+                tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);
+            }
             break;
         default:
             /* No implementation required. */
