@@ -257,6 +257,8 @@ void Mux::dm_response_send()
 
 void Mux::on_rx_frame_disc()
 {   
+    // @todo: add comment when and why we send DM response
+    
     switch (_tx_context.tx_state) {
         uint8_t dlci_id;
         case TX_IDLE:                      

@@ -4619,93 +4619,6 @@ TEST(MultiplexerOpenTestGroup, user_rx_invalid_fcs)
 }
 
 
-static uint8_t m_user_rx_invalid_pf_bit_check_value = 0;
-static void user_rx_invalid_pf_bit_callback()
-{
-    ++m_user_rx_invalid_pf_bit_check_value;
-}
-
-
-/*
- * TC - Ensure proper behaviour when user data Rx frame received with invalid P/F bit
- * 
- * Test sequence:
- * - Mux open
- * - Establish a DLCI
- * - Rx user data frame with invalid P/F bit: silently discarded by the implementation
- * - Rx user data frame with valid P/F bit: accepted by the implementation.
- * 
- * Expected outcome:
- * - The invalid P/F bit Rx frame is dropped by the implementation
- * - The valid P/F bit Rx frame is accepted by the implementation
- * - Validate proper callback callcount
- * - Validate read buffer
- */
-TEST(MultiplexerOpenTestGroup, user_rx_invalid_pf_bit)
-{
-    m_user_rx_invalid_pf_bit_check_value = 0;
-    
-    mbed::FileHandleMock fh_mock;   
-    mbed::EventQueueMock eq_mock;
-    
-    mbed::Mux::eventqueue_attach(&eq_mock);
-       
-    /* Set and test mock. */
-    mock_t * mock_sigio = mock_free_get("sigio");    
-    CHECK(mock_sigio != NULL);      
-    mbed::Mux::serial_attach(&fh_mock);
-    
-    mux_self_iniated_open();    
-    
-    /* Establish a DLCI. */
-    
-    const uint8_t dlci_id = DLCI_ID_LOWER_BOUND;
-    m_file_handle[0]      = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);             
-    CHECK(m_file_handle[0] != NULL);
-    m_file_handle[0]->sigio(user_rx_invalid_pf_bit_callback);            
-    
-    /* Rx user data frame with invalid P/F bit: silently discarded by the implementation. */
-    
-    const uint8_t user_data = 0xA5u;
-    uint8_t read_byte[6]    = 
-    {
-        1u | (dlci_id << 2),        
-        (FRAME_TYPE_UIH | PF_BIT), 
-        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
-        user_data,
-        fcs_calculate(&read_byte[0], 3u),
-        FLAG_SEQUENCE_OCTET
-    };             
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
-
-    /* Validate proper callback callcount. */
-    CHECK_EQUAL(0, m_user_rx_invalid_pf_bit_check_value);    
-
-    /* Rx user data frame with valid P/F bit: accepted by the implementation. */
-   
-    read_byte[1] = FRAME_TYPE_UIH;
-    read_byte[4] = fcs_calculate(&read_byte[0], 3u);
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
-    
-    /* Validate proper callback callcount. */
-    CHECK_EQUAL(1, m_user_rx_invalid_pf_bit_check_value);    
-
-    /* Validate read buffer. */
-    mock_t * mock_call = mock_free_get("call");
-    CHECK(mock_call != NULL);           
-    mock_call->return_value = 1;                    
-    uint8_t test_buffer[1]  = {0};    
-    ssize_t read_ret        = m_file_handle[0]->read(&(test_buffer[0]), 1u);
-    CHECK_EQUAL(1, read_ret);
-    CHECK_EQUAL(user_data, test_buffer[0]);        
-    read_ret = m_file_handle[0]->read(&(test_buffer[0]), 1u);
-    CHECK_EQUAL(-EAGAIN, read_ret);     
-    
-    /* Validate proper callback callcount. */
-    CHECK_EQUAL(1, m_user_rx_invalid_pf_bit_check_value);
-}
-
-
 static uint8_t m_rx_frame_type_not_supported_check_value = 0;
 static void rx_frame_type_not_supported_callback()
 {
@@ -4995,5 +4908,91 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_invalid_cr_bit)
     CHECK(obj != NULL);    
 }
 
+
+static uint8_t m_rx_frame_type_uih_invalid_cr_bit_check_value  = 0;
+static void rx_frame_type_uih_invalid_cr_bit_callback()
+{
+    ++m_rx_frame_type_uih_invalid_cr_bit_check_value ;
+}
+
+
+/*
+ * TC - Ensure proper behaviour when user data Rx frame received with invalid P/F bit
+ * 
+ * Test sequence:
+ * - Mux open
+ * - Establish a DLCI
+ * - Rx user data frame with invalid P/F bit: silently discarded by the implementation
+ * - Rx user data frame with valid P/F bit: accepted by the implementation.
+ * 
+ * Expected outcome:
+ * - The invalid P/F bit Rx frame is dropped by the implementation
+ * - The valid P/F bit Rx frame is accepted by the implementation
+ * - Validate proper callback callcount
+ * - Validate read buffer
+ */
+TEST(MultiplexerOpenTestGroup, rx_frame_type_uih_invalid_cr_bit)
+{
+    m_rx_frame_type_uih_invalid_cr_bit_check_value = 0;
+    
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();    
+    
+    /* Establish a DLCI. */
+    
+    const uint8_t dlci_id = DLCI_ID_LOWER_BOUND;
+    m_file_handle[0]      = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);             
+    CHECK(m_file_handle[0] != NULL);
+    m_file_handle[0]->sigio(rx_frame_type_uih_invalid_cr_bit_callback);            
+    
+    /* Rx user data frame with invalid P/F bit: silently discarded by the implementation. */
+    
+    const uint8_t user_data = 0xA5u;
+    uint8_t read_byte[6]    = 
+    {
+        1u | (dlci_id << 2),        
+        (FRAME_TYPE_UIH | PF_BIT), 
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&read_byte[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };             
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+
+    /* Validate proper callback callcount. */
+    CHECK_EQUAL(0, m_rx_frame_type_uih_invalid_cr_bit_check_value );    
+
+    /* Rx user data frame with valid P/F bit: accepted by the implementation. */
+   
+    read_byte[1] = FRAME_TYPE_UIH;
+    read_byte[4] = fcs_calculate(&read_byte[0], 3u);
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+    
+    /* Validate proper callback callcount. */
+    CHECK_EQUAL(1, m_rx_frame_type_uih_invalid_cr_bit_check_value );    
+
+    /* Validate read buffer. */
+    mock_t * mock_call = mock_free_get("call");
+    CHECK(mock_call != NULL);           
+    mock_call->return_value = 1;                    
+    uint8_t test_buffer[1]  = {0};    
+    ssize_t read_ret        = m_file_handle[0]->read(&(test_buffer[0]), 1u);
+    CHECK_EQUAL(1, read_ret);
+    CHECK_EQUAL(user_data, test_buffer[0]);        
+    read_ret = m_file_handle[0]->read(&(test_buffer[0]), 1u);
+    CHECK_EQUAL(-EAGAIN, read_ret);     
+    
+    /* Validate proper callback callcount. */
+    CHECK_EQUAL(1, m_rx_frame_type_uih_invalid_cr_bit_check_value );
+}
 
 } // namespace mbed
