@@ -296,8 +296,10 @@ void Mux::on_rx_frame_uih()
     if (length != 0) {
         /* Proceed with processing for non 0 length user data frames. */
 
-        if ((_rx_context.buffer[FRAME_CONTROL_FIELD_INDEX] & PF_BIT) == 0) {
-            /* Proceed with processing upon P/F bit being clear. */
+        const bool is_cr_bit_clear = !(_rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] & CR_BIT);
+        const bool is_pf_bit_clear = !(_rx_context.buffer[FRAME_CONTROL_FIELD_INDEX] & PF_BIT);        
+        if (is_cr_bit_clear && is_pf_bit_clear) {
+            /* Proceed with processing upon P/F and C/R bits being clear. */
         
             const uint8_t dlci_id = rx_dlci_id_get();
             if (dlci_id != MUX_DLCI_INVALID_ID) {

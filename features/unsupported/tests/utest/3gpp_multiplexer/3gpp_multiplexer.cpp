@@ -65,7 +65,8 @@ TEST(MultiplexerOpenTestGroup, FirstTest)
 #define CRC_TABLE_LEN                256u                        /* CRC table length in number of bytes. */
 #define RETRANSMIT_COUNT             3u                          /* Retransmission count for the tx frames requiring a 
                                                                     response. */       
-#define PF_BIT                       (1u << 4)                   /* P/F bit position in the frame control field. */      
+#define PF_BIT                       (1u << 4)                   /* P/F bit position in the frame control field. */   
+#define CR_BIT                       (1u << 1)                   /* C/R bit position in the frame address field. */
                                                                    
                                                                     
 #define FRAME_TYPE_SABM              0x2Fu                       /* SABM frame type coding in the frame control 
@@ -4930,10 +4931,10 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_invalid_cr_and_pf_bit)
 }
 
 
-static uint8_t m_rx_frame_type_uih_invalid_cr_bit_check_value  = 0;
-static void rx_frame_type_uih_invalid_cr_bit_callback()
+static uint8_t m_rx_frame_type_uih_invalid_cr_and_pf_bit_check_value = 0;
+static void rx_frame_type_uih_invalid_cr_and_pf_bit_callback()
 {
-    ++m_rx_frame_type_uih_invalid_cr_bit_check_value ;
+    ++m_rx_frame_type_uih_invalid_cr_and_pf_bit_check_value;
 }
 
 
@@ -4944,7 +4945,8 @@ static void rx_frame_type_uih_invalid_cr_bit_callback()
  * - Mux open
  * - Establish a DLCI
  * - Rx user data frame with invalid P/F bit: silently discarded by the implementation
- * - Rx user data frame with valid P/F bit: accepted by the implementation.
+ * - Rx user data frame with invalid C/R bit: silently discarded by the implementation
+ * - Rx user data frame, whic is valid: accepted by the implementation.
  * 
  * Expected outcome:
  * - The invalid P/F bit Rx frame is dropped by the implementation
@@ -4952,9 +4954,9 @@ static void rx_frame_type_uih_invalid_cr_bit_callback()
  * - Validate proper callback callcount
  * - Validate read buffer
  */
-TEST(MultiplexerOpenTestGroup, rx_frame_type_uih_invalid_cr_bit)
+TEST(MultiplexerOpenTestGroup, rx_frame_type_uih_invalid_cr_and_pf_bit)
 {
-    m_rx_frame_type_uih_invalid_cr_bit_check_value = 0;
+    m_rx_frame_type_uih_invalid_cr_and_pf_bit_check_value = 0;
     
     mbed::FileHandleMock fh_mock;   
     mbed::EventQueueMock eq_mock;
@@ -4973,33 +4975,54 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_uih_invalid_cr_bit)
     const uint8_t dlci_id = DLCI_ID_LOWER_BOUND;
     m_file_handle[0]      = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);             
     CHECK(m_file_handle[0] != NULL);
-    m_file_handle[0]->sigio(rx_frame_type_uih_invalid_cr_bit_callback);            
+    m_file_handle[0]->sigio(rx_frame_type_uih_invalid_cr_and_pf_bit_callback);            
     
     /* Rx user data frame with invalid P/F bit: silently discarded by the implementation. */
     
-    const uint8_t user_data = 0xA5u;
-    uint8_t read_byte[6]    = 
+    const uint8_t user_data                   = 0xA5u;
+    const uint8_t read_byte_invalid_pf_bit[6] = 
     {
         1u | (dlci_id << 2),        
         (FRAME_TYPE_UIH | PF_BIT), 
         LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
         user_data,
-        fcs_calculate(&read_byte[0], 3u),
+        fcs_calculate(&read_byte_invalid_pf_bit[0], 3u),
         FLAG_SEQUENCE_OCTET
     };             
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+    single_complete_read_cycle(&(read_byte_invalid_pf_bit[0]), sizeof(read_byte_invalid_pf_bit));
 
     /* Validate proper callback callcount. */
-    CHECK_EQUAL(0, m_rx_frame_type_uih_invalid_cr_bit_check_value );    
+    CHECK_EQUAL(0, m_rx_frame_type_uih_invalid_cr_and_pf_bit_check_value);    
+    
+    /* Rx user data frame with invalid C/R bit: silently discarded by the implementation. */
+    const uint8_t read_byte_invalid_cr_bit[6] = 
+    {
+        1u | CR_BIT | (dlci_id << 2),        
+        FRAME_TYPE_UIH, 
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&read_byte_invalid_cr_bit[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };             
+    single_complete_read_cycle(&(read_byte_invalid_cr_bit[0]), sizeof(read_byte_invalid_cr_bit));
 
-    /* Rx user data frame with valid P/F bit: accepted by the implementation. */
-   
-    read_byte[1] = FRAME_TYPE_UIH;
-    read_byte[4] = fcs_calculate(&read_byte[0], 3u);
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+    /* Validate proper callback callcount. */
+    CHECK_EQUAL(0, m_rx_frame_type_uih_invalid_cr_and_pf_bit_check_value);        
+
+    /* Valid Rx user data frame: accepted by the implementation. */
+    const uint8_t read_byte_valid[6] = 
+    {
+        1u | (dlci_id << 2),        
+        FRAME_TYPE_UIH, 
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&read_byte_valid[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };             
+    single_complete_read_cycle(&(read_byte_valid[0]), sizeof(read_byte_valid));
     
     /* Validate proper callback callcount. */
-    CHECK_EQUAL(1, m_rx_frame_type_uih_invalid_cr_bit_check_value );    
+    CHECK_EQUAL(1, m_rx_frame_type_uih_invalid_cr_and_pf_bit_check_value);    
 
     /* Validate read buffer. */
     mock_t * mock_call = mock_free_get("call");
@@ -5013,7 +5036,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_uih_invalid_cr_bit)
     CHECK_EQUAL(-EAGAIN, read_ret);     
     
     /* Validate proper callback callcount. */
-    CHECK_EQUAL(1, m_rx_frame_type_uih_invalid_cr_bit_check_value );
+    CHECK_EQUAL(1, m_rx_frame_type_uih_invalid_cr_and_pf_bit_check_value);
 }
 
 } // namespace mbed
