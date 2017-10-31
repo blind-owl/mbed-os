@@ -177,12 +177,6 @@ void Mux::on_rx_frame_sabm()
 }
 
 
-uint8_t Mux::rx_dlci_id_get()
-{
-    return (_rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX]) >> 2;
-}
-
-
 void Mux::on_rx_frame_ua()
 {
     switch (_tx_context.tx_state) {
@@ -197,7 +191,7 @@ void Mux::on_rx_frame_ua()
             
             if (is_cr_bit_set && is_pf_bit_set) {            
                 tx_dlci_id = _tx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] >> 2;
-                rx_dlci_id = rx_dlci_id_get();                
+                rx_dlci_id = _rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] >> 2;                
                 if (tx_dlci_id == rx_dlci_id) {
                     _event_q->cancel(_tx_context.timer_id);           
                     _establish_status = Mux::MUX_ESTABLISH_SUCCESS;
@@ -235,7 +229,7 @@ void Mux::on_rx_frame_dm()
             
             if (is_cr_bit_set && is_pf_bit_set) {
                 tx_dlci_id = _tx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] >> 2;
-                rx_dlci_id = rx_dlci_id_get();                                
+                rx_dlci_id = _rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] >> 2;
                 if (tx_dlci_id == rx_dlci_id) {                
                     _event_q->cancel(_tx_context.timer_id);           
                     _establish_status = Mux::MUX_ESTABLISH_REJECT;
@@ -284,7 +278,7 @@ void Mux::on_rx_frame_disc()
                 is_pf_bit_set   = _rx_context.buffer[FRAME_CONTROL_FIELD_INDEX] & PF_BIT;            
                 
                 if (is_cr_bit_clear && is_pf_bit_set) {                                       
-                    dlci_id = rx_dlci_id_get();
+                    dlci_id = _rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] >> 2;
                     if (dlci_id != 0) {
                         if (!is_dlci_in_use(dlci_id)) {
                             dm_response_send();
@@ -317,7 +311,7 @@ void Mux::on_rx_frame_uih()
         if (is_cr_bit_clear && is_pf_bit_clear) {
             /* Proceed with processing upon P/F and C/R bits being clear. */
         
-            const uint8_t dlci_id = rx_dlci_id_get();
+            const uint8_t dlci_id = _rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] >> 2;
             if (dlci_id != MUX_DLCI_INVALID_ID) {
                 /* Proceed with processing for non internal invalidate ID type. */
                 
