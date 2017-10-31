@@ -5192,7 +5192,6 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_disc_invalid_cr_and_pf_bit)
     /* DISC received to non established DLCI ID with invalid C/R bit: silently discarded by the implementation. */
     const uint8_t read_byte_invalid_cr_bit[5] = 
     {
-        /* Peer assumes the role of initiator. */
         1u | CR_BIT | (DLCI_ID_LOWER_BOUND << 2),
         (FRAME_TYPE_DISC | PF_BIT), 
         LENGTH_INDICATOR_OCTET,
@@ -5208,7 +5207,6 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_disc_invalid_cr_and_pf_bit)
     /* DISC received to to non established DLCI ID with invalid P/F bit: silently discarded by the implementation. */
     const uint8_t read_byte_invalid_pf_bit[5] = 
     {
-        /* Peer assumes the role of initiator. */
         1u | (DLCI_ID_LOWER_BOUND << 2),
         FRAME_TYPE_DISC, 
         LENGTH_INDICATOR_OCTET,
@@ -5224,7 +5222,6 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_disc_invalid_cr_and_pf_bit)
     /* Valid DISC received: starts expected processing within implementation. */
     const uint8_t read_byte_valid[5] = 
     {
-        /* Peer assumes the role of initiator. */
         1u | (DLCI_ID_LOWER_BOUND << 2),
         (FRAME_TYPE_DISC | PF_BIT), 
         LENGTH_INDICATOR_OCTET,
@@ -5246,6 +5243,84 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_disc_invalid_cr_and_pf_bit)
                             NULL,               // No current frame in the TX pipeline.
                             0);                                    
 
+}
+
+
+/*
+ * TC - Ensure proper behaviour when DISC frame received to non-open DLCI while TX is in progress
+ *
+ * Test sequence:
+ * - Mux open
+ * - Establish DLCI
+ * - Write user data to established DLCI: TX not finished
+ * - Valid DISC received: starts expected processing within implementation
+ *
+ * Expected outcome:
+ * - As specified above
+ */
+TEST(MultiplexerOpenTestGroup, rx_frame_type_disc_while_tx_in_progress)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    mux_self_iniated_open();
+
+    FileHandle* f_handle = dlci_self_iniated_establish(ROLE_INITIATOR, DLCI_ID_LOWER_BOUND);   
+    f_handle->sigio(NULL);
+    
+    /* Write user data to established DLCI: TX not finished. */
+    const uint8_t user_data         = 0xA5u;    
+    const uint8_t write_byte_uih[7] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (DLCI_ID_LOWER_BOUND << 2),        
+        FRAME_TYPE_UIH, 
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&write_byte_uih[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };               
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte_uih[0]);        
+    mock_write->input_param[1].param        = sizeof(write_byte_uih);
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 1;    
+    
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte_uih[1]);        
+    mock_write->input_param[1].param        = sizeof(write_byte_uih) - sizeof(write_byte_uih[0]);
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;            
+
+    const ssize_t write_ret = f_handle->write(&user_data, sizeof(user_data));
+    CHECK_EQUAL(sizeof(user_data), write_ret);    
+    
+    /* Valid DISC received: starts expected processing within implementation. */
+    const uint8_t read_byte[5] = 
+    {
+        1u | (DLCI_ID_LOWER_BOUND << 2),
+        (FRAME_TYPE_DISC | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };                     
+    /* Generate DISC from peer which is ignored buy the implementation. */       
+    peer_iniated_request_rx(&(read_byte[0]),
+                            SKIP_FLAG_SEQUENCE_OCTET,                            
+                            NULL,                   // No TX response frame within the RX cycle.
+                            &(write_byte_uih[1]),   // Continue current frame TX in the TX pipeline.
+                            sizeof(write_byte_uih) - sizeof(write_byte_uih[0]));
 }
 
 

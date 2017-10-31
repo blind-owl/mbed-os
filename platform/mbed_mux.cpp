@@ -258,7 +258,7 @@ void Mux::tx_internal_resp_entry_run()
 void Mux::dm_response_send()
 {
     dm_response_construct();    
-    tx_state_change(TX_INTERNAL_RESP, tx_internal_resp_entry_run, tx_idle_exit_run);     
+    tx_state_change(TX_INTERNAL_RESP, tx_internal_resp_entry_run, tx_idle_exit_run);
 }
 
 
@@ -292,9 +292,7 @@ void Mux::on_rx_frame_disc()
             }
             break;
         default:
-            /* @todo: DEFECT implement missing functionality OR NOT. */
-            trace("on_rx_frame_disc: ", _tx_context.tx_state);              
-            MBED_ASSERT(false);       
+            /* @note: Silently discarded as the current implementation does not support pending DM frame generation. */
             break;            
     }
     
