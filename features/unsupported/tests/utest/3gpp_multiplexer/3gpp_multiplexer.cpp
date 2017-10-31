@@ -5324,4 +5324,99 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_disc_while_tx_in_progress)
 }
 
 
+static void rx_frame_type_ua_dlci_id_mismatch_sem_wait(const void* context)
+{
+    self_iniated_request_tx((const uint8_t*)(context), (SABM_FRAME_LEN - 1u), FLAG_SEQUENCE_OCTET_LEN);
+
+    /* Receive UA frame which has a different DLCI ID than the SABM frame: silently discarded. */    
+    const uint8_t read_byte_invalid_dlci_id[6] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        (1u | CR_BIT | (DLCI_ID_LOWER_BOUND << 2)), 
+        (FRAME_TYPE_UA | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_invalid_dlci_id[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };        
+    peer_iniated_request_rx(&(read_byte_invalid_dlci_id[0]),
+                            READ_FLAG_SEQUENCE_OCTET,                            
+                            NULL,   // No TX response frame within the RX cycle.
+                            NULL,   // No current frame in the TX pipeline.
+                            0);    
+
+    /* Receive valid UA frame: establishment success. */
+    const uint8_t read_byte[5] = 
+    {
+        (1u | CR_BIT), 
+        (FRAME_TYPE_UA | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };    
+    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+}
+
+
+/*
+ * TC - Ensure proper behaviour when UA frame received to pending SABM request and there is a DLCI ID mismatch
+ *
+ * Test sequence:
+ * - Send SABM frame
+ * - Receive UA frame which has a different DLCI ID than the SABM frame: silently discarded
+ * - Receive valid UA frame: establishment success
+ *
+ * Expected outcome:
+ * - As specified above
+ */
+TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_dlci_id_mismatch)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+       
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+      
+    /* Send SABM frame. */
+    const uint8_t write_byte[6] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        (1u | CR_BIT), 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);        
+    mock_write->input_param[1].param        = sizeof(write_byte);    
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value = 1;    
+    
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[1]);        
+    mock_write->input_param[1].param        = sizeof(write_byte) - sizeof(write_byte[0]);        
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value = 0;        
+
+    mock_t * mock_wait = mock_free_get("wait");
+    CHECK(mock_wait != NULL);
+    mock_wait->return_value = 1;
+    mock_wait->func         = rx_frame_type_ua_dlci_id_mismatch_sem_wait;
+    mock_wait->func_context = &(write_byte[1]);
+
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
+    const Mux::MuxReturnStatus ret = mbed::Mux::mux_start(status);
+    CHECK_EQUAL(mbed::Mux::MUX_STATUS_SUCCESS, ret);
+    CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_SUCCESS, status);
+}
+
+
 } // namespace mbed
