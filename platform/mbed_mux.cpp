@@ -199,8 +199,7 @@ void Mux::on_rx_frame_ua()
             if (is_cr_bit_set && is_pf_bit_set) {
                 _event_q->cancel(_tx_context.timer_id);           
                 _establish_status = Mux::MUX_ESTABLISH_SUCCESS;
-                dlci_id           = rx_dlci_id_get();
-                
+                dlci_id           = rx_dlci_id_get();                
                 if (dlci_id != 0) {
                     dlci_id_append(dlci_id);
                 } 
@@ -265,28 +264,35 @@ void Mux::dm_response_send()
 
 void Mux::on_rx_frame_disc()
 {   
-    // @todo: add comment when and why we send DM response
+    /* Follow the specification: DM response generated for those DLCI IDs which are not established. */
     
     switch (_tx_context.tx_state) {
         uint8_t dlci_id;
-        case TX_IDLE:                      
+        bool    is_cr_bit_clear;
+        bool    is_pf_bit_set;
+        case TX_IDLE:
             if (!_state.is_mux_open) {
                 dm_response_send();
             } else {
-                dlci_id = rx_dlci_id_get();
-                if (dlci_id != 0) {
-                    if (!is_dlci_in_use(dlci_id)) {
-                        dm_response_send();
+                is_cr_bit_clear = !(_rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] & CR_BIT);
+                is_pf_bit_set   = _rx_context.buffer[FRAME_CONTROL_FIELD_INDEX] & PF_BIT;            
+                
+                if (is_cr_bit_clear && is_pf_bit_set) {                                       
+                    dlci_id = rx_dlci_id_get();
+                    if (dlci_id != 0) {
+                        if (!is_dlci_in_use(dlci_id)) {
+                            dm_response_send();
+                        } else {
+                            /* DLCI close not supported and silently discarded. */
+                        }
                     } else {
-                        /* DLCI close not supported and silently discarded. */
+                        /* Mux close not supported and silently discarded. */
                     }
-                } else {
-                    /* Mux close not supported and silently discarded. */
                 }
             }
             break;
         default:
-            /* @todo: DEFECT implement missing functionality. */
+            /* @todo: DEFECT implement missing functionality OR NOT. */
             trace("on_rx_frame_disc: ", _tx_context.tx_state);              
             MBED_ASSERT(false);       
             break;            
