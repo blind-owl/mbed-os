@@ -223,10 +223,10 @@ void Mux::on_rx_frame_ua()
 
 void Mux::on_rx_frame_dm()
 {
-    // @todo: DEFECT we should do request-response DLCI ID matching    
-
     switch (_tx_context.tx_state) {
         osStatus os_status;
+        uint8_t  rx_dlci_id;
+        uint8_t  tx_dlci_id;        
         bool     is_cr_bit_set;
         bool     is_pf_bit_set;        
         case TX_RETRANSMIT_DONE:
@@ -234,12 +234,16 @@ void Mux::on_rx_frame_dm()
             is_pf_bit_set = _rx_context.buffer[FRAME_CONTROL_FIELD_INDEX] & PF_BIT;            
             
             if (is_cr_bit_set && is_pf_bit_set) {
-                _event_q->cancel(_tx_context.timer_id);           
-                _establish_status = Mux::MUX_ESTABLISH_REJECT;
-                os_status         = _semaphore.release();
-                MBED_ASSERT(os_status == osOK);        
-                // @todo: need to verify correct call order for sm change and Semaphore release.
-                tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);
+                tx_dlci_id = _tx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] >> 2;
+                rx_dlci_id = rx_dlci_id_get();                                
+                if (tx_dlci_id == rx_dlci_id) {                
+                    _event_q->cancel(_tx_context.timer_id);           
+                    _establish_status = Mux::MUX_ESTABLISH_REJECT;
+                    os_status         = _semaphore.release();
+                    MBED_ASSERT(os_status == osOK);        
+                    // @todo: need to verify correct call order for sm change and Semaphore release.
+                    tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);
+                }
             }
             break;
         default:
