@@ -1645,7 +1645,7 @@ void dlci_establish_self_initated_sem_wait_rejected_by_peer(const void *context)
 {    
     const uint8_t read_byte[5] = 
     {
-        1u | (1u << 2),        
+        1u | CR_BIT| (1u << 2),        
         (FRAME_TYPE_DM | PF_BIT), 
         LENGTH_INDICATOR_OCTET,        
         fcs_calculate(&read_byte[0], 3),
