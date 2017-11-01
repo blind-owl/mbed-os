@@ -786,12 +786,6 @@ ssize_t Mux::on_rx_read_state_trailer_read()
         } else {
             rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);            
         }
-  
-        // @todo: DEFECT schedule system thread afte Rx complete to trigger new run, as decoder funcs make sm transit??
-        // as there can be new data pending in the buffer, we could use event_q_pending bit to avoid 1 extra enqeue here
-        // included in the enqeue func itself        
-        
-        read_err = -EAGAIN;
     }
     
     return read_err;

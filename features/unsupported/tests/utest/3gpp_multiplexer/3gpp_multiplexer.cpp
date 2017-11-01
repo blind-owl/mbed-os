@@ -305,6 +305,15 @@ void self_iniated_response_rx(const uint8_t            *rx_buf,
     CHECK(mock_release != NULL);
     mock_release->return_value = osOK;    
 
+    /* Resume the Rx cycle and stop it. */
+    mock_read = mock_free_get("read");
+    CHECK(mock_read != NULL); 
+    mock_read->output_param[0].param       = NULL;
+    mock_read->output_param[0].len         = 0;
+    mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_read->input_param[0].param        = FRAME_HEADER_READ_LEN;
+    mock_read->return_value                = -EAGAIN;              
+    
     /* Trigger the deferred call context to execute all mocks. */
     mbed::EventQueueMock::io_control(eq_io_control);               
 }
@@ -463,6 +472,15 @@ void peer_iniated_request_rx(const uint8_t            *rx_buf,
         ++rx_count;    
         --read_len;
     } while (read_len != 0);
+
+    /* Resume the Rx cycle and stop it. */
+    mock_read = mock_free_get("read");
+    CHECK(mock_read != NULL); 
+    mock_read->output_param[0].param       = NULL;
+    mock_read->output_param[0].len         = 0;
+    mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_read->input_param[0].param        = FRAME_HEADER_READ_LEN;
+    mock_read->return_value                = -EAGAIN;                  
     
     mock_t * mock_write;
     if (resp_write_byte != NULL)  {
@@ -690,6 +708,15 @@ void peer_iniated_request_rx_full_frame_tx(const uint8_t *rx_buf,
     
         ++i;
     } while (i != tx_buf_len);        
+
+    /* Resume the Rx cycle and stop it. */    
+    mock_read = mock_free_get("read");
+    CHECK(mock_read != NULL); 
+    mock_read->output_param[0].param       = NULL;
+    mock_read->output_param[0].len         = 0;
+    mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_read->input_param[0].param        = FRAME_HEADER_READ_LEN;
+    mock_read->return_value                = -EAGAIN;                      
     
     /* Trigger the deferred call context to execute all mocks. */
     mbed::EventQueueMock::io_control(eq_io_control);
@@ -3733,8 +3760,15 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_tx_to_different_dlci_not_wit
 }
 
 
-void single_complete_read_cycle(const uint8_t *read_byte,  
-                                uint8_t        length)
+typedef enum
+{
+    RESUME_RX_CYCLE = 0, 
+    SUSPEND_RX_CYCLE
+} RxCycleContinueType;
+
+void single_complete_read_cycle(const uint8_t*      read_byte,
+                                uint8_t             length,
+                                RxCycleContinueType rx_cycle_continue)
 {
     mock_t * mock_call = mock_free_get("call");
     CHECK(mock_call != NULL);           
@@ -3765,6 +3799,18 @@ void single_complete_read_cycle(const uint8_t *read_byte,
     /* Verify internal logic. */
     rx_count += mock_read->return_value;
     CHECK_EQUAL(rx_count, length);
+   
+    if (rx_cycle_continue == RESUME_RX_CYCLE) {
+        /* Resume the Rx cycle and stop it. */
+        
+        mock_read = mock_free_get("read");
+        CHECK(mock_read != NULL); 
+        mock_read->output_param[0].param       = NULL;
+        mock_read->output_param[0].len         = 0;
+        mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_read->input_param[0].param        = FRAME_HEADER_READ_LEN;
+        mock_read->return_value                = -EAGAIN;
+    }
 
     /* Trigger deferred call to execute the programmed mocks above. */
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
@@ -3815,9 +3861,8 @@ TEST(MultiplexerOpenTestGroup, user_rx_0_length_user_payload)
         LENGTH_INDICATOR_OCTET,
         fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
-    };      
-    
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+    };         
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE);
     
     /* Verify read failure after successfull read cycle. */
     uint8_t buffer[1]      = {0};
@@ -3893,7 +3938,8 @@ TEST(MultiplexerOpenTestGroup, user_rx_single_read)
         FLAG_SEQUENCE_OCTET
     };      
     
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+    /* Rx user data is read completely within callback context, thus Rx cycle is resumed. */
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE);
     
     /* Validate proper callback callcount. */
     CHECK_EQUAL(1, m_user_rx_single_read_check_value);
@@ -3996,7 +4042,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_rx_suspend_rx_resume_cycle)
         fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
     };         
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE);
 
     /* Validate proper callback callcount. */
     CHECK_EQUAL(1, m_user_rx_rx_suspend_rx_resume_cycle_check_value );
@@ -4029,7 +4075,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_rx_suspend_rx_resume_cycle)
     read_byte[3] = user_data;
     read_byte[4] = fcs_calculate(&read_byte[0], 3u);
     
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));   
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE);   
     
     /* Validate proper callback callcount. */
     CHECK_EQUAL(2, m_user_rx_rx_suspend_rx_resume_cycle_check_value );    
@@ -4254,7 +4300,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_max_size_user_payload_in_1_read_call
     read_byte[sizeof(read_byte) - 2] = fcs_calculate(&read_byte[0], 3u);
     read_byte[sizeof(read_byte) - 1] = FLAG_SEQUENCE_OCTET;    
     
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));    
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE);    
     
     /* Verify read buffer. */
     mock_t * mock_call = mock_free_get("call");
@@ -4321,7 +4367,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_1_byte_per_read_call_max_size_user_p
     read_byte[sizeof(read_byte) - 2] = fcs_calculate(&read_byte[0], 3u);
     read_byte[sizeof(read_byte) - 1] = FLAG_SEQUENCE_OCTET;    
     
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));    
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE);    
     
     /* Verify read buffer: do reads 1 byte a time until all of the data is read. */
     mock_t * mock_call;
@@ -4407,7 +4453,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_dlci_not_established)
     for (uint8_t i = 0; i!= MAX_DLCI_COUNT; ++i) {
         
         /* Start read cycle for the not established DLCI. */
-        single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+        single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE);
         
         /* Establish the DLCI. */
         m_file_handle[i] = dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);             
@@ -4418,7 +4464,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_dlci_not_established)
         CHECK_EQUAL(i, m_user_rx_dlci_not_established_check_value);                
         
         /* Start read cycle for the established DLCI. */
-        single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+        single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE);
 
         /* Validate proper callback callcount. */
         CHECK_EQUAL((i + 1), m_user_rx_dlci_not_established_check_value);                
@@ -4481,8 +4527,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_invalidate_dlci_id_used)
     
     mux_self_iniated_open();    
     
-    /* Rx user data frame to invalidate ID DLCI: silently discarded by the implementation. */
-    
+    /* Rx user data frame to invalidate ID DLCI: silently discarded by the implementation. */    
     const uint8_t user_data = 0xA5u;
     uint8_t dlci_id         = DLCI_INVALID_ID;   
     uint8_t read_byte[6]    = 
@@ -4494,7 +4539,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_invalidate_dlci_id_used)
         fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
     };             
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE);
 
     /* Establish a DLCI. */
     
@@ -4504,7 +4549,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_invalidate_dlci_id_used)
     m_file_handle[0]->sigio(user_rx_invalidate_dlci_id_used_callback);    
     
     /* Rx user data frame to invalidate ID DLCI: silently discarded by the implementation. */    
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE);
     
     /* Validate proper callback callcount. */
     CHECK_EQUAL(0, m_user_rx_invalidate_dlci_id_used_check_value);                    
@@ -4513,7 +4558,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_invalidate_dlci_id_used)
     
     read_byte[0] = 1u | (dlci_id << 2);
     read_byte[4] = fcs_calculate(&read_byte[0], 3u);
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE);
     
     /* Validate proper callback callcount. */
     CHECK_EQUAL(1, m_user_rx_invalidate_dlci_id_used_check_value);
@@ -4579,8 +4624,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_invalid_fcs)
     CHECK(m_file_handle[0] != NULL);
     m_file_handle[0]->sigio(user_rx_invalid_fcs_callback);            
     
-    /* Rx user data frame with invalid FCS: silently discarded by the implementation. */
-    
+    /* Rx user data frame with invalid FCS: silently discarded by the implementation. */    
     const uint8_t user_data = 0xA5u;
     uint8_t read_byte[6]    = 
     {
@@ -4591,15 +4635,14 @@ TEST(MultiplexerOpenTestGroup, user_rx_invalid_fcs)
         fcs_calculate(&read_byte[0], 3u) + 1u,
         FLAG_SEQUENCE_OCTET
     };             
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE);
 
     /* Validate proper callback callcount. */
     CHECK_EQUAL(0, m_user_rx_invalid_fcs_check_value);    
 
-    /* Rx user data frame with valid FCS: accepted by the implementation. */
-   
+    /* Rx user data frame with valid FCS: accepted by the implementation. */   
     read_byte[4] = fcs_calculate(&read_byte[0], 3u);
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE);
     
     /* Validate proper callback callcount. */
     CHECK_EQUAL(1, m_user_rx_invalid_fcs_check_value);    
@@ -4634,7 +4677,7 @@ static void rx_frame_type_not_supported_callback()
  * - Mux open
  * - Establish a DLCI
  * - Rx frame with invalid frame type ID: silently discarded by the implementation
- * - Rx frame with invalid frame type ID: accepted by the implementation.
+ * - Rx frame with valid frame type ID: accepted by the implementation.
  * 
  * Expected outcome:
  * - The invalid frame type ID Rx frame is dropped by the implementation
@@ -4665,8 +4708,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_not_supported)
     CHECK(m_file_handle[0] != NULL);
     m_file_handle[0]->sigio(rx_frame_type_not_supported_callback);            
     
-    /* Rx user data frame with invalid P/F bit: silently discarded by the implementation. */
-    
+    /* Rx frame with invalid frame type ID: silently discarded by the implementation. */    
     const uint8_t user_data = 0xA5u;
     uint8_t read_byte[6]    = 
     {
@@ -4677,16 +4719,15 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_not_supported)
         fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
     };             
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE);
 
     /* Validate proper callback callcount. */
     CHECK_EQUAL(0, m_rx_frame_type_not_supported_check_value);    
 
-    /* Rx user data frame with valid P/F bit: accepted by the implementation. */
-   
+    /* Rx frame with valid frame type ID: accepted by the implementation. */   
     read_byte[1] = FRAME_TYPE_UIH;
     read_byte[4] = fcs_calculate(&read_byte[0], 3u);
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE);
     
     /* Validate proper callback callcount. */
     CHECK_EQUAL(1, m_rx_frame_type_not_supported_check_value);    
@@ -4742,8 +4783,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_when_no_sabm_send)
     m_file_handle[0]->sigio(NULL);                
     
     /* Rx frame type UA received, without pending SABM frame, to the established DLCI: silently discarded by the 
-       implementation. */
-   
+       implementation. */   
     const uint8_t read_byte[5] = 
     {
         3u | (dlci_id << 2),        
@@ -4752,10 +4792,9 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_when_no_sabm_send)
         fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
     };             
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));    
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE);    
    
-    /* Establish 2nd DLCI. */
-    
+    /* Establish 2nd DLCI. */    
     m_file_handle[1] = dlci_self_iniated_establish(ROLE_INITIATOR, (dlci_id + 1u));             
     CHECK(m_file_handle[1] != NULL);    
 }
@@ -4796,8 +4835,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_when_no_sabm_send)
     m_file_handle[0]->sigio(NULL);                
     
     /* Rx frame type DM received, without pending SABM frame, to the established DLCI: silently discarded by the 
-       implementation. */
-   
+       implementation. */   
     const uint8_t read_byte[5] = 
     {
         3u | (dlci_id << 2),        
@@ -4806,7 +4844,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_when_no_sabm_send)
         fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
     };             
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte));    
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE);    
    
     /* Establish 2nd DLCI. */
     
@@ -4830,7 +4868,7 @@ static void rx_frame_type_ua_invalid_cr_and_pf_bit_sem_wait(const void* context)
         fcs_calculate(&read_byte_invalid_cr_bit[0], 3),
         FLAG_SEQUENCE_OCTET
     };        
-    single_complete_read_cycle(&(read_byte_invalid_cr_bit[0]), sizeof(read_byte_invalid_cr_bit));    
+    single_complete_read_cycle(&(read_byte_invalid_cr_bit[0]), sizeof(read_byte_invalid_cr_bit), RESUME_RX_CYCLE);    
     
     /* Rx frame type UA received with invalid P/F bit: silently discarded by the implementation. */ 
     const uint8_t read_byte_invalid_pf_bit[5] = 
@@ -4841,7 +4879,7 @@ static void rx_frame_type_ua_invalid_cr_and_pf_bit_sem_wait(const void* context)
         fcs_calculate(&read_byte_invalid_pf_bit[0], 3),
         FLAG_SEQUENCE_OCTET
     };                
-    single_complete_read_cycle(&(read_byte_invalid_pf_bit[0]), sizeof(read_byte_invalid_pf_bit));
+    single_complete_read_cycle(&(read_byte_invalid_pf_bit[0]), sizeof(read_byte_invalid_pf_bit), RESUME_RX_CYCLE);
     
     /* Rx frame type UA, whic is valid: DLCI established. */
     const uint8_t read_byte_valid[5] = 
@@ -4980,7 +5018,6 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_uih_invalid_cr_and_pf_bit)
     m_file_handle[0]->sigio(rx_frame_type_uih_invalid_cr_and_pf_bit_callback);            
     
     /* Rx user data frame with invalid P/F bit: silently discarded by the implementation. */
-    
     const uint8_t user_data                   = 0xA5u;
     const uint8_t read_byte_invalid_pf_bit[6] = 
     {
@@ -4991,7 +5028,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_uih_invalid_cr_and_pf_bit)
         fcs_calculate(&read_byte_invalid_pf_bit[0], 3u),
         FLAG_SEQUENCE_OCTET
     };             
-    single_complete_read_cycle(&(read_byte_invalid_pf_bit[0]), sizeof(read_byte_invalid_pf_bit));
+    single_complete_read_cycle(&(read_byte_invalid_pf_bit[0]), sizeof(read_byte_invalid_pf_bit), RESUME_RX_CYCLE);
 
     /* Validate proper callback callcount. */
     CHECK_EQUAL(0, m_rx_frame_type_uih_invalid_cr_and_pf_bit_check_value);    
@@ -5006,7 +5043,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_uih_invalid_cr_and_pf_bit)
         fcs_calculate(&read_byte_invalid_cr_bit[0], 3u),
         FLAG_SEQUENCE_OCTET
     };             
-    single_complete_read_cycle(&(read_byte_invalid_cr_bit[0]), sizeof(read_byte_invalid_cr_bit));
+    single_complete_read_cycle(&(read_byte_invalid_cr_bit[0]), sizeof(read_byte_invalid_cr_bit), RESUME_RX_CYCLE);
 
     /* Validate proper callback callcount. */
     CHECK_EQUAL(0, m_rx_frame_type_uih_invalid_cr_and_pf_bit_check_value);        
@@ -5021,7 +5058,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_uih_invalid_cr_and_pf_bit)
         fcs_calculate(&read_byte_valid[0], 3u),
         FLAG_SEQUENCE_OCTET
     };             
-    single_complete_read_cycle(&(read_byte_valid[0]), sizeof(read_byte_valid));
+    single_complete_read_cycle(&(read_byte_valid[0]), sizeof(read_byte_valid), SUSPEND_RX_CYCLE);
     
     /* Validate proper callback callcount. */
     CHECK_EQUAL(1, m_rx_frame_type_uih_invalid_cr_and_pf_bit_check_value);    
@@ -5033,10 +5070,9 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_uih_invalid_cr_and_pf_bit)
     uint8_t test_buffer[1]  = {0};    
     ssize_t read_ret        = m_file_handle[0]->read(&(test_buffer[0]), 1u);
     CHECK_EQUAL(1, read_ret);
-    CHECK_EQUAL(user_data, test_buffer[0]);        
+    CHECK_EQUAL(user_data, test_buffer[0]);       
     read_ret = m_file_handle[0]->read(&(test_buffer[0]), 1u);
-    CHECK_EQUAL(-EAGAIN, read_ret);     
-    
+    CHECK_EQUAL(-EAGAIN, read_ret);
     /* Validate proper callback callcount. */
     CHECK_EQUAL(1, m_rx_frame_type_uih_invalid_cr_and_pf_bit_check_value);
 }
@@ -5046,8 +5082,7 @@ void rx_frame_type_dm_invalid_cr_and_pf_bit_sem_wait(const void *context)
 {    
     /* Complete the request frame write. */
     const uint8_t *write_byte = (const uint8_t *)context;
-    self_iniated_request_tx(&(write_byte[0]), (SABM_FRAME_LEN - 1u), FRAME_HEADER_READ_LEN);    
-
+    self_iniated_request_tx(&(write_byte[0]), (SABM_FRAME_LEN - 1u), FRAME_HEADER_READ_LEN);
     /* Rx frame type DM received with invalid C/R bit: silently discarded by the implementation */
     const uint8_t read_byte_invalid_cr_bit[5] = 
     {
@@ -5057,8 +5092,7 @@ void rx_frame_type_dm_invalid_cr_and_pf_bit_sem_wait(const void *context)
         fcs_calculate(&read_byte_invalid_cr_bit[0], 3),
         FLAG_SEQUENCE_OCTET
     };        
-    single_complete_read_cycle(&(read_byte_invalid_cr_bit[0]), sizeof(read_byte_invalid_cr_bit));        
-
+    single_complete_read_cycle(&(read_byte_invalid_cr_bit[0]), sizeof(read_byte_invalid_cr_bit), RESUME_RX_CYCLE);
     /* Rx frame type DM received with invalid P/F bit: silently discarded by the implementation. */
     const uint8_t read_byte_invalid_pf_bit[5] = 
     {
@@ -5068,8 +5102,7 @@ void rx_frame_type_dm_invalid_cr_and_pf_bit_sem_wait(const void *context)
         fcs_calculate(&read_byte_invalid_pf_bit[0], 3),
         FLAG_SEQUENCE_OCTET
     };                
-    single_complete_read_cycle(&(read_byte_invalid_pf_bit[0]), sizeof(read_byte_invalid_pf_bit));    
-    
+    single_complete_read_cycle(&(read_byte_invalid_pf_bit[0]), sizeof(read_byte_invalid_pf_bit), RESUME_RX_CYCLE);
     /* Valid Rx frame type DM received: starts expected processing within implementation */
     const uint8_t read_byte_valid[5] = 
     {
@@ -5447,7 +5480,7 @@ static void rx_frame_type_dm_dlci_id_mismatch_sem_wait(const void* context)
         LENGTH_INDICATOR_OCTET,
         fcs_calculate(&read_byte[0], 3),
         FLAG_SEQUENCE_OCTET
-    };    
+    };   
     self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
 }
 
