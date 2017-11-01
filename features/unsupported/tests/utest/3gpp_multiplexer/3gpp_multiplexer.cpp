@@ -210,8 +210,7 @@ typedef enum
 
 /* Read complete response frame from the peer
  */
-void self_iniated_response_rx(const uint8_t            *rx_buf, 
-                              uint8_t                   rx_buf_len, // @todo remove me
+void self_iniated_response_rx(const uint8_t            *rx_buf,
                               const uint8_t            *write_byte,
                               FlagSequenceOctetReadType read_type,
                               StripFlagFieldType        strip_flag_field_type)
@@ -318,78 +317,6 @@ void self_iniated_response_rx(const uint8_t            *rx_buf,
     mbed::EventQueueMock::io_control(eq_io_control);               
 }
 
-#if 0
-void self_iniated_response_rx(const uint8_t *rx_buf, uint8_t rx_buf_len, const uint8_t *write_byte)
-{
-    /* Read the complete response frame in do...while. */
-    uint8_t                                  rx_count      = 0;       
-    const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
-    const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};    
-    do {
-        /* Enqueue deferred call to EventQueue. 
-         * Trigger sigio callback from the Filehandle used by the Mux (component under test). */
-        mock_t * mock = mock_free_get("call");
-        CHECK(mock != NULL);           
-        mock->return_value = 1;
-
-        mbed::FileHandleMock::io_control(io_control);
-        
-        mock_t * mock_read = mock_free_get("read");
-        CHECK(mock_read != NULL); 
-        mock_read->output_param[0].param       = &(rx_buf[rx_count]);
-        mock_read->output_param[0].len         = sizeof(rx_buf[0]);
-        mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_read->input_param[0].param        = READ_LEN;
-        mock_read->return_value                = 1;  
-       
-        if (rx_count == (rx_buf_len - 1)) {            
-            /* Start frame read sequence gets completed, now cancel T1 timer with the RX decode. */   
-            
-            mock_t * mock_cancel = mock_free_get("cancel");    
-            CHECK(mock_cancel != NULL);    
-            mock_cancel->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-            mock_cancel->input_param[0].param        = T1_TIMER_EVENT_ID;     
-            
-            /* Release the semaphore blocking the call thread. */
-            mock_t * mock_release = mock_free_get("release");
-            CHECK(mock_release != NULL);
-            mock_release->return_value = osOK;
-            
-            if (write_byte != NULL)  {
-                /* RX frame gets completed start the pending frame TX sequence within the RX decode. */                 
-                
-                mock_t * mock_write = mock_free_get("write");
-                CHECK(mock_write != NULL);                
-                mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-                mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);
-                mock_write->input_param[1].param        = WRITE_LEN;
-                mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-                mock_write->return_value                = 1;
-                
-                mock_write = mock_free_get("write");
-                CHECK(mock_write != NULL);                
-                mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-                mock_write->input_param[0].param        = (uint32_t)&(write_byte[1]);
-                mock_write->input_param[1].param        = WRITE_LEN;
-                mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-                mock_write->return_value                = 0;
-            }
-        }
-       
-        /* End RX cycle. */
-        mock_read = mock_free_get("read");
-        CHECK(mock_read != NULL);
-        mock_read->output_param[0].param       = NULL;
-        mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_read->input_param[0].param        = READ_LEN;
-        mock_read->return_value                = 0;                 
-
-        mbed::EventQueueMock::io_control(eq_io_control);   
-
-        ++rx_count;        
-    } while (rx_count != rx_buf_len);           
-}
-#endif // 0
 
 /*
  * LOOP UNTIL COMPLETE REQUEST FRAME READ DONE
@@ -531,96 +458,6 @@ void peer_iniated_request_rx(const uint8_t            *rx_buf,
     mbed::EventQueueMock::io_control(eq_io_control);                   
 }
 
-
-#if 0
-void peer_iniated_request_rx(const uint8_t *rx_buf, 
-                             uint8_t        rx_buf_len, 
-                             const uint8_t *resp_write_byte,
-                             const uint8_t *current_tx_write_byte)
-{
-    /* Internal logic error if both supplied params are != NULL. */
-    CHECK(!((resp_write_byte != NULL) && (current_tx_write_byte != NULL)));
-        
-    /* Read the complete request frame in do...while. */
-    mock_t * mock_write;
-    uint8_t                                  rx_count      = 0;      
-    const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
-    const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};    
-    do {
-        /* Enqueue deferred call to EventQueue. 
-         * Trigger sigio callback from the Filehandle used by the Mux (component under test). */
-        mock_t * mock = mock_free_get("call");
-        CHECK(mock != NULL);           
-        mock->return_value = 1;
-
-        mbed::FileHandleMock::io_control(io_control);
-        
-        mock_t * mock_read = mock_free_get("read");
-        CHECK(mock_read != NULL); 
-        mock_read->output_param[0].param       = &(rx_buf[rx_count]);
-        mock_read->output_param[0].len         = sizeof(rx_buf[0]);
-        mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_read->input_param[0].param        = READ_LEN;
-        mock_read->return_value                = 1; 
-        
-        if (resp_write_byte != NULL)  {
-            if (rx_count == (rx_buf_len - 1)) {                
-                /* RX frame gets completed start the response frame TX sequence within RX decode. */ 
-                
-                mock_write = mock_free_get("write");
-                CHECK(mock_write != NULL);                
-                mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-                mock_write->input_param[0].param        = (uint32_t)&(resp_write_byte[0]);
-                mock_write->input_param[1].param        = WRITE_LEN;
-                mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-                mock_write->return_value                = 1;
-                
-                /* End TX sequence: this call orginates from tx_internal_resp_entry_run(). */
-                mock_write = mock_free_get("write");
-                CHECK(mock_write != NULL);                
-                mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-                mock_write->input_param[0].param        = (uint32_t)&(resp_write_byte[1]);                       
-                mock_write->input_param[1].param        = WRITE_LEN;
-                mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-                mock_write->return_value                = 0;
-                
-                /* End TX sequence: this call orginates from on_deferred_call(). */
-                mock_write = mock_free_get("write");
-                CHECK(mock_write != NULL);                
-                mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-                mock_write->input_param[0].param        = (uint32_t)&(resp_write_byte[1]);                       
-                mock_write->input_param[1].param        = WRITE_LEN;
-                mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-                mock_write->return_value                = 0;             
-            }
-        } else if (current_tx_write_byte != NULL) {
-            /* End TX sequence for the current byte in the TX pipeline: this call orginates from on_deferred_call(). */
-            
-            mock_write = mock_free_get("write");
-            CHECK(mock_write != NULL);               
-            mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-            mock_write->input_param[0].param        = (uint32_t)&(current_tx_write_byte[0]);                       
-            mock_write->input_param[1].param        = WRITE_LEN;
-            mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-            mock_write->return_value                = 0;                                   
-        } else {
-            /* No implementation required. */
-        }
-        
-        /* End RX cycle. */
-        mock_read = mock_free_get("read");
-        CHECK(mock_read != NULL);
-        mock_read->output_param[0].param       = NULL;
-        mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_read->input_param[0].param        = READ_LEN;
-        mock_read->return_value                = 0;                                 
-        
-        mbed::EventQueueMock::io_control(eq_io_control);   
-
-        ++rx_count;        
-    } while (rx_count != rx_buf_len);    
-}
-#endif // 0
 
 /*
  * LOOP UNTIL COMPLETE REQUEST FRAME READ DONE
@@ -926,11 +763,7 @@ void mux_start_self_initated_sem_wait(const void *context)
 
     const mux_self_iniated_open_context_t *cntx = (const mux_self_iniated_open_context_t *)context;
     self_iniated_request_tx(cntx->write_byte, (SABM_FRAME_LEN - 1u), cntx->tx_cycle_read_len);
-    self_iniated_response_rx(&(read_byte[0]), 
-                             sizeof(read_byte), 
-                             NULL,
-                             cntx->rx_cycle_read_type,
-                             cntx->strip_flag_field_type);   
+    self_iniated_response_rx(&(read_byte[0]), NULL, cntx->rx_cycle_read_type, cntx->strip_flag_field_type);   
 }
 
 
@@ -1132,7 +965,7 @@ void mux_start_self_initated_existing_open_pending_2_sem_wait(const void *contex
     self_iniated_request_tx(&(write_byte_2[1]), 
                             (sizeof(write_byte_2) - sizeof(write_byte_2[0])),
                             FRAME_HEADER_READ_LEN);
-    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+    self_iniated_response_rx(&(read_byte[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
 }
 
 
@@ -1245,7 +1078,7 @@ void dlci_establish_self_initated_sem_wait(const void *context)
 
     /* Complete the request frame write and read the response frame. */
     self_iniated_request_tx(&(write_byte[0]), sizeof(write_byte), FRAME_HEADER_READ_LEN);
-    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+    self_iniated_response_rx(&(read_byte[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
 }
 
 
@@ -1682,7 +1515,7 @@ void dlci_establish_self_initated_sem_wait_rejected_by_peer(const void *context)
     /* Complete the request frame write and read the response frame. */
     const uint8_t *write_byte = (const uint8_t *)context;
     self_iniated_request_tx(&(write_byte[0]), (SABM_FRAME_LEN - 1u), FRAME_HEADER_READ_LEN);
-    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+    self_iniated_response_rx(&(read_byte[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
 }
 
 
@@ -1794,7 +1627,7 @@ void mux_start_self_initated_sem_wait_rejected_by_peer(const void *context)
     };
     
     self_iniated_request_tx((const uint8_t*)(context), (SABM_FRAME_LEN - 1u), FLAG_SEQUENCE_OCTET_LEN);
-    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL, READ_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+    self_iniated_response_rx(&(read_byte[0]), NULL, READ_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
 }
 
 
@@ -2144,8 +1977,7 @@ void mux_open_self_iniated_dm_tx_in_progress_sem_wait(const void *context)
         fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
     };   
-    self_iniated_response_rx(&(read_byte[0]), 
-                             sizeof(read_byte), 
+    self_iniated_response_rx(&(read_byte[0]),
                              NULL,
                              SKIP_FLAG_SEQUENCE_OCTET,
                              STRIP_FLAG_FIELD_NO);
@@ -2261,8 +2093,7 @@ void dlci_establish_self_initated_dm_tx_in_progress_sem_wait(const void *context
         fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
     };
-    self_iniated_response_rx(&(read_byte[0]), 
-                             sizeof(read_byte), 
+    self_iniated_response_rx(&(read_byte[0]),
                              NULL,
                              SKIP_FLAG_SEQUENCE_OCTET,
                              STRIP_FLAG_FIELD_NO);        
@@ -2434,8 +2265,7 @@ void mux_open_self_initiated_full_frame_write_in_loop_succes_sem_wait(const void
         fcs_calculate(&read_byte[1], 3u),
         FLAG_SEQUENCE_OCTET
     };   
-    self_iniated_response_rx(&(read_byte[0]), 
-                             sizeof(read_byte), 
+    self_iniated_response_rx(&(read_byte[0]),
                              NULL,
                              READ_FLAG_SEQUENCE_OCTET,
                              STRIP_FLAG_FIELD_NO);                
@@ -2514,8 +2344,7 @@ void dlci_establish_self_initiated_full_frame_write_in_loop_succes_sem_wait(cons
         fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
     };   
-    self_iniated_response_rx(&(read_byte[0]), 
-                             sizeof(read_byte), 
+    self_iniated_response_rx(&(read_byte[0]),
                              NULL,
                              SKIP_FLAG_SEQUENCE_OCTET,
                              STRIP_FLAG_FIELD_NO);                
@@ -2945,8 +2774,7 @@ static void user_tx_dlci_establish_during_user_tx_sem_wait(const void *context)
         fcs_calculate(&read_byte_sabm[0], 3u),
         FLAG_SEQUENCE_OCTET
     };
-    self_iniated_response_rx(&(read_byte_sabm[0]), 
-                             sizeof(read_byte_sabm), 
+    self_iniated_response_rx(&(read_byte_sabm[0]),
                              NULL,
                              SKIP_FLAG_SEQUENCE_OCTET,
                              STRIP_FLAG_FIELD_NO);            
@@ -4890,8 +4718,7 @@ static void rx_frame_type_ua_invalid_cr_and_pf_bit_sem_wait(const void* context)
         fcs_calculate(&read_byte_valid[0], 3),
         FLAG_SEQUENCE_OCTET
     };
-    self_iniated_response_rx(&(read_byte_valid[0]), 
-                             sizeof(read_byte_valid), 
+    self_iniated_response_rx(&(read_byte_valid[0]),
                              NULL, 
                              SKIP_FLAG_SEQUENCE_OCTET,
                              STRIP_FLAG_FIELD_NO);
@@ -5112,8 +4939,7 @@ void rx_frame_type_dm_invalid_cr_and_pf_bit_sem_wait(const void *context)
         fcs_calculate(&read_byte_valid[0], 3),
         FLAG_SEQUENCE_OCTET
     };
-    self_iniated_response_rx(&(read_byte_valid[0]), 
-                             sizeof(read_byte_valid), 
+    self_iniated_response_rx(&(read_byte_valid[0]),
                              NULL, 
                              SKIP_FLAG_SEQUENCE_OCTET,
                              STRIP_FLAG_FIELD_NO);
@@ -5386,7 +5212,7 @@ static void rx_frame_type_ua_dlci_id_mismatch_sem_wait(const void* context)
         fcs_calculate(&read_byte[0], 3),
         FLAG_SEQUENCE_OCTET
     };    
-    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+    self_iniated_response_rx(&(read_byte[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
 }
 
 
@@ -5481,7 +5307,7 @@ static void rx_frame_type_dm_dlci_id_mismatch_sem_wait(const void* context)
         fcs_calculate(&read_byte[0], 3),
         FLAG_SEQUENCE_OCTET
     };   
-    self_iniated_response_rx(&(read_byte[0]), sizeof(read_byte), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+    self_iniated_response_rx(&(read_byte[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
 }
 
 
