@@ -30,14 +30,14 @@
 #include "mbed.h"
 */
 
-#define MUX_DLCI_INVALID_ID 0u      /* Invalid DLCI ID. Used to invalidate MuxDataService object. */
-#define MUX_CRC_TABLE_LEN   256u    /* CRC table length in number of bytes. */
+#define MUX_DLCI_INVALID_ID       0    /* Invalid DLCI ID. Used to invalidate MuxDataService object. */
+#define MUX_CRC_TABLE_LEN         256u /* CRC table length in number of bytes. */
 
 #ifndef MBED_CONF_MUX_DLCI_COUNT
-#define MBED_CONF_MUX_DLCI_COUNT    3u
+#define MBED_CONF_MUX_DLCI_COUNT  3u   /* Number of supported DLCI IDs. */
 #endif
-#ifndef MBED_CONF_BUFFER_SIZE
-#define MBED_CONF_BUFFER_SIZE       31u
+#ifndef MBED_CONF_MUX_BUFFER_SIZE
+#define MBED_CONF_MUX_BUFFER_SIZE 31u  /* Size of TX/Rx buffers in number of bytes. */
 #endif 
 
 /* @todo:
@@ -517,14 +517,14 @@ private:
     /* Definition for Tx context type. */
     typedef struct 
     {
-        int     timer_id;                       /* Timer id. */
-        TxState tx_state;                       /* Tx state machine current state. */
-        uint8_t retransmit_counter;             /* Frame retransmission counter. */
-        uint8_t bytes_remaining;                /* Bytes remaining in the buffer to write. */
-        uint8_t offset;                         /* Offset in the buffer where to write from. */
-        uint8_t buffer[MBED_CONF_BUFFER_SIZE];  /* Tx buffer. */  
+        int     timer_id;                           /* Timer id. */
+        TxState tx_state;                           /* Tx state machine current state. */
+        uint8_t retransmit_counter;                 /* Frame retransmission counter. */
+        uint8_t bytes_remaining;                    /* Bytes remaining in the buffer to write. */
+        uint8_t offset;                             /* Offset in the buffer where to write from. */
+        uint8_t buffer[MBED_CONF_MUX_BUFFER_SIZE];  /* Tx buffer. */  
         
-        // @todo: static assert needed to enforce this compared to MBED_CONF_MUX_DLCI_COUNT
+        // @todo: static assert needed to enforce this compared to MBED_CONF_MUX_BUFFER_SIZE
         
         uint8_t tx_callback_context;            /* Context for the TX callback dispatching logic as follows:
                                                    - 4 LO bits contain the pending callback mask
@@ -534,32 +534,30 @@ private:
     /* Definition for Rx context type. */
     typedef struct 
     {        
-        RxState rx_state;                       /* Rx state machine current state. */
-        uint8_t offset;                         /* Offset in the buffer where to read to. */
-        uint8_t read_length;                    /* Amount to read in number of bytes. */        
-        uint8_t buffer[MBED_CONF_BUFFER_SIZE];  /* Rx buffer. */
+        RxState rx_state;                           /* Rx state machine current state. */
+        uint8_t offset;                             /* Offset in the buffer where to read to. */
+        uint8_t read_length;                        /* Amount to read in number of bytes. */        
+        uint8_t buffer[MBED_CONF_MUX_BUFFER_SIZE];  /* Rx buffer. */
        
     } rx_context_t;    
     
     /* Definition for state type. */
     typedef struct
     {
-        uint16_t is_mux_open            : 1; /* True when multiplexer is open. */
-        uint16_t is_mux_open_pending    : 1; /* True when multiplexer open is pending. */
-        uint16_t is_mux_open_running    : 1; /* True when multiplexer open is running. */
-        uint16_t is_dlci_open_pending   : 1; /* True when DLCI open is pending. */
-        uint16_t is_dlci_open_running   : 1; /* True when DLCI open is running. */
-        
-        uint16_t is_user_thread_context : 1; /* @todo: change semantic/name. */
-        
-        uint16_t is_tx_callback_context : 1; /* True when current context is TX callback context. */
-        uint16_t is_user_tx_pending     : 1; /* True when user TX is pending. */       
-        uint16_t is_user_rx_ready       : 1; /* True when user RX is ready/available. */       
+        uint16_t is_mux_open              : 1; /* True when multiplexer is open. */
+        uint16_t is_mux_open_pending      : 1; /* True when multiplexer open is pending. */
+        uint16_t is_mux_open_running      : 1; /* True when multiplexer open is running. */
+        uint16_t is_dlci_open_pending     : 1; /* True when DLCI open is pending. */
+        uint16_t is_dlci_open_running     : 1; /* True when DLCI open is running. */        
+        uint16_t is_system_thread_context : 1; /* True when current context is system thread context. */        
+        uint16_t is_tx_callback_context   : 1; /* True when current context is TX callback context. */
+        uint16_t is_user_tx_pending       : 1; /* True when user TX is pending. */       
+        uint16_t is_user_rx_ready         : 1; /* True when user RX is ready/available. */       
     } state_t;
     
     static FileHandle      *_serial;                                /* Serial used. */  
     static EventQueueMock  *_event_q;                               /* Event queue used. */  
-//    static rtos::Semaphore  _semaphore;                             /* Semaphore. */
+//    static rtos::Semaphore  _semaphore;                           /* Semaphore. */
     static SemaphoreMock    _semaphore;
     static MuxDataService   _mux_objects[MBED_CONF_MUX_DLCI_COUNT]; /* Number of supported DLCIs (multiplexer 
                                                                        object pool) is fixed at compile time. */

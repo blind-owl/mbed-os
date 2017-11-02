@@ -25,6 +25,7 @@ namespace mbed {
 #define FRAME_TYPE_UIH                      0xEFu     /* UIH frame type coding in the frame control field. */
 
 #define PF_BIT                              (1u << 4) /* P/F bit position in the frame control field. */
+#define EA_BIT                              (1u << 0) /* E/A bit position in the frame address field. */    
 #define CR_BIT                              (1u << 1) /* C/R bit position in the frame address field. */
 
 #define DLCI_ID_LOWER_BOUND                 1u        /* Lower bound value of DLCI id.*/
@@ -35,6 +36,12 @@ namespace mbed {
 #define FRAME_CONTROL_FIELD_INDEX           2u        /* Index of the frame control field. */
 #define FRAME_LENGTH_FIELD_INDEX            3u        /* Index of the frame length indicator field. */    
 #define FRAME_INFORMATION_FIELD_INDEX       4u        /* Index of the frame information field. */
+
+#define FRAME_START_READ_LEN                1u        /* Frame start read length in number of bytes. */
+#define FRAME_HEADER_READ_LEN               3u        /* Frame header read length in number of bytes. */
+#define FRAME_TRAILER_LEN                   2u        /* Frame trailer read length in number of bytes. */
+
+#define LENGTH_INDICATOR_OCTET              1u        /* Length indicator field value used in frame. */    
     
 /* Definition for frame header type. */
 typedef struct
@@ -84,15 +91,15 @@ extern void trace(char *string, int data);
 
 void Mux::module_init()
 {
-    _state.is_mux_open            = 0;
-    _state.is_mux_open_pending    = 0;
-    _state.is_mux_open_running    = 0;    
-    _state.is_dlci_open_pending   = 0;
-    _state.is_dlci_open_running   = 0;
-    _state.is_user_thread_context = 0;
-    _state.is_tx_callback_context = 0;
-    _state.is_user_tx_pending     = 0;
-    _state.is_user_rx_ready       = 0;
+    _state.is_mux_open              = 0;
+    _state.is_mux_open_pending      = 0;
+    _state.is_mux_open_running      = 0;    
+    _state.is_dlci_open_pending     = 0;
+    _state.is_dlci_open_running     = 0;
+    _state.is_system_thread_context = 0;
+    _state.is_tx_callback_context   = 0;
+    _state.is_user_tx_pending       = 0;
+    _state.is_user_rx_ready         = 0;
    
     _rx_context.offset      = 0;
     _rx_context.read_length = 0;        
@@ -103,6 +110,10 @@ void Mux::module_init()
     
     _establish_status = static_cast<MuxEstablishStatus>(Mux::MUX_ESTABLISH_MAX);
     
+    frame_hdr_t* frame_hdr = 
+        reinterpret_cast<frame_hdr_t *>(&(Mux::_tx_context.buffer[FRAME_FLAG_SEQUENCE_FIELD_INDEX]));    
+    frame_hdr->flag_seq    = FLAG_SEQUENCE_OCTET;    
+    
     const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);
     for (uint8_t i = 0; i != end; ++i) {
         _mux_objects[i].dlci = MUX_DLCI_INVALID_ID;
@@ -111,8 +122,7 @@ void Mux::module_init()
 
 
 void Mux::frame_retransmit_begin()
-{   
-//trace("Mux::frame_retransmit ", 0);    
+{  
     _tx_context.bytes_remaining = _tx_context.offset;
     _tx_context.offset          = 0;
 }
@@ -120,59 +130,54 @@ void Mux::frame_retransmit_begin()
 
 void Mux::on_timeout()
 {
-//trace("on_timeout:_tx_context.tx_state", _tx_context.tx_state);    
-// ADD STATE STUFF
-//trace("Mux::on_timeout ", _tx_context.retransmit_counter);     
+// @todo: take mutex
+    
+    _state.is_system_thread_context = 1u;
+
     switch (_tx_context.tx_state) {
         case TX_RETRANSMIT_DONE:
             if (_tx_context.retransmit_counter != 0) {
                 --(_tx_context.retransmit_counter);
                 frame_retransmit_begin();
-                tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, NULL);
+                tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, null_action);
             } else {
                 /* Retransmission limit reached, change state and release the suspended call thread with appropriate 
                    status code. */
                 _establish_status        = MUX_ESTABLISH_TIMEOUT;
                 const osStatus os_status = _semaphore.release();
                 MBED_ASSERT(os_status == osOK);    
-                tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);
-                // @todo: need to be carefull of call order between the thread release and state change.
+                tx_state_change(TX_IDLE, tx_idle_entry_run, null_action);
             }            
             break;
         default:
             /* No implementation required. */
             break;
     }
+    
+    _state.is_system_thread_context = 0;
+    
+// @todo: free mutex    
 }
 
 
 void Mux::dm_response_construct()
 {
-//    trace("dm_response_construct: ", 0);        
-    
-    // @todo: combine common functionality with other response function.
-    
     frame_hdr_t* frame_hdr = 
         reinterpret_cast<frame_hdr_t *>(&(Mux::_tx_context.buffer[FRAME_FLAG_SEQUENCE_FIELD_INDEX]));
-    
-    frame_hdr->flag_seq       = FLAG_SEQUENCE_OCTET;
+   
     frame_hdr->address        = _rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX];
     frame_hdr->control        = (FRAME_TYPE_DM | PF_BIT);    
-    frame_hdr->length         = 1u;    
+    frame_hdr->length         = LENGTH_INDICATOR_OCTET;
     frame_hdr->information[0] = fcs_calculate(&(Mux::_tx_context.buffer[FRAME_ADDRESS_FIELD_INDEX]), FCS_INPUT_LEN);    
     (++frame_hdr)->flag_seq   = FLAG_SEQUENCE_OCTET;
     
-    // @todo: make XXX_FRAME_LEN define
-    
     _tx_context.bytes_remaining = DM_FRAME_LEN;
-    _tx_context.offset          = 0;               
 }
 
 
 void Mux::on_rx_frame_sabm()
 {    
-    /* Peer iniated open/establishment is not supported. */
-    
+    /* Peer iniated open/establishment is not supported. */    
     rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);    
 }
 
@@ -200,9 +205,8 @@ void Mux::on_rx_frame_ua()
                     } 
                     
                     os_status = _semaphore.release();
-                    MBED_ASSERT(os_status == osOK); 
-                    // @todo: need to verify correct call order for sm change and Semaphore release.
-                    tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);
+                    MBED_ASSERT(os_status == osOK);
+                    tx_state_change(TX_IDLE, tx_idle_entry_run, null_action);
                 }
             }
             break;
@@ -234,9 +238,8 @@ void Mux::on_rx_frame_dm()
                     _event_q->cancel(_tx_context.timer_id);           
                     _establish_status = Mux::MUX_ESTABLISH_REJECT;
                     os_status         = _semaphore.release();
-                    MBED_ASSERT(os_status == osOK);        
-                    // @todo: need to verify correct call order for sm change and Semaphore release.
-                    tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);
+                    MBED_ASSERT(os_status == osOK);       
+                    tx_state_change(TX_IDLE, tx_idle_entry_run, null_action);
                 }
             }
             break;
@@ -345,8 +348,6 @@ void Mux::on_rx_frame_not_supported()
 
 Mux::FrameRxType Mux::frame_rx_type_resolve()
 {
-//trace("frame_type_resolve ", _rx_context.buffer[FRAME_CONTROL_FIELD_INDEX]);    
-
     const uint8_t frame_type = (_rx_context.buffer[FRAME_CONTROL_FIELD_INDEX] & ~PF_BIT);
     
     if (frame_type == FRAME_TYPE_SABM) {
@@ -367,17 +368,9 @@ Mux::FrameRxType Mux::frame_rx_type_resolve()
 
 void Mux::tx_state_change(TxState new_state, tx_state_entry_func_t entry_func, tx_state_exit_func_t exit_func)
 {
-    if (exit_func != NULL) {
-        exit_func();
-    }
-
+    exit_func();
     _tx_context.tx_state = new_state;
-    
-//    trace("tx_state_change: ", _tx_context.tx_state);
-
-    if (entry_func != NULL) {
-        entry_func();
-    }
+    entry_func();
 }
 
 
@@ -412,7 +405,7 @@ void Mux::on_post_tx_frame_sabm()
 {
     switch (_tx_context.tx_state) {
         case TX_RETRANSMIT_ENQUEUE:
-            tx_state_change(TX_RETRANSMIT_DONE, tx_retransmit_done_entry_run, NULL);
+            tx_state_change(TX_RETRANSMIT_DONE, tx_retransmit_done_entry_run, null_action);
             break;
         default:
             /* Code that should never be reached. */
@@ -431,7 +424,7 @@ void Mux::pending_self_iniated_mux_open_start()
 
     sabm_request_construct(0);
     tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
-    _tx_context.retransmit_counter = RETRANSMIT_COUNT; // @todo: set in 1 place - NOT?         
+    _tx_context.retransmit_counter = RETRANSMIT_COUNT;
 }
 
 
@@ -443,13 +436,13 @@ void Mux::pending_self_iniated_dlci_open_start()
 
     sabm_request_construct(_dlci_id);
     tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
-    _tx_context.retransmit_counter = RETRANSMIT_COUNT; // @todo: set in 1 place - NOT ?
+    _tx_context.retransmit_counter = RETRANSMIT_COUNT;
 }
 
 
 void Mux::tx_idle_exit_run()
 {
-
+    _tx_context.offset = 0; 
 }
 
 
@@ -499,9 +492,7 @@ void Mux::tx_callback_pending_bit_set(uint8_t dlci_id)
     
     MBED_ASSERT(i != end);    
     
-    _tx_context.tx_callback_context |= bit;
-    
-//trace("!!tx_callback_pending_bit_set", bit);    
+    _tx_context.tx_callback_context |= bit;   
 }
 
 
@@ -536,7 +527,7 @@ void Mux::tx_callbacks_run()
 {
     uint8_t current_tx_index;              
     uint8_t tx_callback_pending_mask = tx_callback_pending_mask_get();        
-//trace("E_LOOP_2", tx_callback_pending_mask);                                       
+
     while (tx_callback_pending_mask != 0) {            
         /* Locate 1st pending TX callback. */           
         do {
@@ -545,7 +536,7 @@ void Mux::tx_callbacks_run()
             
         /* Clear pending bit and dispatch TX callback. */
         tx_callback_pending_bit_clear(current_tx_index);
-//trace("TX_PEND-DISPATCH", current_tx_index);                   
+
         tx_callback_dispatch(current_tx_index);
             
         /* No valid use case exists for TX cycle activation within TX callback as per design user TX is started within 
@@ -558,7 +549,7 @@ void Mux::tx_callbacks_run()
                                           
         if (_state.is_user_tx_pending) {
             /* User TX was requested within callback context dispatched above. */
-//trace("TX_PEND-RUN", 0);                                           
+
             /* TX buffer was constructed within @ref user_data_tx, now start the TX cycle. */
             _state.is_user_tx_pending = 0;                                             
             tx_state_change(TX_NORETRANSMIT, tx_noretransmit_entry_run, tx_idle_exit_run);
@@ -575,10 +566,6 @@ void Mux::tx_callbacks_run()
 
 void Mux::tx_idle_entry_run()
 {
-#if 0    
-trace("tx_idle_entry_run: ", _state.is_dlci_open_peer_iniated_pending);
-#endif // 0
-
     if (_state.is_mux_open_pending) {
         pending_self_iniated_mux_open_start();
     } else if (_state.is_dlci_open_pending) {
@@ -603,11 +590,10 @@ void Mux::on_post_tx_frame_dm()
 {
     switch (_tx_context.tx_state) {
         case TX_INTERNAL_RESP:   
-            tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);           
+            tx_state_change(TX_IDLE, tx_idle_entry_run, null_action);           
             break;
         default:
             /* Code that should never be reached. */
-            trace("_tx_context.tx_state", _tx_context.tx_state);                       
             MBED_ASSERT(false);
             break;
     }                   
@@ -618,11 +604,10 @@ void Mux::on_post_tx_frame_uih()
 {
     switch (_tx_context.tx_state) {
         case TX_NORETRANSMIT:   
-            tx_state_change(TX_IDLE, tx_idle_entry_run, NULL);           
+            tx_state_change(TX_IDLE, tx_idle_entry_run, null_action);           
             break;
         default:
             /* Code that should never be reached. */
-            trace("_tx_context.tx_state", _tx_context.tx_state);                       
             MBED_ASSERT(false);
             break;
     }                   
@@ -640,7 +625,6 @@ Mux::FrameTxType Mux::frame_tx_type_resolve()
     } else if (frame_type == FRAME_TYPE_UIH) {
         return FRAME_TX_TYPE_UIH;
     } else {
-        trace("frame_type: ", frame_type);                               
         MBED_ASSERT(false);
         return FRAME_TX_TYPE_MAX;
     }
@@ -653,10 +637,9 @@ void Mux::null_action()
 }
     
 
-#define FRAME_HEADER_READ_LEN 3u
 void Mux::rx_header_read_entry_run()
 {
-    _rx_context.offset      = 1u;                
+    _rx_context.offset      = FRAME_ADDRESS_FIELD_INDEX;                
     _rx_context.read_length = FRAME_HEADER_READ_LEN;
 }
 
@@ -668,16 +651,12 @@ void Mux::rx_state_change(RxState new_state, rx_state_entry_func_t entry_func)
 }
 
 
-#define FRAME_START_READ_LEN 1u
 ssize_t Mux::on_rx_read_state_frame_start()
 {
-//trace("!RX-FRAME_START", 0);
-
     ssize_t read_err;
     _rx_context.buffer[_rx_context.offset] = static_cast<uint8_t>(~FLAG_SEQUENCE_OCTET);
     do {
         read_err = _serial->read(&(_rx_context.buffer[_rx_context.offset]), FRAME_START_READ_LEN);
-//trace("!READ_VALUE", _rx_context.buffer[_rx_context.offset]);        
     } while ((_rx_context.buffer[_rx_context.offset] != FLAG_SEQUENCE_OCTET) && (read_err != -EAGAIN));
     
     if (_rx_context.buffer[_rx_context.offset] == FLAG_SEQUENCE_OCTET) {        
@@ -687,34 +666,27 @@ ssize_t Mux::on_rx_read_state_frame_start()
         rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);
     }
 
-//trace("!read_err", read_err);    
     return read_err;
 }
 
 
-#define FRAME_TRAILER_LEN     2u
 ssize_t Mux::on_rx_read_state_header_read()
 {
-//trace("!RX-FRAME_HEADER", 0);
-
     ssize_t read_err;
 
-//trace("read_len", read_len);    
     do {
-//trace("H-read_len", _rx_context.read_length);
         read_err = _serial->read(&(_rx_context.buffer[_rx_context.offset]), _rx_context.read_length);
         if (read_err != -EAGAIN) {
-            if ((_rx_context.offset == 1u) && (_rx_context.buffer[_rx_context.offset] == FLAG_SEQUENCE_OCTET)) {
+            if ((_rx_context.offset == FRAME_ADDRESS_FIELD_INDEX) && 
+                (_rx_context.buffer[_rx_context.offset] == FLAG_SEQUENCE_OCTET)) {
                 /* Overlapping block move 1-index possible trailing data after the flag sequence octet. */
-//trace("!!SKIP!!", 0);                
+
                 memmove(&(_rx_context.buffer[_rx_context.offset]), 
                         &(_rx_context.buffer[_rx_context.offset + 1u]),
                         (read_err - 1u));
                 
                 _rx_context.offset      += (read_err - 1u);
-                _rx_context.read_length -= (read_err - 1u);                
-
-                //@todo: proper TCs needed for this branch??
+                _rx_context.read_length -= (read_err - 1u);               
             } else {
                 _rx_context.offset      += read_err;
                 _rx_context.read_length -= read_err;                
@@ -724,16 +696,13 @@ ssize_t Mux::on_rx_read_state_header_read()
     
     if (_rx_context.offset == (FRAME_HEADER_READ_LEN + FRAME_START_READ_LEN)) {       
         /* Decode remaining frame read length and change state. Current implementation supports only 1-byte length 
-           field, enforce this with MBED_ASSERT. */
+           field, enforce this with MBED_ASSERT along with buffer over write. */
 
-        // @todo: instaed of -1 use #define
-        MBED_ASSERT((_rx_context.buffer[_rx_context.offset - 1u] & 1u) == 1u);
-        _rx_context.read_length = (_rx_context.buffer[_rx_context.offset - 1u] >> 1) + FRAME_TRAILER_LEN;
+        MBED_ASSERT((_rx_context.buffer[FRAME_LENGTH_FIELD_INDEX] & LENGTH_INDICATOR_OCTET));
+        _rx_context.read_length = (_rx_context.buffer[FRAME_LENGTH_FIELD_INDEX] >> 1) + FRAME_TRAILER_LEN;       
+        MBED_ASSERT(_rx_context.read_length <= 
+            (MBED_CONF_MUX_BUFFER_SIZE - (FRAME_START_READ_LEN + FRAME_HEADER_READ_LEN))); 
         
-        // @todo: enforce buffer over write by MBED_ASSERT
-        
-//trace("_rx_context.read_length", _rx_context.read_length);
-
         rx_state_change(RX_TRAILER_READ, null_action);        
     }
 
@@ -753,8 +722,6 @@ bool Mux::is_rx_fcs_valid()
 
 ssize_t Mux::on_rx_read_state_trailer_read()
 {
-//trace("!RX-FRAME_TRAILER", 0);
-
     typedef void (*rx_frame_decoder_func_t)();    
     static const rx_frame_decoder_func_t rx_frame_decoder_func[FRAME_RX_TYPE_MAX] = {
         on_rx_frame_sabm,
@@ -767,7 +734,6 @@ ssize_t Mux::on_rx_read_state_trailer_read()
     
     ssize_t read_err;
     do {
-//trace("T-read_len", _rx_context.read_length);        
         read_err = _serial->read(&(_rx_context.buffer[_rx_context.offset]), _rx_context.read_length);
         if (read_err != -EAGAIN) {
             _rx_context.offset      += read_err;            
@@ -814,7 +780,6 @@ void Mux::rx_event_do(RxEvent event)
         case RX_READ:            
             do {
                 func     = rx_read_func[_rx_context.rx_state];
-//trace("!RUN-READ", 0);                
                 read_err = func();
             } while (read_err != -EAGAIN);
             
@@ -839,8 +804,7 @@ void Mux::write_do()
         ssize_t write_err;
         case TX_NORETRANSMIT:
         case TX_RETRANSMIT_ENQUEUE:
-        case TX_INTERNAL_RESP:    
-//trace("!B-bytes_remaining: ", _tx_context.bytes_remaining);
+        case TX_INTERNAL_RESP:   
             write_err = 1;
             do {
                 write_err = _serial->write(&(_tx_context.buffer[_tx_context.offset]), _tx_context.bytes_remaining);
@@ -848,10 +812,8 @@ void Mux::write_do()
 
                 _tx_context.bytes_remaining -= write_err;
                 _tx_context.offset          += write_err;
-
-//trace("!write_err: ", write_err);        
             } while ((_tx_context.bytes_remaining != 0) && (write_err > 0));
-//trace("!E-bytes_remaining: ", _tx_context.bytes_remaining);    
+
             if (_tx_context.bytes_remaining == 0) {
                 /* Frame write complete, execute correct post processing function for clean-up. */
                 
@@ -876,8 +838,14 @@ void Mux::write_do()
 
 void Mux::on_deferred_call()
 {   
+    // @todo: take mutex
+    _state.is_system_thread_context = 1u;
+    
     rx_event_do(RX_READ);
     write_do();
+    
+    _state.is_system_thread_context = 0;    
+    // @todo: free mutex    
 }
 
 
@@ -911,8 +879,6 @@ uint8_t Mux::fcs_calculate(const uint8_t *buffer,  uint8_t input_len)
     
     /* Ones complement. */
     fcs = 0xFFu - fcs;
- 
-//    trace("FCS: ", fcs);
 
     return fcs;
 }
@@ -922,16 +888,14 @@ void Mux::sabm_request_construct(uint8_t dlci_id)
 {
     frame_hdr_t *frame_hdr = 
         reinterpret_cast<frame_hdr_t *>(&(Mux::_tx_context.buffer[FRAME_FLAG_SEQUENCE_FIELD_INDEX]));
-    
-    frame_hdr->flag_seq       = FLAG_SEQUENCE_OCTET;
-    frame_hdr->address        = 3u | (dlci_id << 2);
+   
+    frame_hdr->address        = EA_BIT | CR_BIT | (dlci_id << 2);
     frame_hdr->control        = (FRAME_TYPE_SABM | PF_BIT);         
-    frame_hdr->length         = 1u;
+    frame_hdr->length         = LENGTH_INDICATOR_OCTET;
     frame_hdr->information[0] = fcs_calculate(&(Mux::_tx_context.buffer[FRAME_ADDRESS_FIELD_INDEX]), FCS_INPUT_LEN);    
     (++frame_hdr)->flag_seq   = FLAG_SEQUENCE_OCTET;
     
     _tx_context.bytes_remaining = SABM_FRAME_LEN;
-    _tx_context.offset          = 0;                
 }
 
 
@@ -984,11 +948,15 @@ MuxDataService * Mux::file_handle_get(uint8_t dlci_id)
     
     
 Mux::MuxReturnStatus Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHandle **obj)
-{       
+{
     if ((dlci_id < DLCI_ID_LOWER_BOUND) || (dlci_id > DLCI_ID_UPPER_BOUND)) {
         return MUX_STATUS_INVALID_RANGE;
     }
+    
 // @todo: add mutex_lock    
+
+    MBED_ASSERT(!_state.is_system_thread_context);
+
     if (!_state.is_mux_open) {
 // @todo: add mutex_free                
         return MUX_STATUS_MUX_NOT_OPEN;
@@ -1015,7 +983,7 @@ Mux::MuxReturnStatus Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &st
         case TX_IDLE:
             /* Construct the frame, start the tx sequence, and suspend the call thread upon write sequence success. */  
             sabm_request_construct(dlci_id);
-            _tx_context.retransmit_counter = RETRANSMIT_COUNT; // @todo: set to tx_idle_exit - NOT?           
+            _tx_context.retransmit_counter = RETRANSMIT_COUNT;
             tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
             _state.is_dlci_open_running = 1u;              
 // @todo: add mutex_free here               
@@ -1031,7 +999,7 @@ Mux::MuxReturnStatus Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &st
         case TX_INTERNAL_RESP:
         case TX_NORETRANSMIT:
             _state.is_dlci_open_pending = 1u;
-            _dlci_id                                 = dlci_id;
+            _dlci_id                    = dlci_id;
 // @todo: add mutex_free               
             ret_wait = _semaphore.wait();
             MBED_ASSERT(ret_wait == 1);        
@@ -1057,9 +1025,7 @@ Mux::MuxReturnStatus Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &st
 
 void Mux::tx_retransmit_enqueu_entry_run()
 {
-    _state.is_user_thread_context = 1u;
     write_do();
-    _state.is_user_thread_context = 0;
 }
 
     
@@ -1125,11 +1091,10 @@ void Mux::user_information_construct(uint8_t dlci_id, const void* buffer, size_t
 {
     frame_hdr_t *frame_hdr = 
         reinterpret_cast<frame_hdr_t *>(&(Mux::_tx_context.buffer[FRAME_FLAG_SEQUENCE_FIELD_INDEX]));
-    
-    frame_hdr->flag_seq = FLAG_SEQUENCE_OCTET; // @todo set this @ _init as always fixed??
-    frame_hdr->address  = 3u | (dlci_id << 2); // @todo: use make #defines for 3                
+   
+    frame_hdr->address  = EA_BIT | CR_BIT | (dlci_id << 2);
     frame_hdr->control  = FRAME_TYPE_UIH;           
-    frame_hdr->length   = (1u | (size << 1));  // @todo: use make #defines for 1                
+    frame_hdr->length   = (LENGTH_INDICATOR_OCTET | (size << 1));
     
     memmove(&(frame_hdr->information[0]), buffer, size);
     
@@ -1138,25 +1103,22 @@ void Mux::user_information_construct(uint8_t dlci_id, const void* buffer, size_t
     *(++fcs_pos)     = FLAG_SEQUENCE_OCTET;
     
     _tx_context.bytes_remaining = UIH_FRAME_MIN_LEN + size;
-    _tx_context.offset          = 0; // @todo set this @ tx_id_state_exit
 }
 
 
 void Mux::tx_noretransmit_entry_run()
 {
-//    _state.is_user_thread_context = 1u; // @todo: is this really so?? we should set this allways in dfc or timeout 
-                                          // to be sure and use is_system_thread_context => FEELS LIKE A GOOD IDEA
     write_do();
-//    _state.is_user_thread_context = 0;
 }
 
 
 ssize_t Mux::user_data_tx(uint8_t dlci_id, const void* buffer, size_t size)
 {
-    MBED_ASSERT(size <= (MBED_CONF_BUFFER_SIZE - 6u)); // @todo: define magic
+    MBED_ASSERT(size <= 
+        (MBED_CONF_MUX_BUFFER_SIZE - (FRAME_START_READ_LEN + FRAME_HEADER_READ_LEN + FRAME_TRAILER_LEN))); 
     MBED_ASSERT(buffer != NULL);
 
-    if (0 == size) {
+    if (size == 0) {
         return 0;
     }
     
@@ -1182,7 +1144,6 @@ ssize_t Mux::user_data_tx(uint8_t dlci_id, const void* buffer, size_t size)
                      * stored sequence this will result to dispatching 1 unnecessary TX callback, if this is a issue one
                      * should clear the TX callback pending bit marker for this DLCI in this place. */
 
-//trace("TX_PEND-SET", 0);                    
                     _state.is_user_tx_pending = 1u;                    
                     user_information_construct(dlci_id, buffer, size);
                     
@@ -1205,8 +1166,7 @@ ssize_t Mux::user_data_tx(uint8_t dlci_id, const void* buffer, size_t size)
             
             break;
     }
-        
-
+       
 // @todo: release mutex
 
     return write_ret;
