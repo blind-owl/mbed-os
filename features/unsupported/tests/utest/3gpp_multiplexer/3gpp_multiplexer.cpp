@@ -813,6 +813,11 @@ void mux_self_iniated_open(uint8_t                   tx_cycle_read_len,
     };
     mock_wait->func_context = &context;    
 
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                    
+    
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
     const Mux::MuxReturnStatus ret = mbed::Mux::mux_start(status);
@@ -851,10 +856,15 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_succes)
 /* Multiplexer semaphore wait call from mux_open_self_initiated_existing_open_pending TC. */
 void mux_start_self_initated_existing_open_pending_sem_wait(const void *context)
 {
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);            
+    
     /* Issue new self iniated mux open, which fails. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    const uint32_t ret = mbed::Mux::mux_start(status);   
-    CHECK_EQUAL(ret, 1);
+    const mbed::Mux::MuxReturnStatus ret = mbed::Mux::mux_start(status);
+    CHECK_EQUAL(mbed::Mux::MUX_STATUS_INPROGRESS, ret);
     
     /* Finish the mux open establishment with success. */
     mux_start_self_initated_sem_wait(context);
@@ -920,11 +930,21 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_existing_open_pending)
     };
     mock_wait->func_context = &context;   
     
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                        
+    
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
     mbed::Mux::MuxReturnStatus ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(mbed::Mux::MUX_STATUS_SUCCESS, ret);
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_SUCCESS);       
+
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);        
     
     /* Issue new self iniated mux open, which fails. */
     ret = mbed::Mux::mux_start(status);   
@@ -935,10 +955,15 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_existing_open_pending)
 /* Multiplexer semaphore wait call from mux_open_self_initiated_existing_open_pending_2 TC. */
 void mux_start_self_initated_existing_open_pending_2_sem_wait(const void *context)
 {
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);            
+    
     /* Issue new self iniated mux open, which fails. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    const uint32_t ret = mbed::Mux::mux_start(status);   
-    CHECK_EQUAL(ret, 1);
+    mbed::Mux::MuxReturnStatus ret = mbed::Mux::mux_start(status);
+    CHECK_EQUAL(mbed::Mux::MUX_STATUS_INPROGRESS, ret);
 
     const uint8_t write_byte_2[6] = 
     {
@@ -1022,11 +1047,21 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_existing_open_pending_2)
     mock_wait->func         = mux_start_self_initated_existing_open_pending_2_sem_wait;    
     mock_wait->func_context = &(write_byte[1]);
     
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                    
+    
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
     mbed::Mux::MuxReturnStatus ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(mbed::Mux::MUX_STATUS_SUCCESS, ret);
     CHECK_EQUAL(status, mbed::Mux::MUX_ESTABLISH_SUCCESS);
+
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);        
     
     /* Issue new self iniated mux open, which fails. */
     ret = mbed::Mux::mux_start(status);   
@@ -1607,6 +1642,11 @@ TEST(MultiplexerOpenTestGroup, mux_open_allready_open)
     
     mux_self_iniated_open();
    
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);    
+    
     /* Issue new start. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
     const mbed::Mux::MuxReturnStatus ret = mbed::Mux::mux_start(status);
@@ -1689,6 +1729,11 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_rejected_by_peer)
     mock_wait->func         = mux_start_self_initated_sem_wait_rejected_by_peer;
     mock_wait->func_context = &(write_byte[1]);
 
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                    
+    
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
     const mbed::Mux::MuxReturnStatus ret = mbed::Mux::mux_start(status);
@@ -1798,6 +1843,11 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_success_after_timeout)
     mock_wait->func         = mux_start_self_initated_sem_wait_timeout;
     mock_wait->func_context = &(write_buf[0]);
 
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                            
+    
     /* Start test sequence: fails with timeout. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
     const mbed::Mux::MuxReturnStatus ret = mbed::Mux::mux_start(status);
@@ -1957,16 +2007,26 @@ void mux_open_self_iniated_dm_tx_in_progress_sem_wait(const void *context)
     const uint8_t* write_byte_dm = (const uint8_t*)context;
     peer_iniated_response_tx(&write_byte_dm[0], (DM_FRAME_LEN - 1u), &write_byte[0], false, NULL);    
 
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);    
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);            
+    
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
-    uint32_t ret = mbed::Mux::mux_start(status);
-    CHECK_EQUAL(1, ret);
+    mbed::Mux::MuxReturnStatus ret = mbed::Mux::mux_start(status);
+    CHECK_EQUAL(mbed::Mux::MUX_STATUS_INPROGRESS, ret);
 
     /* TX remainder of the mux start-up request. */
     self_iniated_request_tx(&(write_byte[1]), (sizeof(write_byte) - sizeof(write_byte[0])), FRAME_HEADER_READ_LEN);    
        
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);    
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                
+    
     status = mbed::Mux::MUX_ESTABLISH_MAX;    
     ret    = mbed::Mux::mux_start(status);
-    CHECK_EQUAL(1, ret);       
+    CHECK_EQUAL(mbed::Mux::MUX_STATUS_INPROGRESS, ret);       
     
     /* RX mux start-up response. */
     const uint8_t read_byte[5] = 
@@ -2044,10 +2104,20 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_iniated_dm_tx_in_progress)
     mock_wait->func         = mux_open_self_iniated_dm_tx_in_progress_sem_wait;   
     mock_wait->func_context = &(write_byte[1]);    
 
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);    
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                    
+    
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);   
     mbed::Mux::MuxReturnStatus ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(Mux::MUX_STATUS_SUCCESS, ret);
     CHECK_EQUAL(Mux::MUX_ESTABLISH_SUCCESS, status);
+
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);        
     
     status = mbed::Mux::MUX_ESTABLISH_MAX;    
     ret    = mbed::Mux::mux_start(status);
@@ -2323,6 +2393,11 @@ TEST(MultiplexerOpenTestGroup, mux_open_self_initiated_full_frame_write_in_loop_
     CHECK(mock_wait != NULL);
     mock_wait->return_value = 1;
     mock_wait->func = mux_open_self_initiated_full_frame_write_in_loop_succes_sem_wait;
+    
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                        
     
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
@@ -5271,6 +5346,11 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_dlci_id_mismatch)
     mock_wait->func         = rx_frame_type_ua_dlci_id_mismatch_sem_wait;
     mock_wait->func_context = &(write_byte[1]);
 
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                    
+    
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
     const Mux::MuxReturnStatus ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(mbed::Mux::MUX_STATUS_SUCCESS, ret);
@@ -5366,6 +5446,11 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_dlci_id_mismatch)
     mock_wait->func         = rx_frame_type_dm_dlci_id_mismatch_sem_wait;
     mock_wait->func_context = &(write_byte[1]);
 
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                
+    
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
     const mbed::Mux::MuxReturnStatus ret = mbed::Mux::mux_start(status);
     CHECK_EQUAL(mbed::Mux::MUX_STATUS_SUCCESS, ret);

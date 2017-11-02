@@ -21,6 +21,7 @@
 #include <stdint.h>
 #include "FileHandle.h"
 #include "SemaphoreMock.h"
+#include "PlatformMutexMock.h"
 
 #if 0
 #include "rtos/Semaphore.h"
@@ -556,9 +557,9 @@ private:
     } state_t;
     
     static FileHandle      *_serial;                                /* Serial used. */  
-    static EventQueueMock  *_event_q;                               /* Event queue used. */  
-//    static rtos::Semaphore  _semaphore;                           /* Semaphore. */
+    static EventQueueMock  *_event_q;                               /* Event queue used. */ 
     static SemaphoreMock    _semaphore;
+    static PlatformMutexMock _mutex;
     static MuxDataService   _mux_objects[MBED_CONF_MUX_DLCI_COUNT]; /* Number of supported DLCIs (multiplexer 
                                                                        object pool) is fixed at compile time. */
     static tx_context_t     _tx_context;                            /* Tx context. */

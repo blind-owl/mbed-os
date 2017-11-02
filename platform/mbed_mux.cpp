@@ -61,6 +61,7 @@ MuxDataService Mux::_mux_objects[MBED_CONF_MUX_DLCI_COUNT];
 
 //rtos::Semaphore Mux::_semaphore(0);
 SemaphoreMock Mux::_semaphore;
+PlatformMutexMock Mux::_mutex;
 
 Mux::tx_context_t Mux::_tx_context;
 Mux::rx_context_t Mux::_rx_context;
@@ -1031,18 +1032,21 @@ void Mux::tx_retransmit_enqueu_entry_run()
     
 Mux::MuxReturnStatus Mux::mux_start(Mux::MuxEstablishStatus &status)
 {
-// @todo: add mutex_lock
+    _mutex.lock();
        
-    if (_state.is_mux_open) { 
-// @todo: add mutex_free        
+    if (_state.is_mux_open) {
+        _mutex.unlock();
+        
         return MUX_STATUS_NO_RESOURCE;
     }
     if (_state.is_mux_open_pending) { 
-// @todo: add mutex_free                
+        _mutex.unlock();
+        
         return MUX_STATUS_INPROGRESS;
     }
     if (_state.is_mux_open_running ) {
-// @todo: add mutex_free                
+        _mutex.unlock();
+        
         return MUX_STATUS_INPROGRESS;        
     }
 
@@ -1054,7 +1058,8 @@ Mux::MuxReturnStatus Mux::mux_start(Mux::MuxEstablishStatus &status)
             _tx_context.retransmit_counter = RETRANSMIT_COUNT;            
             tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
             _state.is_mux_open_running = 1u;              
-// @todo: add mutex_free here               
+            
+            _mutex.unlock();
             ret_wait = _semaphore.wait();
             MBED_ASSERT(ret_wait == 1);
             status = static_cast<MuxEstablishStatus>(_establish_status);
@@ -1065,7 +1070,8 @@ Mux::MuxReturnStatus Mux::mux_start(Mux::MuxEstablishStatus &status)
             break;
         case TX_INTERNAL_RESP:
             _state.is_mux_open_pending = 1u;
-// @todo: add mutex_free               
+
+            _mutex.unlock();            
             ret_wait = _semaphore.wait();
             MBED_ASSERT(ret_wait == 1);        
             status = static_cast<MuxEstablishStatus>(_establish_status);
@@ -1076,8 +1082,7 @@ Mux::MuxReturnStatus Mux::mux_start(Mux::MuxEstablishStatus &status)
             break;
         default:
             /* Code that should never be reached. */
-            MBED_ASSERT(false);
-            
+            MBED_ASSERT(false);            
             break;
     };
                 
