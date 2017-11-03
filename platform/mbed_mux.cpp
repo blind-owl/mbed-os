@@ -1197,7 +1197,8 @@ ssize_t Mux::user_data_rx(void* buffer, size_t size)
 {    
     MBED_ASSERT(buffer != NULL);
     
-// @todo: get mutex    
+    _mutex.lock();
+    
     if (_state.is_user_rx_ready) {               
         const size_t read_length = min((_rx_context.read_length - _rx_context.offset), size);        
         memcpy(buffer, &(_rx_context.buffer[FRAME_INFORMATION_FIELD_INDEX + _rx_context.offset]), read_length);
@@ -1210,10 +1211,12 @@ ssize_t Mux::user_data_rx(void* buffer, size_t size)
             rx_event_do(RX_RESUME);
         }
         
-// @todo: release mutex               
+        _mutex.unlock();
+    
         return static_cast<ssize_t>(read_length);
     } else {
-// @todo: release mutex               
+        _mutex.unlock();
+        
         return -EAGAIN;
     }   
 }

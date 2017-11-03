@@ -4024,6 +4024,10 @@ TEST(MultiplexerOpenTestGroup, user_rx_0_length_user_payload)
     single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE);
     
     /* Verify read failure after successfull read cycle. */
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                       
     uint8_t buffer[1]      = {0};
     const ssize_t read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
     CHECK_EQUAL(-EAGAIN, read_ret);        
@@ -4039,11 +4043,19 @@ static void user_rx_single_read_callback()
     CHECK(mock_call != NULL);           
     mock_call->return_value = 1;            
     uint8_t buffer[1]       = {0};
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                       
     ssize_t read_ret        = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
     CHECK(read_ret == sizeof(buffer));
     CHECK_EQUAL(0xA5u, buffer[0]);
     
     /* Verify failure after successfull read cycle. */
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                       
     read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
     CHECK_EQUAL(-EAGAIN, read_ret);    
 }
@@ -4141,6 +4153,10 @@ TEST(MultiplexerOpenTestGroup, user_rx_single_read_no_data_available)
     m_file_handle[0]->sigio(user_rx_single_read_no_data_available_callback);
     
     uint8_t buffer[1]      = {0};
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                       
     const ssize_t read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
     CHECK(read_ret == -EAGAIN);
 }
@@ -4223,11 +4239,19 @@ TEST(MultiplexerOpenTestGroup, user_rx_rx_suspend_rx_resume_cycle)
     /* Verify read buffer: consumption of the read buffer triggers enqueue to event Q. */
     mock_call = mock_free_get("call");
     CHECK(mock_call != NULL);           
-    mock_call->return_value = 1;      
+    mock_call->return_value = 1;   
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                       
     uint8_t buffer[1]       = {0};
     ssize_t read_ret        = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
     CHECK_EQUAL(sizeof(buffer), read_ret);
     CHECK(buffer[0] == user_data);    
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                       
     read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
     CHECK_EQUAL(-EAGAIN, read_ret);    
        
@@ -4258,11 +4282,19 @@ TEST(MultiplexerOpenTestGroup, user_rx_rx_suspend_rx_resume_cycle)
     /* Verify read buffer: consumption of the read buffer triggers enqueue to event Q. */
     mock_call = mock_free_get("call");
     CHECK(mock_call != NULL);           
-    mock_call->return_value = 1;          
+    mock_call->return_value = 1;  
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                       
     buffer[0]               = 0;
     read_ret                = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
     CHECK_EQUAL(sizeof(buffer), read_ret);
     CHECK(buffer[0] == user_data);
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                       
     read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
     CHECK_EQUAL(-EAGAIN, read_ret);
 }
@@ -4418,7 +4450,11 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_1_byte_per_run_context)
     /* Verify read buffer. */
     mock_t * mock_call = mock_free_get("call");
     CHECK(mock_call != NULL);           
-    mock_call->return_value = 1;            
+    mock_call->return_value = 1;    
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                       
     uint8_t buffer[1]       = {0};
     const ssize_t read_ret  = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
     CHECK_EQUAL(sizeof(buffer), read_ret);
@@ -4482,7 +4518,11 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_max_size_user_payload_in_1_read_call
     /* Verify read buffer. */
     mock_t * mock_call = mock_free_get("call");
     CHECK(mock_call != NULL);           
-    mock_call->return_value             = 1;            
+    mock_call->return_value             = 1;  
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                   
     uint8_t buffer[RX_BUFFER_SIZE - 6u] = {0};
     CHECK_EQUAL(sizeof(buffer), (sizeof(read_byte) - 5u));               
     const ssize_t read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
@@ -4547,6 +4587,8 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_1_byte_per_read_call_max_size_user_p
     single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE);    
     
     /* Verify read buffer: do reads 1 byte a time until all of the data is read. */
+    mock_t * mock_lock;
+    mock_t * mock_unlock;
     mock_t * mock_call;
     ssize_t  read_ret;
     uint8_t  test_buffer[sizeof(read_byte) - 5u] = {0};    
@@ -4558,14 +4600,22 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_1_byte_per_read_call_max_size_user_p
             mock_call->return_value = 1;                        
         }
         
+        mock_lock = mock_free_get("lock");
+        CHECK(mock_lock != NULL);
+        mock_unlock = mock_free_get("unlock");
+        CHECK(mock_unlock != NULL);                                    
         read_ret = m_file_handle[0]->read(&(test_buffer[read_count]), 1u);
         CHECK_EQUAL(1, read_ret);
         CHECK_EQUAL(read_byte[3u + read_count], test_buffer[read_count]);
         
         ++read_count;
     } while (read_count != sizeof(test_buffer));
-    
+   
     /* Verify read buffer empty. */
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                   
     read_ret = m_file_handle[0]->read(&(test_buffer[0]), 1u);
     CHECK_EQUAL(-EAGAIN, read_ret);
     
@@ -4649,10 +4699,18 @@ TEST(MultiplexerOpenTestGroup, user_rx_dlci_not_established)
         /* Validate read buffer. */
         mock_call = mock_free_get("call");
         CHECK(mock_call != NULL);           
-        mock_call->return_value = 1;                    
+        mock_call->return_value = 1;     
+        mock_t * mock_lock = mock_free_get("lock");
+        CHECK(mock_lock != NULL);
+        mock_t * mock_unlock = mock_free_get("unlock");
+        CHECK(mock_unlock != NULL);                                    
         read_ret = m_file_handle[i]->read(&(test_buffer[0]), 1u);
         CHECK_EQUAL(1, read_ret);
         CHECK_EQUAL(user_data, test_buffer[0]);        
+        mock_lock = mock_free_get("lock");
+        CHECK(mock_lock != NULL);
+        mock_unlock = mock_free_get("unlock");
+        CHECK(mock_unlock != NULL);                                    
         read_ret = m_file_handle[i]->read(&(test_buffer[0]), 1u);
         CHECK_EQUAL(-EAGAIN, read_ret);
         
@@ -4744,10 +4802,18 @@ TEST(MultiplexerOpenTestGroup, user_rx_invalidate_dlci_id_used)
     mock_t * mock_call = mock_free_get("call");
     CHECK(mock_call != NULL);           
     mock_call->return_value = 1;                    
-    uint8_t test_buffer[1]  = {0};    
-    ssize_t read_ret        = m_file_handle[0]->read(&(test_buffer[0]), 1u);
+    uint8_t test_buffer[1]  = {0};  
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                                
+    ssize_t read_ret = m_file_handle[0]->read(&(test_buffer[0]), 1u);
     CHECK_EQUAL(1, read_ret);
     CHECK_EQUAL(user_data, test_buffer[0]);        
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                                
     read_ret = m_file_handle[0]->read(&(test_buffer[0]), 1u);
     CHECK_EQUAL(-EAGAIN, read_ret);     
     
@@ -4827,11 +4893,19 @@ TEST(MultiplexerOpenTestGroup, user_rx_invalid_fcs)
     /* Validate read buffer. */
     mock_t * mock_call = mock_free_get("call");
     CHECK(mock_call != NULL);           
-    mock_call->return_value = 1;                    
+    mock_call->return_value = 1;      
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                                
     uint8_t test_buffer[1]  = {0};    
     ssize_t read_ret        = m_file_handle[0]->read(&(test_buffer[0]), 1u);
     CHECK_EQUAL(1, read_ret);
     CHECK_EQUAL(user_data, test_buffer[0]);        
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                                
     read_ret = m_file_handle[0]->read(&(test_buffer[0]), 1u);
     CHECK_EQUAL(-EAGAIN, read_ret);     
     
@@ -4912,11 +4986,19 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_not_supported)
     /* Validate read buffer. */
     mock_t * mock_call = mock_free_get("call");
     CHECK(mock_call != NULL);           
-    mock_call->return_value = 1;                    
+    mock_call->return_value = 1;        
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                                
     uint8_t test_buffer[1]  = {0};    
     ssize_t read_ret        = m_file_handle[0]->read(&(test_buffer[0]), 1u);
     CHECK_EQUAL(1, read_ret);
     CHECK_EQUAL(user_data, test_buffer[0]);        
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                                
     read_ret = m_file_handle[0]->read(&(test_buffer[0]), 1u);
     CHECK_EQUAL(-EAGAIN, read_ret);     
     
@@ -5247,11 +5329,19 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_uih_invalid_cr_and_pf_bit)
     /* Validate read buffer. */
     mock_t * mock_call = mock_free_get("call");
     CHECK(mock_call != NULL);           
-    mock_call->return_value = 1;                    
+    mock_call->return_value = 1;  
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                            
     uint8_t test_buffer[1]  = {0};    
     ssize_t read_ret        = m_file_handle[0]->read(&(test_buffer[0]), 1u);
     CHECK_EQUAL(1, read_ret);
-    CHECK_EQUAL(user_data, test_buffer[0]);       
+    CHECK_EQUAL(user_data, test_buffer[0]);   
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                            
     read_ret = m_file_handle[0]->read(&(test_buffer[0]), 1u);
     CHECK_EQUAL(-EAGAIN, read_ret);
     /* Validate proper callback callcount. */
