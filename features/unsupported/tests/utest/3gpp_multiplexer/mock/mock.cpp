@@ -7,7 +7,7 @@ namespace mbed {
 extern void trace(char *string, int data);
 }
 
-#define DB_LEN 13u
+#define DB_LEN 15u
 
 static mock_t db[DB_LEN];
 

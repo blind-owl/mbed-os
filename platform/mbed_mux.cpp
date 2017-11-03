@@ -839,14 +839,16 @@ void Mux::write_do()
 
 void Mux::on_deferred_call()
 {   
-    // @todo: take mutex
+    _mutex.lock();
+    
     _state.is_system_thread_context = 1u;
     
     rx_event_do(RX_READ);
     write_do();
     
     _state.is_system_thread_context = 0;    
-    // @todo: free mutex    
+    
+    _mutex.unlock();
 }
 
 

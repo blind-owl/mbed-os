@@ -139,7 +139,9 @@ uint8_t fcs_calculate(const uint8_t *buffer,  uint8_t input_len)
 void self_iniated_request_tx(const uint8_t *tx_buf, uint8_t tx_buf_len, uint8_t read_len)
 {
     /* Write the complete request frame in the do...while. */
-    uint8_t                                  tx_count      = 0;           
+    mock_t* mock_lock;
+    mock_t* mock_unlock;
+    uint8_t tx_count                                       = 0;           
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};    
     const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};
     do {    
@@ -188,6 +190,10 @@ void self_iniated_request_tx(const uint8_t *tx_buf, uint8_t tx_buf_len, uint8_t 
             mock_write->return_value                = 0;        
         }
         
+        mock_lock = mock_free_get("lock");
+        CHECK(mock_lock != NULL);
+        mock_unlock = mock_free_get("unlock");
+        CHECK(mock_unlock != NULL);                
         mbed::EventQueueMock::io_control(eq_io_control);   
         
         ++tx_count;        
@@ -218,7 +224,9 @@ void self_iniated_response_rx(const uint8_t            *rx_buf,
     /* Guard against internal logic error. */
     CHECK(!((read_type == READ_FLAG_SEQUENCE_OCTET) && (strip_flag_field_type == STRIP_FLAG_FIELD_YES)));
         
-    uint8_t                                  rx_count      = 0;       
+    mock_t* mock_lock;
+    mock_t* mock_unlock;    
+    uint8_t rx_count                                       = 0;       
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
     const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};    
 
@@ -312,7 +320,11 @@ void self_iniated_response_rx(const uint8_t            *rx_buf,
     mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_read->input_param[0].param        = FRAME_HEADER_READ_LEN;
     mock_read->return_value                = -EAGAIN;              
-    
+
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                    
     /* Trigger the deferred call context to execute all mocks. */
     mbed::EventQueueMock::io_control(eq_io_control);               
 }
@@ -339,7 +351,9 @@ void peer_iniated_request_rx(const uint8_t            *rx_buf,
     CHECK(!((resp_write_byte != NULL) && (current_tx_write_byte != NULL)));
     
     /* Phase 1: read frame start flag. */
-    uint8_t                                  rx_count      = 0;       
+    mock_t* mock_lock;
+    mock_t* mock_unlock;    
+    uint8_t rx_count                                       = 0;       
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
     const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};    
 
@@ -454,6 +468,10 @@ void peer_iniated_request_rx(const uint8_t            *rx_buf,
         /* No implementation required. */
     }
    
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                   
     /* Trigger the deferred call context to execute all mocks. */
     mbed::EventQueueMock::io_control(eq_io_control);                   
 }
@@ -474,6 +492,8 @@ void peer_iniated_request_rx_full_frame_tx(const uint8_t *rx_buf,
                                            const uint8_t *write_byte,
                                            uint8_t        tx_buf_len)
 {   
+    mock_t* mock_lock;
+    mock_t* mock_unlock;        
     uint8_t rx_count                                       = 0;               
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
     const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};    
@@ -555,6 +575,10 @@ void peer_iniated_request_rx_full_frame_tx(const uint8_t *rx_buf,
     mock_read->input_param[0].param        = FRAME_HEADER_READ_LEN;
     mock_read->return_value                = -EAGAIN;                      
     
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                       
     /* Trigger the deferred call context to execute all mocks. */
     mbed::EventQueueMock::io_control(eq_io_control);
 }
@@ -579,9 +603,11 @@ void peer_iniated_response_tx(const uint8_t *buf,
                               bool           expected_state,
                               compare_func_t func)
 {
+    mock_t* mock_lock;
+    mock_t* mock_unlock;       
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
     const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};    
-    uint8_t                                  tx_count      = 0;          
+    uint8_t tx_count                                       = 0;          
    
     /* Write the complete response frame in do...while. */
     do {   
@@ -645,6 +671,10 @@ void peer_iniated_response_tx(const uint8_t *buf,
             mock_write->return_value                = 0;        
         }            
 
+        mock_lock = mock_free_get("lock");
+        CHECK(mock_lock != NULL);
+        mock_unlock = mock_free_get("unlock");
+        CHECK(mock_unlock != NULL);
         mbed::EventQueueMock::io_control(eq_io_control);  
 
         if (tx_count == (buf_len - 1)) {
@@ -676,9 +706,11 @@ void peer_iniated_response_tx_no_pending_tx(const uint8_t *buf,
                                             bool           expected_state,
                                             compare_func_t func)
 {
+    mock_t* mock_lock;
+    mock_t* mock_unlock;           
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
     const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};    
-    uint8_t                                  tx_count      = 0;          
+    uint8_t tx_count                                       = 0;          
    
     /* Write the complete response frame in do...while. */
     do {   
@@ -725,6 +757,10 @@ void peer_iniated_response_tx_no_pending_tx(const uint8_t *buf,
             mock_write->return_value                = 0;        
         }
 
+        mock_lock = mock_free_get("lock");
+        CHECK(mock_lock != NULL);
+        mock_unlock = mock_free_get("unlock");
+        CHECK(mock_unlock != NULL);        
         mbed::EventQueueMock::io_control(eq_io_control);  
 
         if (tx_count == (buf_len - 1)) {
@@ -2904,6 +2940,10 @@ void single_complete_write_cycle(const uint8_t *write_byte,
    }
     
     /* Trigger deferred call to execute the programmed mocks above. */
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                            
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
     mbed::EventQueueMock::io_control(eq_io_control);
 }
@@ -3631,7 +3671,7 @@ static void tx_callback_dispatch_tx_to_different_dlci_not_within_current_context
         
     switch (m_user_tx_callback_tx_to_different_dlci_not_within_current_context_check_value) {
         mock_t * mock_write;
-        ssize_t write_ret;
+        ssize_t  write_ret;
         case 0:
             /* Current context is TX callback for the 1st handle. */
             
@@ -3816,6 +3856,10 @@ void single_complete_read_cycle(const uint8_t*      read_byte,
         mock_read->return_value                = -EAGAIN;
     }
 
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                       
     /* Trigger deferred call to execute the programmed mocks above. */
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
     mbed::EventQueueMock::io_control(eq_io_control);    
@@ -4057,7 +4101,11 @@ TEST(MultiplexerOpenTestGroup, user_rx_rx_suspend_rx_resume_cycle)
     CHECK(mock_call != NULL);           
     mock_call->return_value                             = 1;        
     const mbed::FileHandleMock::io_control_t io_control = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};
-    mbed::FileHandleMock::io_control(io_control);    
+    mbed::FileHandleMock::io_control(io_control);
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                           
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
     mbed::EventQueueMock::io_control(eq_io_control);        
     
@@ -4089,7 +4137,11 @@ TEST(MultiplexerOpenTestGroup, user_rx_rx_suspend_rx_resume_cycle)
     mock_call = mock_free_get("call");
     CHECK(mock_call != NULL);           
     mock_call->return_value = 1;       
-    mbed::FileHandleMock::io_control(io_control);   
+    mbed::FileHandleMock::io_control(io_control);  
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                           
     mbed::EventQueueMock::io_control(eq_io_control);        
     
     /* Verify read buffer: consumption of the read buffer triggers enqueue to event Q. */
@@ -4113,6 +4165,8 @@ void single_byte_read_cycle(const uint8_t *read_byte,
     const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};    
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE}; 
   
+    mock_t * mock_lock;
+    mock_t * mock_unlock;
     mock_t * mock_call;
     mock_t * mock_read;
     uint8_t current_read_len;      
@@ -4149,7 +4203,11 @@ void single_byte_read_cycle(const uint8_t *read_byte,
         mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;    
         mock_read->output_param[0].len         = 0;
         mock_read->return_value                = -EAGAIN;
-        
+
+        mock_lock = mock_free_get("lock");
+        CHECK(mock_lock != NULL);
+        mock_unlock = mock_free_get("unlock");        
+        CHECK(mock_unlock != NULL);                               
         /* Trigger deferred call to execute the programmed mocks above. */
         mbed::EventQueueMock::io_control(eq_io_control);            
         
@@ -4183,6 +4241,10 @@ void single_byte_read_cycle(const uint8_t *read_byte,
             mock_read->return_value                = -EAGAIN;            
         }
             
+        mock_lock = mock_free_get("lock");
+        CHECK(mock_lock != NULL);
+        mock_unlock = mock_free_get("unlock");        
+        CHECK(mock_unlock != NULL);                                           
         /* Trigger deferred call to execute the programmed mocks above. */
         mbed::EventQueueMock::io_control(eq_io_control);
        
@@ -5541,7 +5603,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_dlci_id_mismatch)
     mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);        
     mock_write->input_param[1].param        = sizeof(write_byte);    
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->return_value = 1;    
+    mock_write->return_value                = 1;    
     
     mock_write = mock_free_get("write");
     CHECK(mock_write != NULL); 
@@ -5549,7 +5611,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_dlci_id_mismatch)
     mock_write->input_param[0].param        = (uint32_t)&(write_byte[1]);        
     mock_write->input_param[1].param        = sizeof(write_byte) - sizeof(write_byte[0]);        
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->return_value = 0;        
+    mock_write->return_value                = 0;        
 
     mock_t * mock_wait = mock_free_get("wait");
     CHECK(mock_wait != NULL);
