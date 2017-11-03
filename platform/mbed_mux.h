@@ -41,6 +41,10 @@
 #define MBED_CONF_MUX_BUFFER_SIZE 31u  /* Size of TX/Rx buffers in number of bytes. */
 #endif 
 
+/* More RAM needs to allocated if more than 4 DLCI ID to be supported see @ref tx_callback_context for details. */
+MBED_STATIC_ASSERT(MBED_CONF_MUX_DLCI_COUNT <= 4u, "");
+
+
 /* @todo:
 I assume that we need to export some kind of #defines for EVENT_SIZE and MAX_EVENT_COUNT (max number of events that can 
 be queued at the same time by the module inside EventQueue, so that the application designer can calculate the RAM 
@@ -478,7 +482,7 @@ private:
     /** Get data service object based on supplied bit id. 
      * 
      *  @param bit Bit indetifier of data service object to get.
-     *  @return Data service object reference.
+     *  @return    Data service object reference.
      */                                    
     static MuxDataService& tx_callback_lookup(uint8_t bit);
     
@@ -512,27 +516,31 @@ private:
     /* Definition for Tx context type. */
     typedef struct 
     {
-        int     timer_id;                           /* Timer id. */
-        TxState tx_state;                           /* Tx state machine current state. */
-        uint8_t retransmit_counter;                 /* Frame retransmission counter. */
-        uint8_t bytes_remaining;                    /* Bytes remaining in the buffer to write. */
-        uint8_t offset;                             /* Offset in the buffer where to write from. */
-        uint8_t buffer[MBED_CONF_MUX_BUFFER_SIZE];  /* Tx buffer. */  
-        
-        // @todo: static assert needed to enforce this compared to MBED_CONF_MUX_BUFFER_SIZE
-        
-        uint8_t tx_callback_context;            /* Context for the TX callback dispatching logic as follows:
-                                                   - 4 LO bits contain the pending callback mask
-                                                   - 4 HI bits contain the current bit used for masking */       
+        int timer_id;                   /* Timer id. */        
+        union {
+            uint32_t align_4_byte;                      /* Force 4-byte alignment. */
+            uint8_t  buffer[MBED_CONF_MUX_BUFFER_SIZE]; /* Rx buffer. */       
+        };                                                          
+        uint8_t retransmit_counter;     /* Frame retransmission counter. */
+        uint8_t bytes_remaining;        /* Bytes remaining in the buffer to write. */
+        uint8_t offset;                 /* Offset in the buffer where to write from. */               
+        uint8_t tx_callback_context;    /* Context for the TX callback dispatching logic as follows:
+                                           - 4 LO bits contain the pending callback mask
+                                           - 4 HI bits contain the current bit used for masking */       
+        TxState tx_state;               /* Tx state machine current state. */
+                 
     } tx_context_t;
           
     /* Definition for Rx context type. */
     typedef struct 
     {        
-        RxState rx_state;                           /* Rx state machine current state. */
-        uint8_t offset;                             /* Offset in the buffer where to read to. */
-        uint8_t read_length;                        /* Amount to read in number of bytes. */        
-        uint8_t buffer[MBED_CONF_MUX_BUFFER_SIZE];  /* Rx buffer. */       
+        union {
+            uint32_t align_4_byte;                      /* Force 4-byte alignment. */
+            uint8_t  buffer[MBED_CONF_MUX_BUFFER_SIZE]; /* Rx buffer. */       
+        };
+        uint8_t offset;         /* Offset in the buffer where to read to. */
+        uint8_t read_length;    /* Amount to read in number of bytes. */            
+        RxState rx_state;       /* Rx state machine current state. */
     } rx_context_t;    
     
     /* Definition for state type. */
@@ -551,10 +559,9 @@ private:
     
     static FileHandle      *_serial;                                /* Serial used. */  
     static EventQueueMock  *_event_q;                               /* Event queue used. */ 
-    static SemaphoreMock    _semaphore;
-    static PlatformMutexMock _mutex;
-    static MuxDataService   _mux_objects[MBED_CONF_MUX_DLCI_COUNT]; /* Number of supported DLCIs (multiplexer 
-                                                                       object pool) is fixed at compile time. */
+    static SemaphoreMock    _semaphore;                             /* Semaphore used. */ 
+    static PlatformMutexMock _mutex;                                /* Mutex used. */ 
+    static MuxDataService   _mux_objects[MBED_CONF_MUX_DLCI_COUNT]; /* Number of supported DLCIs. */
     static tx_context_t     _tx_context;                            /* Tx context. */
     static rx_context_t     _rx_context;                            /* Rx context. */    
     static state_t          _state;                                 /* General state context. */
