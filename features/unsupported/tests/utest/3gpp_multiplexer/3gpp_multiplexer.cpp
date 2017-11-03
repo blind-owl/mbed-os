@@ -2751,6 +2751,10 @@ TEST(MultiplexerOpenTestGroup, user_tx_size_lower_bound)
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = sizeof(write_byte);    
        
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                                
     const ssize_t write_ret = f_handle->write(&user_data, sizeof(user_data));
     CHECK_EQUAL(sizeof(user_data), write_ret);    
 }
@@ -2808,6 +2812,11 @@ TEST(MultiplexerOpenTestGroup, user_tx_size_upper_bound)
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = mock_write->input_param[1].param;    
         
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+    
     const ssize_t ret = f_handle->write(&(write_byte[4]), (TX_BUFFER_SIZE - 6u));
     CHECK_EQUAL((TX_BUFFER_SIZE - 6u), ret);
 }
@@ -2860,6 +2869,11 @@ TEST(MultiplexerOpenTestGroup, user_tx_2_full_frame_writes)
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = mock_write->input_param[1].param;
 
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+            
     ssize_t write_ret = f_handle->write(&user_data, sizeof(user_data));
     CHECK_EQUAL(sizeof(user_data), write_ret);    
     
@@ -2883,6 +2897,11 @@ TEST(MultiplexerOpenTestGroup, user_tx_2_full_frame_writes)
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = mock_write->input_param[1].param;        
 
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+    
     write_ret = f_handle->write(&user_data, sizeof(user_data));
     CHECK_EQUAL(sizeof(user_data), write_ret);    
 }
@@ -3043,6 +3062,11 @@ TEST(MultiplexerOpenTestGroup, user_tx_dlci_establish_during_user_tx)
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 0;            
 
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+            
     const ssize_t write_ret  = f_handle->write(&user_data, sizeof(user_data));
     CHECK_EQUAL(sizeof(user_data), write_ret);
     
@@ -3053,9 +3077,9 @@ TEST(MultiplexerOpenTestGroup, user_tx_dlci_establish_during_user_tx)
     mock_wait->func         = user_tx_dlci_establish_during_user_tx_sem_wait;   
     mock_wait->func_context = &(write_byte_uih[1]);    
 
-    mock_t * mock_lock = mock_free_get("lock");
+    mock_lock = mock_free_get("lock");
     CHECK(mock_lock != NULL);
-    mock_t * mock_unlock = mock_free_get("unlock");
+    mock_unlock = mock_free_get("unlock");
     CHECK(mock_unlock != NULL);                        
     
     /* Start test sequence. */
@@ -3101,10 +3125,20 @@ static void tx_callback_dispatch_triggered_tx_within_callback_tx_callback()
             /* Write all in a 1 write request. */
             mock_write->return_value                = mock_write->input_param[1].param;    
 
+            mock_t * mock_lock = mock_free_get("lock");
+            CHECK(mock_lock != NULL);
+            mock_t * mock_unlock = mock_free_get("unlock");
+            CHECK(mock_unlock != NULL);
+    
             /* This write is started when this callback function returns. */
             ssize_t ret = m_file_handle[0]->write(&user_data, sizeof(user_data));
             CHECK_EQUAL(sizeof(user_data), ret);   
 
+            mock_lock = mock_free_get("lock");
+            CHECK(mock_lock != NULL);
+            mock_unlock = mock_free_get("unlock");
+            CHECK(mock_unlock != NULL);
+            
             /* This write request will set the pending TX callback, and triggers this function to be called 2nd time. */
             const uint8_t user_data_2 = 0xA5u;
             ret                       = m_file_handle[0]->write(&user_data_2, sizeof(user_data_2));
@@ -3176,9 +3210,19 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_triggered_tx_within_callback
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 0;        
    
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+    
     /* 1st write request accepted by the implementation. */
     ssize_t ret = (m_file_handle[0])->write(&user_data, sizeof(user_data));
     CHECK_EQUAL(sizeof(user_data), ret);
+    
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
     
     /* 1st write request not yet completed by the implementation, issue 2nd request which sets the pending TX callback. 
     */
@@ -3255,6 +3299,11 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_set_pending_multiple_times_f
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 0;        
    
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+    
     /* 1st write request accepted by the implementation. */
     ssize_t ret = (m_file_handle[0])->write(&user_data, sizeof(user_data));
     CHECK_EQUAL(sizeof(user_data), ret);
@@ -3264,6 +3313,10 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_set_pending_multiple_times_f
     uint8_t user_data_2 = 0xA5u;
     uint8_t i           = 2u;
     do {
+        mock_lock = mock_free_get("lock");
+        CHECK(mock_lock != NULL);
+        mock_unlock = mock_free_get("unlock");
+        CHECK(mock_unlock != NULL);        
         ret = (m_file_handle[0])->write(&user_data_2, sizeof(user_data_2));
         CHECK_EQUAL(0, ret); 
         
@@ -3361,12 +3414,21 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_set_pending_for_all_dlcis)
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 0;        
    
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+    
     /* 1st write request accepted by the implementation. */
     ssize_t write_ret = (m_file_handle[0])->write(&user_data, sizeof(user_data));
     CHECK_EQUAL(sizeof(user_data), write_ret);
     
     /* TX cycle in progress, all further write request will fail. */
     for (uint8_t i = 0; i!= MAX_DLCI_COUNT; ++i) {
+        mock_lock = mock_free_get("lock");
+        CHECK(mock_lock != NULL);
+        mock_unlock = mock_free_get("unlock");
+        CHECK(mock_unlock != NULL);        
         ssize_t write_ret = (m_file_handle[i])->write(&user_data, sizeof(user_data));
         CHECK_EQUAL(0, write_ret);        
     }
@@ -3412,11 +3474,21 @@ static void tx_callback_dispatch_rollover_tx_pending_bitmask_tx_callback()
         /* Write all in a 1 write request, which will guarantee callback processing continues within current disptach 
            loop. */
         mock_write->return_value                = mock_write->input_param[1].param;    
-            
+
+        mock_t * mock_lock = mock_free_get("lock");
+        CHECK(mock_lock != NULL);
+        mock_t * mock_unlock = mock_free_get("unlock");
+        CHECK(mock_unlock != NULL);
+    
         /* 1st write request accepted by the implementation: TX cycle not finished. */
         ssize_t write_ret = (m_file_handle[0])->write(&user_data, sizeof(user_data));
         CHECK_EQUAL(sizeof(user_data), write_ret);     
         
+        mock_lock = mock_free_get("lock");
+        CHECK(mock_lock != NULL);
+        mock_unlock = mock_free_get("unlock");
+        CHECK(mock_unlock != NULL);
+    
         /* TX cycle start requested by write call above, now set pending bit for the 1st DLCI of the sequence. */
         write_ret = (m_file_handle[0])->write(&user_data, sizeof(user_data));
         CHECK_EQUAL(0, write_ret);                
@@ -3489,12 +3561,21 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_rollover_tx_pending_bitmask)
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 0;        
    
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+            
     /* 1st write request accepted by the implementation: TX cycle not finished. */
     ssize_t write_ret = (m_file_handle[0])->write(&user_data, sizeof(user_data));
     CHECK_EQUAL(sizeof(user_data), write_ret);    
     
     /* TX cycle in progress, set TX pending bit for all established DLCIs. */
     for (uint8_t i = 0; i!= MAX_DLCI_COUNT; ++i) {
+        mock_lock = mock_free_get("lock");
+        CHECK(mock_lock != NULL);
+        mock_unlock = mock_free_get("unlock");
+        CHECK(mock_unlock != NULL);        
         write_ret = (m_file_handle[i])->write(&user_data, sizeof(user_data));
         CHECK_EQUAL(0, write_ret);        
     }    
@@ -3527,8 +3608,10 @@ static void tx_callback_dispatch_tx_to_different_dlci_tx_callback()
     };
         
     switch (m_user_tx_callback_tx_to_different_dlci_check_value) {
+        mock_t * mock_lock;
+        mock_t * mock_unlock;
         mock_t * mock_write;
-        ssize_t write_ret;
+        ssize_t write_ret;        
         case 0:
             /* Current context is TX callback for the 1st handle. */
             
@@ -3544,6 +3627,11 @@ static void tx_callback_dispatch_tx_to_different_dlci_tx_callback()
              * disptach loop. */
             mock_write->return_value = mock_write->input_param[1].param;    
 
+            mock_lock = mock_free_get("lock");
+            CHECK(mock_lock != NULL);
+            mock_unlock = mock_free_get("unlock");
+            CHECK(mock_unlock != NULL);                        
+    
             /* Start TX to 2nd handle. */
             write_ret = (m_file_handle[1])->write(&user_data, sizeof(user_data));
             CHECK_EQUAL(sizeof(user_data), write_ret);               
@@ -3633,12 +3721,21 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_tx_to_different_dlci_within_
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 0;        
    
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                        
+    
     /* 1st write request accepted by the implementation: TX cycle not finished. */
     ssize_t write_ret = (m_file_handle[0])->write(&user_data, sizeof(user_data));
     CHECK_EQUAL(sizeof(user_data), write_ret);    
     
     /* TX cycle in progress, set TX pending bit for all established DLCIs. */
     for (uint8_t i = 0; i!= 2u; ++i) {
+        mock_lock = mock_free_get("lock");
+        CHECK(mock_lock != NULL);
+        mock_unlock = mock_free_get("unlock");
+        CHECK(mock_unlock != NULL);                                
         write_ret = (m_file_handle[i])->write(&user_data, sizeof(user_data));
         CHECK_EQUAL(0, write_ret);        
     }    
@@ -3693,6 +3790,11 @@ static void tx_callback_dispatch_tx_to_different_dlci_not_within_current_context
             mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
             mock_write->return_value                = 0;                    
 
+            mock_t * mock_lock = mock_free_get("lock");
+            CHECK(mock_lock != NULL);
+            mock_t * mock_unlock = mock_free_get("unlock");
+            CHECK(mock_unlock != NULL);                        
+    
             /* Start TX to 2nd handle: TX cycle not finished within the current context. */
             write_ret = (m_file_handle[1])->write(&user_data, sizeof(user_data));
             CHECK_EQUAL(sizeof(user_data), write_ret);               
@@ -3783,12 +3885,21 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_tx_to_different_dlci_not_wit
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 0;        
    
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                        
+    
     /* 1st write request accepted by the implementation: TX cycle not finished. */
     ssize_t write_ret = (m_file_handle[0])->write(&user_data, sizeof(user_data));
     CHECK_EQUAL(sizeof(user_data), write_ret);    
     
     /* TX cycle in progress, set TX pending bit for all established DLCIs. */
     for (uint8_t i = 0; i!= 2u; ++i) {
+        mock_lock = mock_free_get("lock");
+        CHECK(mock_lock != NULL);
+        mock_unlock = mock_free_get("unlock");
+        CHECK(mock_unlock != NULL);                                
         write_ret = (m_file_handle[i])->write(&user_data, sizeof(user_data));
         CHECK_EQUAL(0, write_ret);        
     }    
@@ -5410,6 +5521,11 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_disc_while_tx_in_progress)
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 0;            
 
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                        
+    
     const ssize_t write_ret = f_handle->write(&user_data, sizeof(user_data));
     CHECK_EQUAL(sizeof(user_data), write_ret);    
     

@@ -1136,7 +1136,7 @@ ssize_t Mux::user_data_tx(uint8_t dlci_id, const void* buffer, size_t size)
         return 0;
     }
     
-// @todo: get mutex
+    _mutex.lock();
     
     ssize_t write_ret;
     switch (_tx_context.tx_state) {        
@@ -1181,7 +1181,7 @@ ssize_t Mux::user_data_tx(uint8_t dlci_id, const void* buffer, size_t size)
             break;
     }
        
-// @todo: release mutex
+    _mutex.unlock();
 
     return write_ret;
 }
