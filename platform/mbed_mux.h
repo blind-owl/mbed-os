@@ -538,8 +538,7 @@ private:
         RxState rx_state;                           /* Rx state machine current state. */
         uint8_t offset;                             /* Offset in the buffer where to read to. */
         uint8_t read_length;                        /* Amount to read in number of bytes. */        
-        uint8_t buffer[MBED_CONF_MUX_BUFFER_SIZE];  /* Rx buffer. */
-       
+        uint8_t buffer[MBED_CONF_MUX_BUFFER_SIZE];  /* Rx buffer. */       
     } rx_context_t;    
     
     /* Definition for state type. */
@@ -566,9 +565,8 @@ private:
     static rx_context_t     _rx_context;                            /* Rx context. */    
     static state_t          _state;                                 /* General state context. */
     static const uint8_t    _crctable[MUX_CRC_TABLE_LEN];           /* CRC table used for frame FCS. */
-    
-    static volatile uint8_t _establish_status; // @todo: => to static volatile uint8_t _shared_memory[1];
-    static volatile uint8_t _dlci_id;   
+    static uint8_t          _shared_memory;                         /* Shared memory used passing data between user and 
+                                                                       system threads. */
 };
 
 } // namespace mbed
