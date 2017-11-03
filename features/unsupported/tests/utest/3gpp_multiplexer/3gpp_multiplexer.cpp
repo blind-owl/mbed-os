@@ -1235,10 +1235,14 @@ void dlci_establish_self_initated_sem_wait_timeout(const void * context)
     
     /* --- begin frame re-transmit sequence --- */
 
+    mock_t* mock_lock;
+    mock_t* mock_unlock;    
+    mock_t* mock_write;
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_TIMEOUT_GENERATE};
-    uint8_t                                  counter       = RETRANSMIT_COUNT;
+    uint8_t counter                                        = RETRANSMIT_COUNT;    
     do {    
-        mock_t * mock_write = mock_free_get("write");
+        mock_write = mock_free_get("write");
+        CHECK(mock_write != NULL);
         mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_write->input_param[0].param        = (uint32_t)&(write_buf[0]);
         mock_write->input_param[1].param        = SABM_FRAME_LEN;
@@ -1253,6 +1257,10 @@ void dlci_establish_self_initated_sem_wait_timeout(const void * context)
         mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_write->return_value                = 0;                
 
+        mock_lock = mock_free_get("lock");
+        CHECK(mock_lock != NULL);
+        mock_unlock = mock_free_get("unlock");
+        CHECK(mock_unlock != NULL);        
         /* Trigger timer timeout. */
         mbed::EventQueueMock::io_control(eq_io_control);
         
@@ -1264,6 +1272,10 @@ void dlci_establish_self_initated_sem_wait_timeout(const void * context)
     
     /* Trigger timer to finish the re-transmission cycle and the whole request. Release the semaphore blocking the call 
        thread. */
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);    
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);            
     mock_t * mock_release = mock_free_get("release");
     CHECK(mock_release != NULL);
     mock_release->return_value = osOK;    
@@ -1793,14 +1805,17 @@ void mux_start_self_initated_sem_wait_timeout(const void *context)
 
     /* --- begin frame re-transmit sequence --- */
 
+    mock_t * mock_lock;
+    mock_t * mock_unlock;    
+    mock_t * mock_write;
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_TIMEOUT_GENERATE};
-    uint8_t                                  counter       = RETRANSMIT_COUNT;
+    uint8_t counter                                        = RETRANSMIT_COUNT;
     do {    
-        mock_t * mock_write = mock_free_get("write");
+        mock_write = mock_free_get("write");
+        CHECK(mock_write != NULL); 
         mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_write->input_param[0].param        = (uint32_t)&(write_buf[0]);        
-        mock_write->input_param[1].param        = SABM_FRAME_LEN;    
-        
+        mock_write->input_param[1].param        = SABM_FRAME_LEN;           
         mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_write->return_value                = 1;    
         
@@ -1812,6 +1827,10 @@ void mux_start_self_initated_sem_wait_timeout(const void *context)
         mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_write->return_value                = 0;                
 
+        mock_lock = mock_free_get("lock");
+        CHECK(mock_lock != NULL);        
+        mock_unlock = mock_free_get("unlock");
+        CHECK(mock_unlock != NULL);
         /* Trigger timer timeout. */
         mbed::EventQueueMock::io_control(eq_io_control);
         
@@ -1823,6 +1842,10 @@ void mux_start_self_initated_sem_wait_timeout(const void *context)
     
     /* Trigger timer to finish the re-transmission cycle and the whole request. Release the semaphore blocking the call 
        thread. */
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);      
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);    
     mock_t * mock_release = mock_free_get("release");
     CHECK(mock_release != NULL);
     mock_release->return_value = osOK;    

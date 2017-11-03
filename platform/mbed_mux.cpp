@@ -131,7 +131,7 @@ void Mux::frame_retransmit_begin()
 
 void Mux::on_timeout()
 {
-// @todo: take mutex
+    _mutex.lock();
     
     _state.is_system_thread_context = 1u;
 
@@ -157,7 +157,7 @@ void Mux::on_timeout()
     
     _state.is_system_thread_context = 0;
     
-// @todo: free mutex    
+    _mutex.unlock(); 
 }
 
 
