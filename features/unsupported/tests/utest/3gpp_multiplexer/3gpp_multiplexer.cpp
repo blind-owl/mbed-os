@@ -2976,7 +2976,19 @@ static void user_tx_dlci_establish_during_user_tx_tx_callback()
 
 static void user_tx_dlci_establish_during_user_tx_sem_wait(const void *context)
 {
-    /* 3. Finish TX cycle for user TX, which triggers the TX callback above. */
+    /* Finish the pending DLCI establishment cycle. */
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);    
+    mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
+    FileHandle *obj = NULL;
+    const mbed::Mux::MuxReturnStatus establish_ret = mbed::Mux::dlci_establish((DLCI_ID_LOWER_BOUND + 1u), 
+                                                                               status,
+                                                                               &obj);
+    CHECK_EQUAL(mbed::Mux::MUX_STATUS_INPROGRESS, establish_ret);
+    
+    /* Finish TX cycle for user TX, which triggers the TX callback above. */
     const uint8_t write_byte_sabm[6] = 
     {
         FLAG_SEQUENCE_OCTET,
@@ -2989,7 +3001,7 @@ static void user_tx_dlci_establish_during_user_tx_sem_wait(const void *context)
     const uint8_t* write_byte_uih = (const uint8_t*)context;
     single_complete_write_cycle(&(write_byte_uih[0]), (UIH_FRAME_LEN - 1u), &(write_byte_sabm[0]));    
     
-    /* 4. Finish the pending DLCI establishment cycle. */
+    /* Finish the pending DLCI establishment cycle. */
     const uint8_t read_byte_sabm[5] = 
     {
         3u | ((DLCI_ID_LOWER_BOUND + 1u) << 2),         
@@ -3009,10 +3021,11 @@ static void user_tx_dlci_establish_during_user_tx_sem_wait(const void *context)
  * TC - Ensure successfull DLCI establishment is done when TX is occupied by user TX request
  *
  * Test sequence:
- * 1. Occupy TX by user TX
- * 2. Start DLCI establishment => put pending as TX occupied
- * 3. Finish the user TX
- * 4. FInish the DLCI establishment put pending in phase 2
+ * - Occupy TX by user TX
+ * - Request DLCI establishment => put pending as TX occupied
+ * - Request DLCI establishment => rejected as previous one pending
+ * - Finish the user TX
+ * - Finish the DLCI establishment put pending
  * 
  * Expected outcome:
  * - Requested DLCI established
@@ -3034,7 +3047,7 @@ TEST(MultiplexerOpenTestGroup, user_tx_dlci_establish_during_user_tx)
     FileHandle* f_handle = dlci_self_iniated_establish(ROLE_INITIATOR, DLCI_ID_LOWER_BOUND);   
     f_handle->sigio(user_tx_dlci_establish_during_user_tx_tx_callback);
     
-    /* 1. Start user TX write cycle, not finished. */
+    /* Start user TX write cycle, not finished. */
     const uint8_t user_data         = 0xA5u;    
     const uint8_t write_byte_uih[7] = 
     {
@@ -3070,7 +3083,7 @@ TEST(MultiplexerOpenTestGroup, user_tx_dlci_establish_during_user_tx)
     const ssize_t write_ret  = f_handle->write(&user_data, sizeof(user_data));
     CHECK_EQUAL(sizeof(user_data), write_ret);
     
-    /* 2. Start new DLCI establishment while user TX in progress, put pending. */
+    /* Start new DLCI establishment while user TX in progress, put pending. */
     mock_t * mock_wait = mock_free_get("wait");
     CHECK(mock_wait != NULL);
     mock_wait->return_value = 1;

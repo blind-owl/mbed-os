@@ -976,7 +976,7 @@ Mux::MuxReturnStatus Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &st
         return MUX_STATUS_NO_RESOURCE;
     }
     if (_state.is_dlci_open_pending) {
-        _mutex.unlock(); // @todo TC needed
+        _mutex.unlock();
         
         return MUX_STATUS_INPROGRESS;        
     }
