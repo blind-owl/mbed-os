@@ -16,12 +16,14 @@ ssize_t MuxDataService::read(void *buffer, size_t size)
     
 off_t MuxDataService::seek(off_t offset, int whence)
 {
+    MBED_ASSERT(false);
     return 0;
 }
     
 
 int MuxDataService::close()
 {
+    MBED_ASSERT(false);    
     return 0;
 }
     

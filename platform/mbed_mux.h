@@ -74,16 +74,10 @@ public:
      */
     virtual ssize_t read(void *buffer, size_t size); 
     
-    /** Not supported by the implementation. 
-     *
-     * @todo: need decide what is the proper mbed way out of the box functionality(ASSERT, error code return etc.) 
-     */    
+    /** Not supported by the implementation. */
     virtual off_t seek(off_t offset, int whence = SEEK_SET);
     
-    /** Not supported by the implementation. 
-     *
-     * @todo: need decide what is the proper mbed way out of the box functionality(ASSERT, error code return etc.) 
-     */        
+    /** Not supported by the implementation. */
     virtual int close();
     
     /** Register a callback on completion of enqueued write and read operations. 
