@@ -954,28 +954,33 @@ Mux::MuxReturnStatus Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &st
         return MUX_STATUS_INVALID_RANGE;
     }
     
-// @todo: add mutex_lock    
+    _mutex.lock();
 
     MBED_ASSERT(!_state.is_system_thread_context);
 
     if (!_state.is_mux_open) {
-// @todo: add mutex_free                
+        _mutex.unlock();
+        
         return MUX_STATUS_MUX_NOT_OPEN;
     }
     if (is_dlci_q_full()) {
-// @todo: add mutex_free                        
+        _mutex.unlock();
+        
         return MUX_STATUS_NO_RESOURCE;
     }
     if (is_dlci_in_use(dlci_id)) {
-// @todo: add mutex_free                        
+        _mutex.unlock();
+
         return MUX_STATUS_NO_RESOURCE;
     }
     if (_state.is_dlci_open_pending) {
-// @todo: add mutex_free                        
+        _mutex.unlock(); // @todo TC needed
+        
         return MUX_STATUS_INPROGRESS;        
     }
     if (_state.is_dlci_open_running) {
-// @todo: add mutex_free                        
+        _mutex.unlock(); 
+        
         return MUX_STATUS_INPROGRESS;                
     }
        
@@ -987,7 +992,8 @@ Mux::MuxReturnStatus Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &st
             _tx_context.retransmit_counter = RETRANSMIT_COUNT;
             tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
             _state.is_dlci_open_running = 1u;              
-// @todo: add mutex_free here               
+            
+            _mutex.unlock(); 
             ret_wait = _semaphore.wait();
             MBED_ASSERT(ret_wait == 1);
             status = static_cast<MuxEstablishStatus>(_establish_status);
@@ -1001,7 +1007,8 @@ Mux::MuxReturnStatus Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &st
         case TX_NORETRANSMIT:
             _state.is_dlci_open_pending = 1u;
             _dlci_id                    = dlci_id;
-// @todo: add mutex_free               
+            
+            _mutex.unlock(); 
             ret_wait = _semaphore.wait();
             MBED_ASSERT(ret_wait == 1);        
             status = static_cast<MuxEstablishStatus>(_establish_status);

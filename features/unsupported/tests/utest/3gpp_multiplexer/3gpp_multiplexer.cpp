@@ -1157,6 +1157,11 @@ FileHandle* dlci_self_iniated_establish(Role role, uint8_t dlci_id)
     const dlci_establish_context_t context = {dlci_id, role};
     mock_wait->func_context                = &context;
 
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                                
+       
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
     FileHandle *obj                      = NULL;
@@ -1184,6 +1189,11 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_mux_not_open)
     CHECK(mock_sigio != NULL);      
     mbed::Mux::serial_attach(&fh_mock);
 
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);            
+    
     /* Start test sequence. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
     FileHandle *obj                      = NULL;    
@@ -1317,6 +1327,11 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_timeout)
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 0;                            
 
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                                    
+    
     /* Start test sequence. fails with timeout. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
     FileHandle *obj                      = NULL;        
@@ -1387,6 +1402,11 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_success_after_timeo
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 0;                            
     
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                                
+    
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
     FileHandle *obj                      = NULL;        
@@ -1424,6 +1444,11 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_dlci_id_used)
     const uint8_t dlci_id = 1;
     dlci_self_iniated_establish(ROLE_INITIATOR, dlci_id);
    
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                            
+    
     /* 2nd establishment with the same DLCI id - fail. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
     FileHandle *obj                      = NULL;
@@ -1463,6 +1488,11 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_all_dlci_ids_used)
         --i;
         ++dlci_id;
     } while (i != 0);
+    
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                            
     
     /* All available DLCI ids consumed. Next request will fail. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
@@ -1524,6 +1554,11 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_consume_all_dlci_id
         ++dlci_id;        
     }
 
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                        
+    
     /* All available DLCI ids consumed. Next request will fail. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
     obj = NULL;
@@ -1609,6 +1644,11 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_rejected_by_peer)
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 0;                    
 
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                                
+    
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX); 
     FileHandle *obj                      = NULL;    
@@ -1980,12 +2020,13 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_id_oob)
     mock_t * mock_sigio = mock_free_get("sigio");    
     CHECK(mock_sigio != NULL);      
     mbed::Mux::serial_attach(&fh_mock);
-   
+      
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
     FileHandle *obj = NULL;    
-    uint32_t ret    = mbed::Mux::dlci_establish((DLCI_ID_LOWER_BOUND - 1u), status, &obj);
+    uint32_t ret    = mbed::Mux::dlci_establish((DLCI_ID_LOWER_BOUND - 1u), status, &obj); // @todo: fix ret code type
     CHECK_EQUAL(2, ret);
     CHECK_EQUAL(obj, NULL);
+       
     ret = mbed::Mux::dlci_establish((DLCI_ID_UPPER_BOUND + 1u), status, &obj);
     CHECK_EQUAL(2, ret);   
     CHECK_EQUAL(obj, NULL);    
@@ -2140,14 +2181,24 @@ void dlci_establish_self_initated_dm_tx_in_progress_sem_wait(const void *context
     const uint8_t* write_byte_dm = (const uint8_t*)context;
     peer_iniated_response_tx(&write_byte_dm[0], (DM_FRAME_LEN - 1u), &write_byte[0], false, NULL);    
 
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);  
+    
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
-    FileHandle *obj                      = NULL;
+    FileHandle *obj                = NULL;
     mbed::Mux::MuxReturnStatus ret = mbed::Mux::dlci_establish(1u, status, &obj);
     CHECK_EQUAL(mbed::Mux::MUX_STATUS_INPROGRESS, ret);
     CHECK_EQUAL(NULL, obj);
     
     /* TX remainder of the pending DLCI establishment request. */
     self_iniated_request_tx(&(write_byte[1]), (sizeof(write_byte) - sizeof(write_byte[0])), FRAME_HEADER_READ_LEN);
+    
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
     
     obj = NULL;
     ret = mbed::Mux::dlci_establish(1u, status, &obj);
@@ -2204,7 +2255,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_dm_tx_in_progress)
         1u | (dlci_id << 2),
         (FRAME_TYPE_DISC | PF_BIT), 
         LENGTH_INDICATOR_OCTET,
-        fcs_calculate(&read_byte[/*1*/0], 3u),
+        fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
     };           
 
@@ -2231,6 +2282,12 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_dm_tx_in_progress)
     mock_wait->func         = dlci_establish_self_initated_dm_tx_in_progress_sem_wait;   
     mock_wait->func_context = &(write_byte[1]);    
 
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);        
+    mock_unlock->magic = 1;
+       
     /* Start test sequence. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
     FileHandle *obj                      = NULL;
@@ -2238,6 +2295,11 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_iniated_dm_tx_in_progress)
     CHECK_EQUAL(mbed::Mux::MUX_STATUS_SUCCESS, ret);
     CHECK_EQUAL(mbed::Mux::MUX_ESTABLISH_SUCCESS, status);      
     CHECK(obj != NULL);
+    
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
     
     /* Fails as DLCI ID allready in use. */
     obj = NULL;
@@ -2480,6 +2542,11 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_self_initiated_full_frame_write_in
     CHECK(mock_wait != NULL);
     mock_wait->return_value = 1;
     mock_wait->func         = dlci_establish_self_initiated_full_frame_write_in_loop_succes_sem_wait;    
+    
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                            
     
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
@@ -2923,6 +2990,11 @@ TEST(MultiplexerOpenTestGroup, user_tx_dlci_establish_during_user_tx)
     mock_wait->func         = user_tx_dlci_establish_during_user_tx_sem_wait;   
     mock_wait->func_context = &(write_byte_uih[1]);    
 
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                        
+    
     /* Start test sequence. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);  
     FileHandle *obj = NULL;
@@ -3183,6 +3255,12 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_set_pending_for_all_dlcis)
         
         ++dlci_id;
     }    
+    
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                    
+    
     
     /* All available DLCI ids consumed. Next request will fail. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX);    
@@ -4863,6 +4941,11 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_invalid_cr_and_pf_bit)
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 0;                    
 
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                        
+    
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX); 
     FileHandle *obj                      = NULL;    
@@ -5084,6 +5167,11 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_invalid_cr_and_pf_bit)
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 0;                    
 
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                        
+    
     /* Start test sequence. Test set mocks. */
     mbed::Mux::MuxEstablishStatus status(mbed::Mux::MUX_ESTABLISH_MAX); 
     FileHandle *obj                      = NULL;    

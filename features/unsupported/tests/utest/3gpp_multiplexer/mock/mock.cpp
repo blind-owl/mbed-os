@@ -3,6 +3,10 @@
 #include <stddef.h>
 #include <string.h>
 
+namespace mbed {
+extern void trace(char *string, int data);
+}
+
 #define DB_LEN 13u
 
 static mock_t db[DB_LEN];
@@ -27,6 +31,7 @@ UT_PRINT(__FUNCTION__);
     for (uint8_t i = 0; i != (sizeof(db) / sizeof(db[0])); ++i) {
         if ((db[i].is_valid)) {   
             UT_PRINT(db[i].name);
+            mbed::trace("magic: ", db[i].magic);
             FAIL("FAILURE: mock_verify!");
         }
     }
