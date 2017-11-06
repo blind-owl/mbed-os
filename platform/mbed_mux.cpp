@@ -116,8 +116,6 @@ void Mux::module_init()
     for (uint8_t i = 0; i != end; ++i) {
         _mux_objects[i]._dlci = MUX_DLCI_INVALID_ID;
     }
-    
-    _serial->set_blocking(false);
 }
 
 
@@ -868,6 +866,7 @@ void Mux::serial_attach(FileHandle *serial)
     _serial = serial;
     
     _serial->sigio(Mux::on_sigio);
+    _serial->set_blocking(false);
 }
 
 
