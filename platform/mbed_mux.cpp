@@ -115,7 +115,9 @@ void Mux::module_init()
     const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);
     for (uint8_t i = 0; i != end; ++i) {
         _mux_objects[i]._dlci = MUX_DLCI_INVALID_ID;
-    }    
+    }
+    
+    _serial->set_blocking(false);
 }
 
 
@@ -1057,7 +1059,7 @@ Mux::MuxReturnStatus Mux::mux_start(Mux::MuxEstablishStatus &status)
     }
 
     switch (_tx_context.tx_state) {
-        int              ret_wait;
+        int ret_wait;
         case TX_IDLE:
             /* Construct the frame, start the tx sequence, and suspend the call thread upon write sequence success. */
             sabm_request_construct(0);
