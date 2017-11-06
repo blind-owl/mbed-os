@@ -114,7 +114,7 @@ void Mux::module_init()
     
     const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);
     for (uint8_t i = 0; i != end; ++i) {
-        _mux_objects[i].dlci = MUX_DLCI_INVALID_ID;
+        _mux_objects[i]._dlci = MUX_DLCI_INVALID_ID;
     }    
 }
 
@@ -390,7 +390,7 @@ bool Mux::is_dlci_in_use(uint8_t dlci_id)
 {  
     const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);
     for (uint8_t i = 0; i != end; ++i) {   
-        if (_mux_objects[i].dlci == dlci_id) {
+        if (_mux_objects[i]._dlci== dlci_id) {
             return true;
         }        
     }
@@ -480,7 +480,7 @@ void Mux::tx_callback_pending_bit_set(uint8_t dlci_id)
     const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);    
 
     do {
-        if (_mux_objects[i].dlci == dlci_id) {
+        if (_mux_objects[i]._dlci== dlci_id) {
             break;
         }
         
@@ -903,7 +903,7 @@ bool Mux::is_dlci_q_full()
 {
     const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);
     for (uint8_t i = 0; i != end; ++i) {  
-        if (_mux_objects[i].dlci == MUX_DLCI_INVALID_ID) {     
+        if (_mux_objects[i]._dlci== MUX_DLCI_INVALID_ID) {     
             return false;
         }
     }
@@ -917,8 +917,8 @@ void Mux::dlci_id_append(uint8_t dlci_id)
     uint8_t i         = 0;
     const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);    
     do {
-        if (_mux_objects[i].dlci == MUX_DLCI_INVALID_ID) {
-            _mux_objects[i].dlci = dlci_id;
+        if (_mux_objects[i]._dlci== MUX_DLCI_INVALID_ID) {
+            _mux_objects[i]._dlci= dlci_id;
             
             break;
         }
@@ -936,7 +936,7 @@ MuxDataService * Mux::file_handle_get(uint8_t dlci_id)
     MuxDataService* obj = NULL;
     const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);
     for (uint8_t i = 0; i != end; ++i) {   
-        if (_mux_objects[i].dlci == dlci_id) {
+        if (_mux_objects[i]._dlci== dlci_id) {
             obj = &(_mux_objects[i]);
             
             break;

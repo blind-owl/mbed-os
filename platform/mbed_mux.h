@@ -93,7 +93,7 @@ public:
     virtual void sigio(Callback<void()> func);
     
     /** Constructor. */
-    MuxDataService() : dlci(MUX_DLCI_INVALID_ID) {};
+    MuxDataService() : _dlci(MUX_DLCI_INVALID_ID) {};
     
 private:
 
@@ -103,7 +103,7 @@ private:
     /* Deny assignment operator. */    
     MuxDataService& operator=(const MuxDataService& obj);
         
-    uint8_t dlci;               /* DLCI number. Valid range 1 - 63. */    
+    uint8_t          _dlci;     /* DLCI number. Valid range 1 - 63. */    
     Callback<void()> _sigio_cb; /* Registered signal callback. */        
 };
 

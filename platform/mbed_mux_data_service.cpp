@@ -4,7 +4,7 @@ namespace mbed {
    
 ssize_t MuxDataService::write(const void* buffer, size_t size)
 {
-    return Mux::user_data_tx(dlci, buffer, size);
+    return Mux::user_data_tx(_dlci, buffer, size);
 }
     
 
