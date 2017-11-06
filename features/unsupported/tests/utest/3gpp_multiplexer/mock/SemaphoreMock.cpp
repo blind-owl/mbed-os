@@ -6,9 +6,6 @@ namespace mbed {
 
 int32_t SemaphoreMock::wait()
 {
-#if 0    
-    UT_PRINT(__FUNCTION__);            
-#endif    
     mock_t *mock = mock_open(__FUNCTION__, MockInvalidateTypeNo);
     if (mock == NULL) {
         FAIL("FAILURE: No mock object found!");
@@ -19,14 +16,12 @@ int32_t SemaphoreMock::wait()
     if (mock->func != NULL) {        
         mock->func(mock->func_context);
     }
-   
-#if 0        
-    UT_PRINT("CALL:mock_invalidate");            
-#endif        
+  
     mock_invalidate(__FUNCTION__);
         
     return (int32_t)mock->return_value;
 }
+
 
 osStatus SemaphoreMock::release(void)
 {
@@ -38,6 +33,5 @@ osStatus SemaphoreMock::release(void)
 
     return (osStatus)mock->return_value; 
 }
- 
  
 } // namespace mbed

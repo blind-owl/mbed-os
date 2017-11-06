@@ -15,8 +15,7 @@ void EventQueueMock::io_control(const io_control_t &control)
         case IO_TYPE_DEFERRED_CALL_GENERATE:
             _call_cb();
             break;
-        case IO_TYPE_TIMEOUT_GENERATE:            
-//trace("IO_TYPE_TIMEOUT_GENERATE: ", 0);                           
+        case IO_TYPE_TIMEOUT_GENERATE:           
             _call_in_cb();
             break;
         default:
@@ -53,9 +52,7 @@ int EventQueueMock::call_in(int ms, Callback<void()> func)
     }   
     
     _call_in_cb = func;
-    
-//trace("EventQueueMock::call_in", 0);
-
+   
     return mock->return_value;
 }
 

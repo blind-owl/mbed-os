@@ -13,9 +13,6 @@ static mock_t db[DB_LEN];
 
 void mock_init(void)
 {
-#if 0    
-UT_PRINT(__FUNCTION__);    
-#endif
     for (uint8_t i = 0; i != (sizeof(db) / sizeof(db[0])); ++i) {
         db[i].is_valid  = 0;
         db[i].magic     = 0;
@@ -25,9 +22,6 @@ UT_PRINT(__FUNCTION__);
 
 void mock_verify(void)
 {
-#if 0
-UT_PRINT(__FUNCTION__);
-#endif // 0
     for (uint8_t i = 0; i != (sizeof(db) / sizeof(db[0])); ++i) {
         if ((db[i].is_valid)) {   
             UT_PRINT(db[i].name);
@@ -40,15 +34,8 @@ UT_PRINT(__FUNCTION__);
 
 void mock_invalidate(const char *name)
 {
-#if 0
-UT_PRINT(__FUNCTION__);                
-UT_PRINT(name);
-#endif // 0
     /* Look-up database for correct mock. */
     for (uint8_t i = 0; i != (sizeof(db) / sizeof(db[0])); ++i) {
-#if 0        
-UT_PRINT(db[i].name);        
-#endif // 0
         if ((strcmp(name, db[i].name) == 0)) {
             CHECK(db[i].is_valid);        
             db[i].is_valid = 0;
@@ -63,10 +50,6 @@ UT_PRINT(db[i].name);
 
 mock_t * mock_open(const char *name, MockInvalidateType type)
 {
-#if 0
-UT_PRINT(__FUNCTION__);                    
-UT_PRINT(name);
-#endif
     mock_t * obj = NULL;
     
     /* Look-up database for correct mock which is allocated. */
@@ -75,11 +58,7 @@ UT_PRINT(name);
             if (type == MockInvalidateTypeYes) {
                 db[i].is_valid = 0;
             } else {
-#if 0                
-UT_PRINT(__FUNCTION__);                                    
-UT_PRINT(name);
-UT_PRINT("!NO_INVALIDATE");        
-#endif // 0
+                /* Add trace if needed. */
             }
                 
             obj = &db[i];
@@ -94,10 +73,6 @@ UT_PRINT("!NO_INVALIDATE");
 
 mock_t * mock_free_get(const char *name)
 {
-#if 0    
-UT_PRINT(__FUNCTION__);                    
-UT_PRINT(name);
-#endif // 0
     mock_t * obj = NULL;
     
     /* Look-up database for free place and occupy it if found. */

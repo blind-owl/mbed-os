@@ -76,15 +76,8 @@ ssize_t FileHandleMock::write(const void *buffer, size_t size)
 
 short FileHandleMock::poll(short events) const
 {
-//trace("FileHandleMock::poll ", 0);
-
-    mock_t *mock = mock_open(__FUNCTION__, MockInvalidateTypeYes);
-    if (mock == NULL) {
-        FAIL("FAILURE: No mock object found!");
-        return -1;
-    }
-   
-    return (short)mock->return_value;   
+    FAIL("FAILURE: not supported");
+    return 0;
 }
     
     
@@ -101,25 +94,15 @@ void FileHandleMock::sigio(Callback<void()> func)
 
 off_t FileHandleMock::seek(off_t offset, int whence)
 {
-    mock_t *mock = mock_open(__FUNCTION__, MockInvalidateTypeYes);
-    if (mock == NULL) {
-        FAIL("FAILURE: No mock object found!");
-        return -1;
-    }
-    
-    return -1;
+    FAIL("FAILURE: not supported");
+    return 0;
 }
 
 
 int FileHandleMock::close()
 {
-    mock_t *mock = mock_open(__FUNCTION__, MockInvalidateTypeYes);
-    if (mock == NULL) {
-        FAIL("FAILURE: No mock object found!");
-        return -1;
-    }
-    
-    return -1;
+    FAIL("FAILURE: not supported");
+    return 0;
 }
     
 } // namespace mbed

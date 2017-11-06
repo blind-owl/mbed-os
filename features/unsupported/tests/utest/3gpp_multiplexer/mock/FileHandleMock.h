@@ -40,9 +40,9 @@ public:
     
     virtual ssize_t read(void *buffer, size_t size);
     virtual ssize_t write(const void *buffer, size_t size);
-    virtual short poll(short events) const;   
     virtual void sigio(Callback<void()> func);
-    
+
+    virtual short poll(short events) const;       
     virtual off_t seek(off_t offset, int whence = SEEK_SET);
     virtual int close();
 private:
