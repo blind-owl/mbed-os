@@ -54,7 +54,7 @@ storage requirements correctly at compile time.
 namespace mbed {
 
 class MuxDataService : public FileHandle {
-friend class Mux;    
+friend class Mux;
 public:
 
     /** Enqueue user data for transmission. 
@@ -121,6 +121,10 @@ typedef enum
     MUX_ESTABLISH_TIMEOUT,     /* Timeout occurred for the request. */
     MUX_ESTABLISH_MAX          /* Enumeration upper bound. */
 } MuxEstablishStatus;
+
+/* @ref MuxEstablishStatus type assigned to _shared_memory variable, which has sizeof(uint8_t) storage class. Enforce 
+   expected behaviour compile time. */
+MBED_STATIC_ASSERT(sizeof(MuxEstablishStatus) == sizeof(uint8_t), "");
 
 /* Definition for multiplexer establishment return code type. */
 typedef enum

@@ -197,7 +197,7 @@ void Mux::on_rx_frame_ua()
                 rx_dlci_id = _rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] >> 2;                
                 if (tx_dlci_id == rx_dlci_id) {
                     _event_q->cancel(_tx_context.timer_id);           
-                    _shared_memory = Mux::MUX_ESTABLISH_SUCCESS;
+                    _shared_memory = MUX_ESTABLISH_SUCCESS;
                     if (rx_dlci_id != 0) {
                         dlci_id_append(rx_dlci_id);
                     } 
@@ -234,7 +234,7 @@ void Mux::on_rx_frame_dm()
                 rx_dlci_id = _rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] >> 2;
                 if (tx_dlci_id == rx_dlci_id) {                
                     _event_q->cancel(_tx_context.timer_id);           
-                    _shared_memory = Mux::MUX_ESTABLISH_REJECT;
+                    _shared_memory = MUX_ESTABLISH_REJECT;
                     os_status      = _semaphore.release();
                     MBED_ASSERT(os_status == osOK);       
                     tx_state_change(TX_IDLE, tx_idle_entry_run, null_action);
