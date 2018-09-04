@@ -1,7 +1,7 @@
 {
     "1" : {"mcu": "K64F",
-        "port":"/dev/ttyACM0",
-        "disk":"/media/jarpoy01/DAPLINK",
+        "port":"COM8",
+        "disk":"D:\\",
         "peripherals": []
     }
 }

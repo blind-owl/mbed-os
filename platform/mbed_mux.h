@@ -20,6 +20,32 @@
 
 #include <stdint.h>
 #include "FileHandle.h"
+
+#if 0 // @toto: enable when moving to gtest
+#include "nsapi_types.h"
+#endif
+
+enum nsapi_error {
+    NSAPI_ERROR_OK                  =  0,        /*!< no error */
+    NSAPI_ERROR_WOULD_BLOCK         = -3001,     /*!< no data is not available but call is non-blocking */
+    NSAPI_ERROR_UNSUPPORTED         = -3002,     /*!< unsupported functionality */
+    NSAPI_ERROR_PARAMETER           = -3003,     /*!< invalid configuration */
+    NSAPI_ERROR_NO_CONNECTION       = -3004,     /*!< not connected to a network */
+    NSAPI_ERROR_NO_SOCKET           = -3005,     /*!< socket not available for use */
+    NSAPI_ERROR_NO_ADDRESS          = -3006,     /*!< IP address is not known */
+    NSAPI_ERROR_NO_MEMORY           = -3007,     /*!< memory resource not available */
+    NSAPI_ERROR_NO_SSID             = -3008,     /*!< ssid not found */
+    NSAPI_ERROR_DNS_FAILURE         = -3009,     /*!< DNS failed to complete successfully */
+    NSAPI_ERROR_DHCP_FAILURE        = -3010,     /*!< DHCP failed to complete successfully */
+    NSAPI_ERROR_AUTH_FAILURE        = -3011,     /*!< connection to access point failed */
+    NSAPI_ERROR_DEVICE_ERROR        = -3012,     /*!< failure interfacing with the network processor */
+    NSAPI_ERROR_IN_PROGRESS         = -3013,     /*!< operation (eg connect) in progress */
+    NSAPI_ERROR_ALREADY             = -3014,     /*!< operation (eg connect) already in progress */
+    NSAPI_ERROR_IS_CONNECTED        = -3015,     /*!< socket is already connected */
+    NSAPI_ERROR_CONNECTION_LOST     = -3016,     /*!< connection lost */
+    NSAPI_ERROR_CONNECTION_TIMEOUT  = -3017,     /*!< connection timed out */
+};
+
 #include "SemaphoreMock.h"
 #include "PlatformMutexMock.h"
 
@@ -107,6 +133,17 @@ private:
     Callback<void()> _sigio_cb; /* Registered signal callback. */        
 };
 
+class MuxCallback {
+
+public:
+    
+    /** Open multiplexer channel completion callback.
+     *
+     * @param obj Valid object upon channel open success, NULL for a failure.
+     */    
+    virtual void channel_open_run(FileHandle *obj) = 0;
+};
+
 class EventQueueMock;
 class FileHandle;
 class Mux {    
@@ -139,7 +176,15 @@ typedef enum
 
     /** Module init. */
     static void module_init();
-    
+
+    /** Open multiplexer channel.
+     *
+     * @return NSAPI_ERROR_OK          Operation accepted for execution. Completion callback will be called.
+     * @return NSAPI_ERROR_IN_PROGRESS Operation allready inprogress and not accpeted for execution. Completion callback 
+     *                                 will not be called
+     */
+    static nsapi_error channel_open();
+#if 0    
     /** Establish the multiplexer control channel.
      *
      *  @note: Relevant request specific parameters are fixed at compile time within multiplexer component.     
@@ -172,6 +217,7 @@ typedef enum
      *                                   allready in use.
      */        
     static MuxReturnStatus dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHandle **obj);
+#endif // 0    
         
     /** Attach serial interface to the object.
      *
@@ -184,6 +230,8 @@ typedef enum
      *  @param event_queue Event queue interface to be used.
      */            
     static void eventqueue_attach(EventQueueMock *event_queue);
+    
+    static void callback_attach(MuxCallback &obj) {_cb = &obj;}
    
 private:
      
@@ -561,6 +609,8 @@ private:
         uint16_t is_user_rx_ready         : 1; /* True when user RX is ready/available. */       
     } state_t;
     
+    static MuxCallback     *_cb;
+    
     static FileHandle      *_serial;                                /* Serial used. */  
     static EventQueueMock  *_event_q;                               /* Event queue used. */ 
     static SemaphoreMock    _semaphore;                             /* Semaphore used. */ 
@@ -570,8 +620,11 @@ private:
     static rx_context_t     _rx_context;                            /* Rx context. */    
     static state_t          _state;                                 /* General state context. */
     static const uint8_t    _crctable[MUX_CRC_TABLE_LEN];           /* CRC table used for frame FCS. */
+#if 0    
     static uint8_t          _shared_memory;                         /* Shared memory used passing data between user and 
                                                                        system threads. */
+#endif 
+    static uint8_t _dlci;
 };
 
 } // namespace mbed
