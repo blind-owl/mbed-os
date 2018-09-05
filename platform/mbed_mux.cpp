@@ -96,6 +96,8 @@ extern void trace(char *string, int data);
 
 void Mux::module_init()
 {
+    _dlci = 1u;
+    
     _state.is_mux_open              = 0;
     _state.is_mux_open_pending      = 0;
     _state.is_mux_open_running      = 0;
@@ -210,6 +212,7 @@ void Mux::on_rx_frame_ua()
                     _shared_memory = MUX_ESTABLISH_SUCCESS;
 #endif                     
                     if (rx_dlci_id != 0) {
+                        _state.is_dlci_open_running = 0;
                         dlci_id_append(rx_dlci_id);
                         
                         FileHandle *fh = file_handle_get(rx_dlci_id);
@@ -218,6 +221,7 @@ void Mux::on_rx_frame_ua()
                         _cb->channel_open_run(fh);
                     } else { 
                         /* Store current state and request scheduling of channel creation procedure. */
+                        _state.is_mux_open_running  = 0;
                         _state.is_mux_open          = 1u;    
                         _state.is_dlci_open_pending = 1u;
                     }
@@ -1132,24 +1136,35 @@ Mux::MuxReturnStatus Mux::mux_start(Mux::MuxEstablishStatus &status)
 nsapi_error Mux::channel_open()
 {
     _mutex.lock();
+    
+    if (_state.is_mux_open_running) {
+        _mutex.unlock();
+        
+        return NSAPI_ERROR_IN_PROGRESS;
+    }
+    if (_state.is_dlci_open_running) {
+        _mutex.unlock();
+        
+        return NSAPI_ERROR_IN_PROGRESS;
+    }    
 
     switch (_tx_context.tx_state) {
         int ret_wait;
         case TX_IDLE:
-            /* Construct the frame, start the tx sequence, and suspend the call thread upon write sequence success. */
-            sabm_request_construct(0);
-            _tx_context.retransmit_counter = RETRANSMIT_COUNT;
-            tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
-            _state.is_mux_open_running = 1u;
-#if 0
-            _mutex.unlock();
-            ret_wait = _semaphore.wait();
-            MBED_ASSERT(ret_wait == 1);
-            status = static_cast<MuxEstablishStatus>(_shared_memory);
-            if (status == MUX_ESTABLISH_SUCCESS) {
-                _state.is_mux_open = 1u;
+            if (_state.is_mux_open) {
+                /* Multiplexer control channel exists, start creation of user channel. */                
+                
+                sabm_request_construct(_dlci++);
+                _state.is_dlci_open_running = 1u;                                
+            } else {
+                /* Start creation of multiplexer control channel. */
+            
+                sabm_request_construct(0);
+                _state.is_mux_open_running = 1u;                                     
             }
-#endif 
+            
+            _tx_context.retransmit_counter = RETRANSMIT_COUNT;
+            tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);                
             break;
         case TX_INTERNAL_RESP:
             MBED_ASSERT(false);
@@ -1170,9 +1185,6 @@ nsapi_error Mux::channel_open()
             MBED_ASSERT(false);
             break;
     };
-#if 0
-    _state.is_mux_open_running = 0; // @todo: move this to proper place 
-#endif 
     
     _mutex.unlock();
     

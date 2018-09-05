@@ -6004,20 +6004,20 @@ void mux_self_iniated_open(MuxCallbackTest &callback)
     mux_self_iniated_open(FLAG_SEQUENCE_OCTET_LEN, READ_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO, callback);    
 }
 
+ 
 /*
-open channel, mux not open
-- open mux
--- TX: mux open
--- RX: mux open
-
-- open channel
-- complete operation
-*/
-/*
- * TC - mux start-up sequence, self initiated: successfull establishment
- * - issue START request
- * - receive START response
- */
+ * TC - Ensure proper behaviour when channel is opened and multiplexer control channel is not open
+ *
+ * Test sequence:
+ * - Send open multiplexer control channel request message
+ * - Receive open multiplexer control channel response message
+ * - Send open user channel request message 
+ * - Receive open user channel response message 
+ * - Generate channel open callbck with a  valid FileHandle
+ *
+ * Expected outcome:
+ * - As specified above
+ */ 
 TEST(MultiplexerOpenTestGroup, channel_open_mux_not_open)
 {
     mbed::FileHandleMock fh_mock;   
@@ -6034,6 +6034,186 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_not_open)
     mbed::Mux::callback_attach(callback);
     
     mux_self_iniated_open(callback);    
+}
+
+ 
+/*
+ * TC - Ensure proper behaviour when channel is opened and multiplexer control channel open is currently running
+ *
+ * Test sequence:
+ * - Start sending open multiplexer control channel request message, but do not finish it
+ * - Issue new channel_open API call => fails with NSAPI_ERROR_IN_PROGRESS
+ * - Finish sending open multiplexer control channel request message
+ * - Receive open multiplexer control channel response message
+ * - Send open user channel request message 
+ * - Receive open user channel response message 
+ * - Generate channel open callback with a valid FileHandle
+ * - Issue new channel_open API call => accepted with NSAPI_ERROR_OK
+ * - Start sending open user channel request message , but do not finish it
+ * - Issue new channel_open API call => fails with NSAPI_ERROR_IN_PROGRESS 
+ *
+ * Expected outcome:
+ * - As specified above
+ */ 
+TEST(MultiplexerOpenTestGroup, channel_open_mux_open_currently_running)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+    
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    MuxCallbackTest callback;
+    mbed::Mux::callback_attach(callback);
+    
+    const uint8_t write_byte_mux_open[6] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET, 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_mux_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    
+    /* Program TX of 1st byte of open multiplexer control channel request. */
+    
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_mux_open[0];        
+    mock_write->input_param[1].param        = SABM_FRAME_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 1;    
+    
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_mux_open[1];        
+    mock_write->input_param[1].param        = SABM_FRAME_LEN - 1u;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;
+
+    /* Program channel_open API mutex usage. */
+    
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                    
+    
+    /* Start test sequence. */
+    nsapi_error channel_open_err = mbed::Mux::channel_open();
+    CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);    
+    
+    /* Program channel_open API mutex usage. */
+    
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                    
+    
+    /* Issue new channel open, while previous one is still running. */ 
+    channel_open_err = mbed::Mux::channel_open();
+    CHECK_EQUAL(NSAPI_ERROR_IN_PROGRESS, channel_open_err);        
+    
+    /* Finish sending open multiplexer control channel request message. */
+
+    self_iniated_request_tx(&write_byte_mux_open[1], (SABM_FRAME_LEN - 1u), FLAG_SEQUENCE_OCTET_LEN);
+    
+    /* Receive open multiplexer control channel response message. */
+    
+    const uint8_t read_byte[6] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_RESP_OCTET, 
+        (FRAME_TYPE_UA | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };        
+    /* Reception of the mux open response frame starts the channel creation procedure. */
+    const uint32_t address_1st_channel_open = (3u) | (1u << 2);        
+    uint8_t write_byte_1st_channel_open[6]  = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        address_1st_channel_open, 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,        
+        fcs_calculate(&write_byte_1st_channel_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };        
+    peer_iniated_request_rx_full_frame_tx(&(read_byte[0]), sizeof(read_byte), 
+                                          &(write_byte_1st_channel_open[0]), sizeof(write_byte_1st_channel_open),
+                                          CANCEL_TIMER_YES, START_TIMER_YES);
+
+    /* Read the channel open response frame. */
+    const uint8_t read_byte_channel_open[5]  = 
+    {
+        (3u | (1u << 2)), 
+        (FRAME_TYPE_UA | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,        
+        fcs_calculate(&read_byte_channel_open[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };     
+    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    
+    /* Program TX of 1st byte of open channel request. */
+    
+    const uint32_t address_2nd_channel_open = (3u) | (2u << 2);        
+    uint8_t write_byte_2nd_channel_open[6]  = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        address_2nd_channel_open, 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,        
+        fcs_calculate(&write_byte_2nd_channel_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };        
+        
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_2nd_channel_open[0];        
+    mock_write->input_param[1].param        = SABM_FRAME_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 1;    
+    
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_2nd_channel_open[1];        
+    mock_write->input_param[1].param        = SABM_FRAME_LEN - 1u;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;
+
+    /* Program channel_open API mutex usage. */
+    
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                    
+    
+    /* Start test sequence. */
+    channel_open_err = mbed::Mux::channel_open();
+    CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
+    
+    /* Program channel_open API mutex usage. */
+    
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                    
+    
+    /* Issue new channel open, while previous one is still running. */ 
+    channel_open_err = mbed::Mux::channel_open();
+    CHECK_EQUAL(NSAPI_ERROR_IN_PROGRESS, channel_open_err);            
 }
 
 } // namespace mbed
