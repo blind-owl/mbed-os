@@ -1131,6 +1131,8 @@ Mux::MuxReturnStatus Mux::mux_start(Mux::MuxEstablishStatus &status)
 
 nsapi_error Mux::channel_open()
 {
+    _mutex.lock();
+
     switch (_tx_context.tx_state) {
         int ret_wait;
         case TX_IDLE:
@@ -1168,8 +1170,11 @@ nsapi_error Mux::channel_open()
             MBED_ASSERT(false);
             break;
     };
-
-    _state.is_mux_open_running = 0;
+#if 0
+    _state.is_mux_open_running = 0; // @todo: move this to proper place 
+#endif 
+    
+    _mutex.unlock();
     
     return NSAPI_ERROR_OK;
 }
