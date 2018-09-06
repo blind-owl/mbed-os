@@ -63,8 +63,10 @@ FileHandle *Mux::_serial      = NULL;
 EventQueueMock *Mux::_event_q = NULL;
 MuxDataService Mux::_mux_objects[MBED_CONF_MUX_DLCI_COUNT];
 
+#if 0
 //rtos::Semaphore Mux::_semaphore(0);
 SemaphoreMock Mux::_semaphore;
+#endif 
 PlatformMutexMock Mux::_mutex;
 
 Mux::tx_context_t Mux::_tx_context;
@@ -212,7 +214,7 @@ void Mux::on_rx_frame_ua()
                     _shared_memory = MUX_ESTABLISH_SUCCESS;
 #endif                     
                     if (rx_dlci_id != 0) {
-                        _state.is_dlci_open_running = 0;
+                        _state.is_dlci_open_running = 0; 
                         dlci_id_append(rx_dlci_id);
                         
                         FileHandle *fh = file_handle_get(rx_dlci_id);
@@ -262,9 +264,16 @@ void Mux::on_rx_frame_dm()
                     _event_q->cancel(_tx_context.timer_id);
 #if 0                    
                     _shared_memory = MUX_ESTABLISH_REJECT;
-#endif                     
                     os_status      = _semaphore.release();
                     MBED_ASSERT(os_status == osOK);
+#endif                                
+
+#if 0 // @todo: logic for setting these needed
+_state.is_dlci_open_running = 0;
+#endif 
+                    _state.is_mux_open_running = 0;
+                    
+                    _cb->channel_open_run(NULL);         
                     tx_state_change(TX_IDLE, tx_idle_entry_run, null_action);
                 }
             }
@@ -804,14 +813,12 @@ void Mux::rx_event_do(RxEvent event)
         on_rx_read_state_suspend,
     };
 
-trace("1-RX-event state: ", _rx_context.rx_state);
-
     switch (event) {
         ssize_t        read_err;
         rx_read_func_t func;
         case RX_READ:
             do {
-trace("2-RX-event state: ", _rx_context.rx_state);                
+trace("RX-event state: ", _rx_context.rx_state);                
                 func     = rx_read_func[_rx_context.rx_state];
                 read_err = func();
             } while (read_err != -EAGAIN);

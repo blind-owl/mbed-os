@@ -613,7 +613,9 @@ private:
     
     static FileHandle      *_serial;                                /* Serial used. */  
     static EventQueueMock  *_event_q;                               /* Event queue used. */ 
+#if 0    
     static SemaphoreMock    _semaphore;                             /* Semaphore used. */ 
+#endif     
     static PlatformMutexMock _mutex;                                /* Mutex used. */ 
     static MuxDataService   _mux_objects[MBED_CONF_MUX_DLCI_COUNT]; /* Number of supported DLCIs. */
     static tx_context_t     _tx_context;                            /* Tx context. */

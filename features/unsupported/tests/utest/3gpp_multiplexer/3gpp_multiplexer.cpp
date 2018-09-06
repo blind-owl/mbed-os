@@ -499,6 +499,7 @@ typedef enum
  * - CALL RETURN 
  */
 void peer_iniated_request_rx_full_frame_tx(FlagSequenceOctetReadType read_type,
+                                           StripFlagFieldType        strip_flag_field_type,
                                            const uint8_t            *rx_buf, 
                                            uint8_t                   rx_buf_len, 
                                            const uint8_t            *write_byte,
@@ -512,6 +513,9 @@ void peer_iniated_request_rx_full_frame_tx(FlagSequenceOctetReadType read_type,
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
     const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};    
 
+    /* Guard against internal logic error. */
+    CHECK(!((read_type == READ_FLAG_SEQUENCE_OCTET) && (strip_flag_field_type == STRIP_FLAG_FIELD_YES)));
+    
     /* Enqueue deferred call to EventQueue.
      * Trigger sigio callback from the Filehandle used by the Mux (component under test). */
     mock_t * mock = mock_free_get("call");
@@ -535,8 +539,22 @@ void peer_iniated_request_rx_full_frame_tx(FlagSequenceOctetReadType read_type,
         ++rx_count;
     }    
     
+    uint8_t read_len = FRAME_HEADER_READ_LEN;           
+    if (strip_flag_field_type == STRIP_FLAG_FIELD_YES) {        
+        /* Flag field present, which will be discarded by the implementation. */
+        
+        mock_read = mock_free_get("read");
+        CHECK(mock_read != NULL); 
+        mock_read->output_param[0].param       = &(rx_buf[rx_count]);
+        mock_read->output_param[0].len         = sizeof(rx_buf[0]);
+        mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_read->input_param[0].param        = read_len;
+        mock_read->return_value                = 1;          
+        
+        ++rx_count;
+    }
+    
     /* Phase 2: read next 3 bytes 1-byte at a time. */
-    uint8_t read_len = FRAME_HEADER_READ_LEN;
     do {    
         /* Continue read cycle within current context. */            
 
@@ -5890,38 +5908,47 @@ class MuxCallbackTest : public MuxCallback {
 
 public:
     
-    MuxCallbackTest() : is_callback_set(false) {};
+    MuxCallbackTest() : _is_callback_set(false), _file_handle(NULL) {};
     
     virtual void channel_open_run(FileHandle *obj);
     bool is_callback_called();
+    FileHandle *file_handle_get();    
     
 private:
 
-    bool is_callback_set;
+    bool        _is_callback_set;
+    FileHandle *_file_handle;
 };
 
 void MuxCallbackTest::channel_open_run(FileHandle *obj)
-{
-    CHECK(obj != NULL);
-    
-    is_callback_set = true;
+{    
+    _is_callback_set = true;
+    _file_handle     = obj;
 }
 
 
 bool MuxCallbackTest::is_callback_called()
 {
-    const bool ret  = is_callback_set;
-    is_callback_set = false;
+    const bool ret   = _is_callback_set;
+    _is_callback_set = false;
     
     return ret;
+}
+
+
+FileHandle *MuxCallbackTest::file_handle_get()
+{
+    FileHandle *fh = _file_handle;
+    _file_handle   = NULL;
+    
+    return fh;
 }
 
 
 /* Do successfull multiplexer self iniated open.*/
 void mux_self_iniated_open(uint8_t                   tx_cycle_read_len, 
                            FlagSequenceOctetReadType rx_cycle_read_type,
-                           StripFlagFieldType        strip_flag_field_type,
-                           MuxCallbackTest          &callback)
+                           StripFlagFieldType        strip_flag_field_type)
 {  
     const uint8_t write_byte[6] = 
     {
@@ -5983,7 +6010,7 @@ void mux_self_iniated_open(uint8_t                   tx_cycle_read_len,
         fcs_calculate(&write_byte_channel_open[1], 3),
         FLAG_SEQUENCE_OCTET
     };        
-    peer_iniated_request_rx_full_frame_tx(READ_FLAG_SEQUENCE_OCTET, 
+    peer_iniated_request_rx_full_frame_tx(rx_cycle_read_type, strip_flag_field_type,
                                           &(read_byte[0]), sizeof(read_byte), 
                                           &(write_byte_channel_open[0]), sizeof(write_byte_channel_open),
                                           CANCEL_TIMER_YES, START_TIMER_YES);
@@ -5998,15 +6025,12 @@ void mux_self_iniated_open(uint8_t                   tx_cycle_read_len,
         FLAG_SEQUENCE_OCTET
     };     
     self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
-
-    /* Validate Filehandle generation. */
-    CHECK(callback.is_callback_called());
 }
 
 
-void mux_self_iniated_open(MuxCallbackTest &callback)
+void mux_self_iniated_open()
 {
-    mux_self_iniated_open(FLAG_SEQUENCE_OCTET_LEN, READ_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO, callback);    
+    mux_self_iniated_open(FLAG_SEQUENCE_OCTET_LEN, READ_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);    
 }
 
  
@@ -6038,7 +6062,12 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_not_open)
     MuxCallbackTest callback;
     mbed::Mux::callback_attach(callback);
     
-    mux_self_iniated_open(callback);    
+    mux_self_iniated_open();
+
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    FileHandle *fh = callback.file_handle_get();
+    CHECK(fh != NULL);    
 }
 
  
@@ -6151,7 +6180,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_currently_running)
         fcs_calculate(&write_byte_1st_channel_open[1], 3),
         FLAG_SEQUENCE_OCTET
     };        
-    peer_iniated_request_rx_full_frame_tx(READ_FLAG_SEQUENCE_OCTET, 
+    peer_iniated_request_rx_full_frame_tx(READ_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
                                           &(read_byte[0]), sizeof(read_byte), 
                                           &(write_byte_1st_channel_open[0]), sizeof(write_byte_1st_channel_open),
                                           CANCEL_TIMER_YES, START_TIMER_YES);
@@ -6169,6 +6198,8 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_currently_running)
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
+    FileHandle *fh = callback.file_handle_get();
+    CHECK(fh != NULL);    
     
     /* Program TX of 1st byte of open channel request. */
     
@@ -6345,7 +6376,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_dm_tx_currently_running)
         fcs_calculate(&write_byte_1st_channel_open[1], 3),
         FLAG_SEQUENCE_OCTET
     };        
-    peer_iniated_request_rx_full_frame_tx(SKIP_FLAG_SEQUENCE_OCTET, 
+    peer_iniated_request_rx_full_frame_tx(SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
                                           &(read_byte_mux_open[0]), sizeof(read_byte_mux_open), 
                                           &(write_byte_1st_channel_open[0]), sizeof(write_byte_1st_channel_open),
                                           CANCEL_TIMER_YES, START_TIMER_YES);
@@ -6363,7 +6394,111 @@ TEST(MultiplexerOpenTestGroup, channel_open_dm_tx_currently_running)
     self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
 
     /* Validate Filehandle generation. */
-    CHECK(callback.is_callback_called());                                          
+    CHECK(callback.is_callback_called());        
+    FileHandle *fh = callback.file_handle_get();
+    CHECK(fh != NULL);    
+}
+
+
+void mux_self_iniated_open_rx_frame_sync_done()
+{
+    mux_self_iniated_open(FRAME_HEADER_READ_LEN, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_YES);    
+}
+
+/*
+ * TC - Ensure proper behaviour when multiplexer control channel open request is rejected by the peer
+ *
+ * Test sequence: 
+ * - Send open multiplexer control channel request message
+ * - Peer rejects open multiplexer control channel request message with appropriate response message
+ * - Send open multiplexer control channel request message
+ * - Receive open multiplexer control channel response message
+ * - Send open user channel request message 
+ * - Receive open user channel response message 
+ * - Generate channel open callback with a valid FileHandle
+ *
+ * Expected outcome:
+ * - As specified above
+ */ 
+TEST(MultiplexerOpenTestGroup, channel_open_mux_open_rejected_by_peer)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+    
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    MuxCallbackTest callback;
+    mbed::Mux::callback_attach(callback);    
+    
+    const uint8_t write_byte_mux_open[6] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET, 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_mux_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    
+    /* Set mock. */
+    mock_t *mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_mux_open[0];        
+    mock_write->input_param[1].param        = SABM_FRAME_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 1;
+        
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_mux_open[1];                
+    mock_write->input_param[1].param        = SABM_FRAME_LEN -1u;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;        
+    
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                    
+    
+    /* Start test sequence. Test set mocks. */
+    const nsapi_error channel_open_err = mbed::Mux::channel_open();
+    CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
+    
+    /* Finish the frame write sequence. */    
+    self_iniated_request_tx(&(write_byte_mux_open[1]), (SABM_FRAME_LEN - 1u), FLAG_SEQUENCE_OCTET_LEN);
+    
+    /* Peer rejects open multiplexer control channel request message with appropriate response message. */
+    
+    const uint8_t read_byte_mux_open[6] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_RESP_OCTET, 
+        (FRAME_TYPE_DM | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_mux_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };    
+    self_iniated_response_rx(&(read_byte_mux_open[0]), NULL, READ_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+    
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    CHECK_EQUAL(NULL, callback.file_handle_get());
+    
+    /* Open multiplexer control channel and user channel. */
+    
+    mux_self_iniated_open_rx_frame_sync_done();    
+    
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    FileHandle *fh = callback.file_handle_get();
+    CHECK(fh != NULL);    
 }
 
 } // namespace mbed
