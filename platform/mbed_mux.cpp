@@ -1147,7 +1147,13 @@ nsapi_error Mux::channel_open()
         
         return NSAPI_ERROR_IN_PROGRESS;
     }    
-
+    if (_state.is_mux_open_pending) {
+        _mutex.unlock();
+        
+        return NSAPI_ERROR_IN_PROGRESS;
+    }        
+    // @todo: add is_dlci_open_pending check
+    
     switch (_tx_context.tx_state) {
         int ret_wait;
         case TX_IDLE:
@@ -1164,10 +1170,16 @@ nsapi_error Mux::channel_open()
             }
             
             _tx_context.retransmit_counter = RETRANSMIT_COUNT;
-            tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);                
+            tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);  
+            
             break;
         case TX_INTERNAL_RESP:
-            MBED_ASSERT(false);
+            if (!_state.is_mux_open) {
+                _state.is_mux_open_pending = 1u;
+            } else {
+                MBED_ASSERT(false);
+                // @todo: add missing feature code
+            }
 #if 0            
             _state.is_mux_open_pending = 1u;
 
