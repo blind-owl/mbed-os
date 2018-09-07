@@ -148,13 +148,18 @@ void Mux::on_timeout()
                 frame_retransmit_begin();
                 tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, null_action);
             } else {
-                /* Retransmission limit reached, change state and release the suspended call thread with appropriate
-                   status code. */
+                /* Retransmission limit reached, change state and complete the operation with appropriate status code. */
 #if 0                   
                 _shared_memory           = MUX_ESTABLISH_TIMEOUT;
                 const osStatus os_status = _semaphore.release();
                 MBED_ASSERT(os_status == osOK);
 #endif                 
+// @todo: clear op running bits? => always do in tx_idle entry? NOT as app can call back in callback context!
+#if 0 // @todo: logic for setting this needed
+_state.is_dlci_open_running = 0;
+#endif 
+                _state.is_mux_open_running = 0;
+                _cb->channel_open_run(NULL);         
                 tx_state_change(TX_IDLE, tx_idle_entry_run, null_action);
             }
             break;
@@ -268,7 +273,7 @@ void Mux::on_rx_frame_dm()
                     MBED_ASSERT(os_status == osOK);
 #endif                                
 
-#if 0 // @todo: logic for setting these needed
+#if 0 // @todo: logic for setting this needed
 _state.is_dlci_open_running = 0;
 #endif 
                     _state.is_mux_open_running = 0;
@@ -405,8 +410,9 @@ Mux::FrameRxType Mux::frame_rx_type_resolve()
 
 void Mux::tx_state_change(TxState new_state, tx_state_entry_func_t entry_func, tx_state_exit_func_t exit_func)
 {
+#if 0    
 trace("TX-state new state: ", new_state);
-
+#endif 
     exit_func();
     _tx_context.tx_state = new_state;
     entry_func();
@@ -818,7 +824,9 @@ void Mux::rx_event_do(RxEvent event)
         rx_read_func_t func;
         case RX_READ:
             do {
+#if 0                
 trace("RX-event state: ", _rx_context.rx_state);                
+#endif 
                 func     = rx_read_func[_rx_context.rx_state];
                 read_err = func();
             } while (read_err != -EAGAIN);

@@ -6501,4 +6501,129 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_rejected_by_peer)
     CHECK(fh != NULL);    
 }
 
+/*
+ * TC - Ensure proper behaviour when multiplexer control channel open request timeouts
+ *
+ * Test sequence: 
+ * - Send open multiplexer control channel request message
+ * - Generate maxium amount of timeout events, which trigger retransmission of open multiplexer control channel request 
+ *   message  
+ * - Once maxium retransmission limit reached, complete operation with failure to the user
+ * - Do a successfull channel open procedure
+ *
+ * Expected outcome:
+ * - As specified above
+ */ 
+TEST(MultiplexerOpenTestGroup, channel_open_mux_open_success_after_timeout)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+    
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    MuxCallbackTest callback;
+    mbed::Mux::callback_attach(callback);    
+    
+    const uint8_t write_byte_mux_open[6] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET, 
+        (FRAME_TYPE_SABM | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_mux_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    
+    /* Set mock. */
+    mock_t *mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_mux_open[0];        
+    mock_write->input_param[1].param        = SABM_FRAME_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 1;
+        
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL); 
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_mux_open[1];                
+    mock_write->input_param[1].param        = SABM_FRAME_LEN -1u;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;        
+    
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                    
+    
+    /* Start test sequence. Test set mocks. */
+    const nsapi_error channel_open_err = mbed::Mux::channel_open();
+    CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
+    
+    /* Generate maxium amount of timeout events, which trigger retransmission of open multiplexer control channel 
+       request message. */
+       
+    /* Complete the frame write. */    
+    self_iniated_request_tx(&(write_byte_mux_open[1]), (SABM_FRAME_LEN - 1u), FLAG_SEQUENCE_OCTET_LEN);
+
+    /* Begin frame re-transmit sequence.*/
+    const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_TIMEOUT_GENERATE};
+    uint8_t counter                                        = RETRANSMIT_COUNT;
+    do {    
+        mock_write = mock_free_get("write");
+        CHECK(mock_write != NULL); 
+        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->input_param[0].param        = (uint32_t)&(write_byte_mux_open[0]);        
+        mock_write->input_param[1].param        = SABM_FRAME_LEN;           
+        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->return_value                = 1;    
+        
+        mock_write = mock_free_get("write");
+        CHECK(mock_write != NULL); 
+        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->input_param[0].param        = (uint32_t)&(write_byte_mux_open[1]);        
+        mock_write->input_param[1].param        = SABM_FRAME_LEN - 1u;            
+        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->return_value                = 0;                
+
+        mock_lock = mock_free_get("lock");
+        CHECK(mock_lock != NULL);        
+        mock_unlock = mock_free_get("unlock");
+        CHECK(mock_unlock != NULL);
+        /* Trigger timer timeout. */
+        mbed::EventQueueMock::io_control(eq_io_control);
+        
+        /* Re-transmit the complete remaining part of the frame. */
+        self_iniated_request_tx(&(write_byte_mux_open[1]), (SABM_FRAME_LEN - 1u), FLAG_SEQUENCE_OCTET_LEN);
+        
+        --counter;
+    } while (counter != 0);
+
+    /* Trigger timer to finish the re-transmission cycle and the whole open multiplexer control channel request. */
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);      
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);    
+    
+    mbed::EventQueueMock::io_control(eq_io_control);
+    
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    CHECK_EQUAL(NULL, callback.file_handle_get());
+    
+    /* Open multiplexer control channel and user channel. */
+    
+    mux_self_iniated_open();    
+    
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    FileHandle *fh = callback.file_handle_get();
+    CHECK(fh != NULL);        
+}
+
 } // namespace mbed
