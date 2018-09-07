@@ -6646,4 +6646,41 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_success_after_timeout)
     CHECK(fh != NULL);        
 }
 
+/*
+ * TC - Ensure proper behaviour when multiplexer control channel open request is recieved from the peer
+ *
+ * Test sequence: 
+ * - Receive open multiplexer control channel request message
+ *
+ * Expected outcome:
+ * - No action taken by the implementation: received open multiplexer control channel request message silently discarded
+ */ 
+TEST(MultiplexerOpenTestGroup, mux_open_peer_initiated)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+    
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    MuxCallbackTest callback;
+    mbed::Mux::callback_attach(callback);        
+    
+    const uint8_t read_byte[6] = 
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET,
+        (FRAME_TYPE_SABM | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };    
+
+    peer_iniated_request_rx(&(read_byte[0]), READ_FLAG_SEQUENCE_OCTET, NULL, NULL, 0);    
+}
+
 } // namespace mbed
