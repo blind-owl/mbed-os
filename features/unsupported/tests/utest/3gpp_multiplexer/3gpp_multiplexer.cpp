@@ -5908,25 +5908,38 @@ class MuxCallbackTest : public MuxCallback {
 
 public:
     
-    MuxCallbackTest() : _is_callback_set(false), _file_handle(NULL) {};
+    MuxCallbackTest() : _is_armed(false), _is_callback_set(false), _file_handle(NULL) {};
     
     virtual void channel_open_run(FileHandle *obj);
     bool is_callback_called();
     FileHandle *file_handle_get();    
+    void callback_arm();
     
 private:
 
+    bool        _is_armed;
     bool        _is_callback_set;
     FileHandle *_file_handle;
 };
 
 void MuxCallbackTest::channel_open_run(FileHandle *obj)
-{    
+{   
+    CHECK(_is_armed);
+    
+    _is_armed        = false;    
     _is_callback_set = true;
     _file_handle     = obj;
 }
 
 
+void MuxCallbackTest::callback_arm()
+{
+    CHECK(!_is_armed);
+    
+    _is_armed = true;
+}
+    
+    
 bool MuxCallbackTest::is_callback_called()
 {
     const bool ret   = _is_callback_set;
@@ -6062,6 +6075,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_not_open)
     MuxCallbackTest callback;
     mbed::Mux::callback_attach(callback);
     
+    callback.callback_arm();
     mux_self_iniated_open();
 
     /* Validate Filehandle generation. */
@@ -6186,6 +6200,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_currently_running)
                                           CANCEL_TIMER_YES, START_TIMER_YES);
 
     /* Read the channel open response frame. */
+    callback.callback_arm();
     const uint8_t read_byte_channel_open[5]  = 
     {
         (3u | (1u << 2)), 
@@ -6383,6 +6398,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_dm_tx_currently_running)
 
     /* Receive open user channel response message. */
     
+    callback.callback_arm();    
     const uint8_t read_byte_channel_open[5]  = 
     {
         (3u | (1u << 2)), 
@@ -6473,7 +6489,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_rejected_by_peer)
     
     /* Finish the frame write sequence. */    
     self_iniated_request_tx(&(write_byte_mux_open[1]), (SABM_FRAME_LEN - 1u), FLAG_SEQUENCE_OCTET_LEN);
-    
+
     /* Peer rejects open multiplexer control channel request message with appropriate response message. */
     
     const uint8_t read_byte_mux_open[6] = 
@@ -6485,20 +6501,22 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_rejected_by_peer)
         fcs_calculate(&read_byte_mux_open[1], 3),
         FLAG_SEQUENCE_OCTET
     };    
+    callback.callback_arm();
     self_iniated_response_rx(&(read_byte_mux_open[0]), NULL, READ_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
-    
+
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
     CHECK_EQUAL(NULL, callback.file_handle_get());
     
     /* Open multiplexer control channel and user channel. */
     
+    callback.callback_arm();    
     mux_self_iniated_open_rx_frame_sync_done();    
     
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
     FileHandle *fh = callback.file_handle_get();
-    CHECK(fh != NULL);    
+    CHECK(fh != NULL);
 }
 
 /*
@@ -6610,6 +6628,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_success_after_timeout)
     mock_unlock = mock_free_get("unlock");
     CHECK(mock_unlock != NULL);    
     
+    callback.callback_arm();    
     mbed::EventQueueMock::io_control(eq_io_control);
     
     /* Validate Filehandle generation. */
@@ -6618,6 +6637,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_success_after_timeout)
     
     /* Open multiplexer control channel and user channel. */
     
+    callback.callback_arm();    
     mux_self_iniated_open();    
     
     /* Validate Filehandle generation. */
