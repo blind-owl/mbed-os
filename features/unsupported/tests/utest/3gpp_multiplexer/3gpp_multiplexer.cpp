@@ -6713,6 +6713,11 @@ TEST(MultiplexerOpenTestGroup, mux_open_rx_disc_dlci_0)
     callback.callback_arm();    
     mux_self_iniated_open();
     
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    FileHandle *fh = callback.file_handle_get();
+    CHECK(fh != NULL);            
+    
     /* Generate DISC from peer which is ignored buy the implementation. */       
     
     const uint8_t dlci_id      = 0;
@@ -6725,6 +6730,58 @@ TEST(MultiplexerOpenTestGroup, mux_open_rx_disc_dlci_0)
         fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
     };                   
+    peer_iniated_request_rx(&(read_byte[0]),
+                            SKIP_FLAG_SEQUENCE_OCTET,                            
+                            NULL,   // No TX response frame within the RX cycle.
+                            NULL,   // No current frame in the TX pipeline.
+                            0);                                    
+}
+
+/*
+ * TC - Ensure proper behaviour when peer sends DISC command to established user channel ID
+ *
+ * Test sequence: 
+ * - Establish a user channel
+ * - Receive DISC command to the established user channel ID from the peer
+ *
+ * Expected outcome:
+ * - No action taken by the implementation: received DISC command is silently discarded
+ */ 
+TEST(MultiplexerOpenTestGroup, mux_open_rx_disc_dlci_in_use)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+    
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    MuxCallbackTest callback;
+    mbed::Mux::callback_attach(callback);     
+
+    /* Open multiplexer control channel and user channel. */
+    
+    callback.callback_arm();    
+    mux_self_iniated_open();
+    
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    FileHandle *fh = callback.file_handle_get();
+    CHECK(fh != NULL);
+    
+    const uint8_t read_byte[5] = 
+    {
+        /* Peer assumes the role of the responder. */
+        1u | (1u << 2),
+        (FRAME_TYPE_DISC | PF_BIT), 
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };                     
+    /* Generate DISC from peer which is ignored buy the implementation. */       
     peer_iniated_request_rx(&(read_byte[0]),
                             SKIP_FLAG_SEQUENCE_OCTET,                            
                             NULL,   // No TX response frame within the RX cycle.
