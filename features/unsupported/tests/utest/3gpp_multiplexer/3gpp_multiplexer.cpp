@@ -7086,4 +7086,67 @@ TEST(MultiplexerOpenTestGroup, channel_open_success_after_timeout)
     CHECK(fh != NULL);                
 }
 
+/*
+ * TC - Ensure proper behaviour when all available channel IDs are used.
+ *
+ * Test sequence: 
+ * - Establish maxium available count of user channels
+ * - Issue open channel request to the module which fails with NSAPI_ERROR_NO_MEMORY
+ *
+ * Expected outcome:
+ * - As specified above
+ */ 
+TEST(MultiplexerOpenTestGroup, channel_open_all_channel_ids_used)
+{
+    mbed::FileHandleMock fh_mock;   
+    mbed::EventQueueMock eq_mock;
+    
+    mbed::Mux::eventqueue_attach(&eq_mock);
+    
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");    
+    CHECK(mock_sigio != NULL);      
+    mbed::Mux::serial_attach(&fh_mock);
+    
+    MuxCallbackTest callback;
+    mbed::Mux::callback_attach(callback);
+    
+    /* Establish a user channel. */
+    
+    callback.callback_arm();
+    mux_self_iniated_open();
+
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    FileHandle *fh = callback.file_handle_get();
+    CHECK(fh != NULL);    
+    
+    /* Establish all remaining available user channels. */
+    
+    uint8_t i       = MAX_DLCI_COUNT - 1u;
+    uint8_t dlci_id = 2u;
+    do {
+        callback.callback_arm(); // @todo: move arming to exact correct location
+        channel_open(dlci_id);
+        
+        /* Validate Filehandle generation. */
+        CHECK(callback.is_callback_called());
+        fh = callback.file_handle_get();
+        CHECK(fh != NULL);                           
+       
+       ++dlci_id;
+        --i;
+    } while (i != 0);
+    
+    /* Issue open channel request to the module which fails with NSAPI_ERROR_NO_MEMORY. */
+    
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);                            
+    
+    const nsapi_error channel_open_err = mbed::Mux::channel_open();
+    CHECK_EQUAL(NSAPI_ERROR_NO_MEMORY, channel_open_err);    
+}
+
 } // namespace mbed

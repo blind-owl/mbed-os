@@ -1167,7 +1167,12 @@ nsapi_error Mux::channel_open()
         _mutex.unlock();
         
         return NSAPI_ERROR_IN_PROGRESS;
-    }        
+    } 
+    if (is_dlci_q_full()) {
+        _mutex.unlock();
+
+        return NSAPI_ERROR_NO_MEMORY;
+    }    
     // @todo: add is_dlci_open_pending check
     
     switch (_tx_context.tx_state) {

@@ -179,9 +179,12 @@ typedef enum
 
     /** Open multiplexer channel.
      *
+     *
      * @return NSAPI_ERROR_OK          Operation accepted for execution. Completion callback will be called.
-     * @return NSAPI_ERROR_IN_PROGRESS Operation allready inprogress and not accpeted for execution. Completion callback 
-     *                                 will not be called
+     * @return NSAPI_ERROR_IN_PROGRESS Operation not accpeted for execution. Operation allready inprogress, completion 
+     *                                 callback will not be called.
+     * @return NSAPI_ERROR_NO_MEMORY   Operation not accepted for execution. All available channels are allready opened, 
+     *                                 completion callback will not be called.
      */
     static nsapi_error channel_open();
 #if 0    
