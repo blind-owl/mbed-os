@@ -273,11 +273,8 @@ void Mux::on_rx_frame_dm()
                     os_status      = _semaphore.release();
                     MBED_ASSERT(os_status == osOK);
 #endif                                
-
-#if 0 // @todo: logic for setting this needed
-_state.is_dlci_open_running = 0;
-#endif 
-                    _state.is_mux_open_running = 0;
+                    _state.is_mux_open_running  = 0;
+                    _state.is_dlci_open_running = 0;
                     
                     _cb->channel_open_run(NULL);         
                     tx_state_change(TX_IDLE, tx_idle_entry_run, null_action);

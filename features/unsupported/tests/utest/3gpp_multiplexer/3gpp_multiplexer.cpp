@@ -6012,7 +6012,8 @@ void channel_open(uint8_t dlci, MuxCallbackTest &callback)
 void mux_self_iniated_open(uint8_t                   tx_cycle_read_len,
                            FlagSequenceOctetReadType rx_cycle_read_type,
                            StripFlagFieldType        strip_flag_field_type,
-                           MuxCallbackTest          &callback)
+                           MuxCallbackTest          &callback,
+                           uint8_t                   frame_type)
 {
     const uint8_t write_byte[6] =
     {
@@ -6083,7 +6084,7 @@ void mux_self_iniated_open(uint8_t                   tx_cycle_read_len,
     const uint8_t read_byte_channel_open[5]  =
     {
         (3u | (1u << 2)),
-        (FRAME_TYPE_UA | PF_BIT),
+        (frame_type | PF_BIT),
         LENGTH_INDICATOR_OCTET,
         fcs_calculate(&read_byte_channel_open[0], 3),
         FLAG_SEQUENCE_OCTET
@@ -6093,9 +6094,9 @@ void mux_self_iniated_open(uint8_t                   tx_cycle_read_len,
 }
 
 
-void mux_self_iniated_open(MuxCallbackTest &callback)
+void mux_self_iniated_open(MuxCallbackTest &callback, uint8_t frame_type)
 {
-    mux_self_iniated_open(FLAG_SEQUENCE_OCTET_LEN, READ_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO, callback);
+    mux_self_iniated_open(FLAG_SEQUENCE_OCTET_LEN, READ_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO, callback, frame_type);
 }
 
 
@@ -6127,7 +6128,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_not_open)
     MuxCallbackTest callback;
     mbed::Mux::callback_attach(callback);
 
-    mux_self_iniated_open(callback);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -6467,9 +6468,9 @@ TEST(MultiplexerOpenTestGroup, channel_open_dm_tx_currently_running)
 }
 
 
-void mux_self_iniated_open_rx_frame_sync_done(MuxCallbackTest &callback)
+void mux_self_iniated_open_rx_frame_sync_done(MuxCallbackTest &callback, uint8_t frame_type)
 {
-    mux_self_iniated_open(FRAME_HEADER_READ_LEN, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_YES, callback);
+    mux_self_iniated_open(FRAME_HEADER_READ_LEN, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_YES, callback, frame_type);
 }
 
 /*
@@ -6561,7 +6562,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_rejected_by_peer)
 
     /* Open multiplexer control channel and user channel. */
 
-    mux_self_iniated_open_rx_frame_sync_done(callback);
+    mux_self_iniated_open_rx_frame_sync_done(callback, FRAME_TYPE_UA);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -6687,7 +6688,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_success_after_timeout)
 
     /* Open multiplexer control channel and user channel. */
 
-    mux_self_iniated_open(callback);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -6759,7 +6760,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_rx_disc_dlci_0)
 
     /* Open multiplexer control channel and user channel. */
 
-    mux_self_iniated_open(callback);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -6812,7 +6813,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_rx_disc_dlci_in_use)
 
     /* Open multiplexer control channel and user channel. */
 
-    mux_self_iniated_open(callback);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -6979,7 +6980,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_success_after_timeout)
 
     /* Establish user channel. */
 
-    mux_self_iniated_open(callback);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -7109,7 +7110,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_all_channel_ids_used)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -7187,7 +7188,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_all_channel_ids_used_ensure_uniqueue
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -7228,6 +7229,55 @@ TEST(MultiplexerOpenTestGroup, channel_open_all_channel_ids_used_ensure_uniqueue
 
     const nsapi_error channel_open_err = mbed::Mux::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_NO_MEMORY, channel_open_err);
+}
+
+/*
+ * TC - Ensure proper behaviour when multiplexer control channel open request is rejected by the peer
+ *
+ * Test sequence:
+ * - Establish multiplexer control channel
+ * - Send open user channel request message
+ * - Peer rejects user channel request message with appropriate response message
+ * - Generate channel open callback with a invalid FileHandle  
+ * - Establish user channel
+ * - Generate channel open callback with a valid FileHandle 
+ *
+ * Expected outcome:
+ * - As specified above
+ */
+TEST(MultiplexerOpenTestGroup, channel_open_rejected_by_peer)
+{
+    mbed::FileHandleMock fh_mock;
+    mbed::EventQueueMock eq_mock;
+
+    mbed::Mux::eventqueue_attach(&eq_mock);
+
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");
+    CHECK(mock_sigio != NULL);
+    mbed::Mux::serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    mbed::Mux::callback_attach(callback);
+
+    /* Establish multiplexer control channel. Peer rejects user channel request message with appropriate response 
+       message. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_DM);
+
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    FileHandle *fh = callback.file_handle_get();
+    CHECK_EQUAL(NULL, fh);
+    
+    /* Establish user channel. */
+    
+    channel_open(1, callback);
+
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    fh = callback.file_handle_get();
+    CHECK(fh != NULL);    
 }
 
 } // namespace mbed
