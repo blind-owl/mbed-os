@@ -6010,7 +6010,8 @@ void channel_open(uint8_t dlci)
 /* Do successfull multiplexer self iniated open.*/
 void mux_self_iniated_open(uint8_t                   tx_cycle_read_len,
                            FlagSequenceOctetReadType rx_cycle_read_type,
-                           StripFlagFieldType        strip_flag_field_type)
+                           StripFlagFieldType        strip_flag_field_type,
+                           MuxCallbackTest          &callback)
 {
     const uint8_t write_byte[6] =
     {
@@ -6086,13 +6087,14 @@ void mux_self_iniated_open(uint8_t                   tx_cycle_read_len,
         fcs_calculate(&read_byte_channel_open[0], 3),
         FLAG_SEQUENCE_OCTET
     };
+    callback.callback_arm();
     self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
 }
 
 
-void mux_self_iniated_open()
+void mux_self_iniated_open(MuxCallbackTest &callback)
 {
-    mux_self_iniated_open(FLAG_SEQUENCE_OCTET_LEN, READ_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+    mux_self_iniated_open(FLAG_SEQUENCE_OCTET_LEN, READ_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO, callback);
 }
 
 
@@ -6124,8 +6126,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_not_open)
     MuxCallbackTest callback;
     mbed::Mux::callback_attach(callback);
 
-    callback.callback_arm();
-    mux_self_iniated_open();
+    mux_self_iniated_open(callback);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -6465,9 +6466,9 @@ TEST(MultiplexerOpenTestGroup, channel_open_dm_tx_currently_running)
 }
 
 
-void mux_self_iniated_open_rx_frame_sync_done()
+void mux_self_iniated_open_rx_frame_sync_done(MuxCallbackTest &callback)
 {
-    mux_self_iniated_open(FRAME_HEADER_READ_LEN, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_YES);
+    mux_self_iniated_open(FRAME_HEADER_READ_LEN, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_YES, callback);
 }
 
 /*
@@ -6559,8 +6560,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_rejected_by_peer)
 
     /* Open multiplexer control channel and user channel. */
 
-    callback.callback_arm();
-    mux_self_iniated_open_rx_frame_sync_done();
+    mux_self_iniated_open_rx_frame_sync_done(callback);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -6686,8 +6686,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_success_after_timeout)
 
     /* Open multiplexer control channel and user channel. */
 
-    callback.callback_arm();
-    mux_self_iniated_open();
+    mux_self_iniated_open(callback);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -6759,8 +6758,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_rx_disc_dlci_0)
 
     /* Open multiplexer control channel and user channel. */
 
-    callback.callback_arm();
-    mux_self_iniated_open();
+    mux_self_iniated_open(callback);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -6813,8 +6811,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_rx_disc_dlci_in_use)
 
     /* Open multiplexer control channel and user channel. */
 
-    callback.callback_arm();
-    mux_self_iniated_open();
+    mux_self_iniated_open(callback);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -6981,8 +6978,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_success_after_timeout)
 
     /* Establish user channel. */
 
-    callback.callback_arm();
-    mux_self_iniated_open();
+    mux_self_iniated_open(callback);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -7113,8 +7109,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_all_channel_ids_used)
 
     /* Establish a user channel. */
 
-    callback.callback_arm();
-    mux_self_iniated_open();
+    mux_self_iniated_open(callback);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -7193,8 +7188,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_all_channel_ids_used_ensure_uniqueue
 
     /* Establish a user channel. */
 
-    callback.callback_arm();
-    mux_self_iniated_open();
+    mux_self_iniated_open(callback);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
