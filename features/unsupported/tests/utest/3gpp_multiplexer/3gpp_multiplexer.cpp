@@ -5958,7 +5958,7 @@ FileHandle *MuxCallbackTest::file_handle_get()
 }
 
 
-void channel_open(uint8_t dlci)
+void channel_open(uint8_t dlci, MuxCallbackTest &callback)
 {
     const uint32_t address                   = (3u) | (dlci << 2);
     const uint8_t write_byte_channel_open[6] =
@@ -6003,6 +6003,7 @@ void channel_open(uint8_t dlci)
         fcs_calculate(&read_byte_channel_open[0], 3),
         FLAG_SEQUENCE_OCTET
     };
+    callback.callback_arm(); 
     self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
 }
 
@@ -7073,8 +7074,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_success_after_timeout)
     CHECK(callback.is_callback_called());
     CHECK_EQUAL(NULL, callback.file_handle_get());
 
-    callback.callback_arm(); // @todo: move arming to exact correct location
-    channel_open(2);
+    channel_open(2, callback);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -7121,8 +7121,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_all_channel_ids_used)
     uint8_t i       = MAX_DLCI_COUNT - 1u;
     uint8_t dlci_id = 2u;
     do {
-        callback.callback_arm(); // @todo: move arming to exact correct location
-        channel_open(dlci_id);
+        channel_open(dlci_id, callback);
 
         /* Validate Filehandle generation. */
         CHECK(callback.is_callback_called());
@@ -7205,8 +7204,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_all_channel_ids_used_ensure_uniqueue
     uint8_t i       = MAX_DLCI_COUNT - 1u;
     uint8_t dlci_id = 2u;
     do {
-        callback.callback_arm(); // @todo: move arming to exact correct location
-        channel_open(dlci_id);
+        channel_open(dlci_id, callback);
 
         /* Validate Filehandle generation. */
         CHECK(callback.is_callback_called());
