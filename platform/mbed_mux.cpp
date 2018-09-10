@@ -221,6 +221,7 @@ void Mux::on_rx_frame_ua()
                     if (rx_dlci_id != 0) {
                         _state.is_dlci_open_running = 0; 
                         dlci_id_append(rx_dlci_id);
+                        ++_dlci;
                         
                         FileHandle *fh = file_handle_get(rx_dlci_id);
                         MBED_ASSERT(fh != NULL);
@@ -479,7 +480,7 @@ void Mux::pending_self_iniated_dlci_open_start()
     _state.is_dlci_open_running = 1u;
     _state.is_dlci_open_pending = 0;
 
-    sabm_request_construct(/*_shared_memory*/_dlci++); // @todo: make dlci_incerement(), which wrap-around
+    sabm_request_construct(/*_shared_memory*/_dlci); // @todo: make dlci_incerement(), which wrap-around?
     tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
     _tx_context.retransmit_counter = RETRANSMIT_COUNT;
 }
@@ -1175,7 +1176,7 @@ nsapi_error Mux::channel_open()
             if (_state.is_mux_open) {
                 /* Multiplexer control channel exists, start creation of user channel. */                
                 
-                sabm_request_construct(_dlci++);
+                sabm_request_construct(_dlci);
                 _state.is_dlci_open_running = 1u;                                
             } else {
                 /* Start creation of multiplexer control channel. */

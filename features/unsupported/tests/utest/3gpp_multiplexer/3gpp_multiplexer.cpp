@@ -7078,7 +7078,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_success_after_timeout)
     CHECK_EQUAL(NULL, callback.file_handle_get());
     
     callback.callback_arm(); // @todo: move arming to exact correct location
-    channel_open(3);         // @todo: correct value is 2 as we should only consume IDs upon channel creation success.
+    channel_open(2);
     
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
