@@ -7280,4 +7280,50 @@ TEST(MultiplexerOpenTestGroup, channel_open_rejected_by_peer)
     CHECK(fh != NULL);    
 }
 
+/*
+ * TC - Ensure proper behaviour when multiplexer control channel is established and user channel open request is 
+ *      received from the peer
+ *
+ * Test sequence:
+ * - Establish multiplexer control channel
+ * - Receive open user channel open request message from the peer
+ *
+ * Expected outcome:
+ * - No action taken by the implementation: received open user channel open request message silently discarded
+ */
+TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated)
+{
+    mbed::FileHandleMock fh_mock;
+    mbed::EventQueueMock eq_mock;
+
+    mbed::Mux::eventqueue_attach(&eq_mock);
+
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");
+    CHECK(mock_sigio != NULL);
+    mbed::Mux::serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    mbed::Mux::callback_attach(callback);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA);
+
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    FileHandle *fh = callback.file_handle_get();
+    CHECK(fh != NULL);    
+    
+    const uint8_t read_byte[5] =
+    {
+        1u | ((DLCI_ID_LOWER_BOUND + 1u) << 2),
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    peer_iniated_request_rx(&(read_byte[0]), SKIP_FLAG_SEQUENCE_OCTET, NULL, NULL, 0);    
+}
+
 } // namespace mbed
