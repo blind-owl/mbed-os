@@ -6065,7 +6065,7 @@ void mux_self_iniated_open(uint8_t                   tx_cycle_read_len,
         FLAG_SEQUENCE_OCTET
     };
     /* Reception of the mux open response frame starts the channel creation procedure. */
-    const uint32_t address                   = (3u) | (1u << 2);
+    const uint32_t address                   = (3u) | (DLCI_ID_LOWER_BOUND << 2);
     const uint8_t write_byte_channel_open[6] =
     {
         FLAG_SEQUENCE_OCTET,
@@ -6322,7 +6322,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_currently_running)
 
 
 /*
- * TC - Ensure proper behaviour when channel is opened and multiplexer control channel open is currently running
+ * TC - Ensure proper behaviour when multiplexer control channel open is requested and DM TX is currently running
  *
  * Test sequence:
  * - Receive DISC command to DLCI 0
@@ -6340,7 +6340,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_currently_running)
  * Expected outcome:
  * - As specified above
  */
-TEST(MultiplexerOpenTestGroup, channel_open_dm_tx_currently_running)
+TEST(MultiplexerOpenTestGroup, mux_open_dm_tx_currently_running)
 {
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
@@ -7324,6 +7324,127 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated)
         FLAG_SEQUENCE_OCTET
     };
     peer_iniated_request_rx(&(read_byte[0]), SKIP_FLAG_SEQUENCE_OCTET, NULL, NULL, 0);    
+}
+
+/*
+ * TC - Ensure proper behaviour when user channel open is requested and DM TX is currently running
+ *
+ * Test sequence:
+ * - Establish  multiplexer control channel and user channel DLCI 1
+ * - Receive DISC command to DLCI 2 (non-established user channel)
+ * - Start sending DM response message, but do not finish it
+ * - Issue channel_open API call => accepted with NSAPI_ERROR_OK
+ * -- operation set as pending, as TX DM allready inprogress
+ * - Issue new channel_open API call => fails with NSAPI_ERROR_IN_PROGRESS
+ * - Finish sending DM response message
+ * - Start sending pending open user channel request message
+ * - Receive open user channel response message
+ * - Generate channel open callback with a valid FileHandle
+ *
+ * Expected outcome:
+ * - As specified above
+ */
+TEST(MultiplexerOpenTestGroup, channel_open_dm_tx_currently_running)
+{
+    mbed::FileHandleMock fh_mock;
+    mbed::EventQueueMock eq_mock;
+
+    mbed::Mux::eventqueue_attach(&eq_mock);
+
+    mock_t * mock_sigio = mock_free_get("sigio");
+    CHECK(mock_sigio != NULL);
+    mbed::Mux::serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    mbed::Mux::callback_attach(callback);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA);
+
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    FileHandle *fh = callback.file_handle_get();
+    CHECK(fh != NULL);
+
+    const uint8_t dlci_id           = DLCI_ID_LOWER_BOUND + 1u;
+    const uint8_t read_byte_disc[5] =
+    {
+        1u | (dlci_id << 2),
+        (FRAME_TYPE_DISC | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_disc[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+
+    /* Generate DISC from peer and trigger TX of DM response, do not finish it. */
+
+    const uint8_t write_byte_dm[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        1u | (dlci_id << 2),
+        (FRAME_TYPE_DM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_dm[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    peer_iniated_request_rx(&(read_byte_disc[0]), SKIP_FLAG_SEQUENCE_OCTET, &(write_byte_dm[0]), NULL, 0);
+
+    /* Issue channel_open API call, operation set as pending, as TX DM allready inprogress. */
+
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+
+    /* Start test sequence. */
+    nsapi_error channel_open_err = mbed::Mux::channel_open();
+    CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
+
+    /* Issue new channel open, while pending exists. */
+
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+
+    channel_open_err = mbed::Mux::channel_open();
+    CHECK_EQUAL(NSAPI_ERROR_IN_PROGRESS, channel_open_err);
+
+    /* Finish sending DM response message and start TX of 1st byte of the pending open user channel request message. */
+
+    const uint32_t address_channel_open      = (3u) | ((DLCI_ID_LOWER_BOUND + 1u) << 2);
+    const uint8_t write_byte_channel_open[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        address_channel_open,
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_channel_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    peer_iniated_response_tx(&(write_byte_dm[1]), (DM_FRAME_LEN -1u), &(write_byte_channel_open[0]), false, NULL);
+
+    /* Finish sending open user channel request message, receive open user channel channel response message. */
+
+    const uint8_t read_byte_channel_open[5] =
+    {
+        address_channel_open,
+        (FRAME_TYPE_UA | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_channel_open[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    self_iniated_request_tx(&(write_byte_channel_open[1]),
+                            (sizeof(write_byte_channel_open) - sizeof(write_byte_channel_open[0])),
+                            FRAME_HEADER_READ_LEN);
+    callback.callback_arm();                            
+    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    fh = callback.file_handle_get();
+    CHECK(fh != NULL);
 }
 
 } // namespace mbed

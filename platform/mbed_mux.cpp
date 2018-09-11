@@ -304,7 +304,7 @@ void Mux::dm_response_send()
 
 
 void Mux::on_rx_frame_disc()
-{
+{    
     /* Follow the specification: DM response generated for those DLCI IDs which are not established. */
 
     switch (_tx_context.tx_state) {
@@ -1165,6 +1165,11 @@ nsapi_error Mux::channel_open()
         
         return NSAPI_ERROR_IN_PROGRESS;
     } 
+    if (_state.is_dlci_open_pending) {
+        _mutex.unlock();
+        
+        return NSAPI_ERROR_IN_PROGRESS;
+    }     
     if (is_dlci_q_full()) {
         _mutex.unlock();
 
@@ -1195,8 +1200,7 @@ nsapi_error Mux::channel_open()
             if (!_state.is_mux_open) {
                 _state.is_mux_open_pending = 1u;
             } else {
-                MBED_ASSERT(false);
-                // @todo: add missing feature code
+                _state.is_dlci_open_pending = 1u;
             }
 #if 0            
             _state.is_mux_open_pending = 1u;
