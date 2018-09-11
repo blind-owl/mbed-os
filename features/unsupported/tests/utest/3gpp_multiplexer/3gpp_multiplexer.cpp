@@ -7447,4 +7447,53 @@ TEST(MultiplexerOpenTestGroup, channel_open_dm_tx_currently_running)
     CHECK(fh != NULL);
 }
 
+
+static void user_tx_0_length_user_payload_callback()
+{
+    FAIL("TC FAILURE IF CALLED");
+}
+
+/*
+ * TC - Ensure proper behaviour when when 0 leng write request is issued
+ *
+ * Test sequence:
+ * - Establish  a user channel
+ * - Issue 0 length write request to the channel
+ *
+ * Expected outcome:
+ * - No Tx is started
+ * - No callback called
+ */
+TEST(MultiplexerOpenTestGroup, user_tx_0_length_user_payload)
+{
+    mbed::FileHandleMock fh_mock;
+    mbed::EventQueueMock eq_mock;
+
+    mbed::Mux::eventqueue_attach(&eq_mock);
+
+    mock_t * mock_sigio = mock_free_get("sigio");
+    CHECK(mock_sigio != NULL);
+    mbed::Mux::serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    mbed::Mux::callback_attach(callback);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA);    
+    
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    FileHandle *fh = callback.file_handle_get();
+    CHECK(fh != NULL);  
+
+    fh->sigio(user_tx_0_length_user_payload_callback);
+
+    /* Issue 0 length write request to the channel. */
+    
+    const uint8_t write_dummy = 0xA5u;
+    const ssize_t ret         = fh->write(&write_dummy, 0);
+    CHECK_EQUAL(0, ret);    
+}
+
 } // namespace mbed
