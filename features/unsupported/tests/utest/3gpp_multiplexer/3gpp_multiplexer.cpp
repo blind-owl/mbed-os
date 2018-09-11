@@ -7454,7 +7454,7 @@ static void user_tx_0_length_user_payload_callback()
 }
 
 /*
- * TC - Ensure proper behaviour when when 0 leng write request is issued
+ * TC - Ensure proper behaviour when 0 length write request is issued
  *
  * Test sequence:
  * - Establish  a user channel
@@ -7494,6 +7494,76 @@ TEST(MultiplexerOpenTestGroup, user_tx_0_length_user_payload)
     const uint8_t write_dummy = 0xA5u;
     const ssize_t ret         = fh->write(&write_dummy, 0);
     CHECK_EQUAL(0, ret);    
+}
+
+
+static void user_tx_size_lower_bound_tx_callback()
+{
+    FAIL("TC FAILURE IF CALLED");
+}
+
+ /*
+ * TC - Ensure proper behaviour when 1 byte length UIH frame TX is done
+ *
+ * Test sequence:
+ * - Establish  a user channel
+ * - Issue 1 byte length write request to the channel
+ *
+ * Expected outcome:
+ * - Request accepted by the implementation
+ */
+TEST(MultiplexerOpenTestGroup, user_tx_size_lower_bound)
+{
+    mbed::FileHandleMock fh_mock;
+    mbed::EventQueueMock eq_mock;
+
+    mbed::Mux::eventqueue_attach(&eq_mock);
+
+    mock_t * mock_sigio = mock_free_get("sigio");
+    CHECK(mock_sigio != NULL);
+    mbed::Mux::serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    mbed::Mux::callback_attach(callback);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA);    
+    
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    FileHandle *fh = callback.file_handle_get();
+    CHECK(fh != NULL);  
+
+    fh->sigio(user_tx_size_lower_bound_tx_callback);
+
+    /* Program write cycle. */
+    const uint8_t dlci_id       = 1u;        
+    uint8_t user_data           = 0xA5u;
+    const uint8_t write_byte[7] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (dlci_id << 2),
+        FRAME_TYPE_UIH,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&write_byte[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL);
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);
+    mock_write->input_param[1].param        = sizeof(write_byte);
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = sizeof(write_byte);
+
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+    const ssize_t write_ret = fh->write(&user_data, sizeof(user_data));
+    CHECK_EQUAL(sizeof(user_data), write_ret);
 }
 
 } // namespace mbed
