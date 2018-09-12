@@ -3069,7 +3069,6 @@ static void user_tx_dlci_establish_during_user_tx_sem_wait(const void *context)
                              STRIP_FLAG_FIELD_NO);
 }
 
-
 /*
  * TC - Ensure successfull DLCI establishment is done when TX is occupied by user TX request
  *
@@ -5904,6 +5903,67 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_dlci_id_mismatch)
 
 #endif
 
+void single_complete_write_cycle(const uint8_t *write_byte,
+                                 uint8_t        length,
+                                 const uint8_t *new_write_byte)
+{
+    mock_t * mock_call = mock_free_get("call");
+    CHECK(mock_call != NULL);
+    mock_call->return_value                             = 1;
+    const mbed::FileHandleMock::io_control_t io_control = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};
+    mbed::FileHandleMock::io_control(io_control);
+
+    /* Nothing to read within the RX cycle. */
+    mock_t * mock_read = mock_free_get("read");
+    CHECK(mock_read != NULL);
+    mock_read->output_param[0].param       = NULL;
+    mock_read->output_param[0].len         = 0;
+    mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_read->input_param[0].param        = FRAME_HEADER_READ_LEN;
+    mock_read->return_value                = -EAGAIN;
+
+    /* Complete the 1st write request which is in progress. */
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL);
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)(write_byte);
+    mock_write->input_param[1].param        = length;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = mock_write->input_param[1].param;
+
+   if (new_write_byte != NULL) {
+       /* Complete the write request of pending request frame. */
+
+        const uint8_t length_of_frame = 4u + (new_write_byte[3] & ~1) + 2u; // @todo: FIX ME: magic numbers.
+
+        mock_write = mock_free_get("write");
+        CHECK(mock_write != NULL);
+        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->input_param[0].param        = (uint32_t)(new_write_byte);
+        mock_write->input_param[1].param        = length_of_frame;
+        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->return_value                = mock_write->input_param[1].param;
+
+        /* Request frame write sequence completed, start T1 timer. */
+
+        mock_t * mock_call_in = mock_free_get("call_in");
+        CHECK(mock_call_in != NULL);
+        mock_call_in->return_value = T1_TIMER_EVENT_ID;
+        mock_call_in->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_call_in->input_param[0].param        = T1_TIMER_VALUE;
+
+   }
+
+    /* Trigger deferred call to execute the programmed mocks above. */
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+
+    const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
+    mbed::EventQueueMock::io_control(eq_io_control);
+}
+
 class MuxCallbackTest : public MuxCallback {
 
 public:
@@ -7742,6 +7802,131 @@ TEST(MultiplexerOpenTestGroup, user_tx_2_full_frame_writes)
 
     write_ret = fh->write(&user_data, sizeof(user_data));
     CHECK_EQUAL(sizeof(user_data), write_ret);
+}
+
+static void user_tx_dlci_establish_during_user_tx_tx_callback()
+{
+    FAIL("TC FAILURE");
+}
+
+/*
+ * TC - Ensure successfull DLCI establishment is done when TX is occupied by user TX request
+ *
+ * Test sequence:
+ * - Occupy TX by user TX
+ * - Request DLCI establishment => put pending as TX occupied
+ * - Request DLCI establishment => rejected as previous one pending
+ * - Finish the user TX
+ * - Finish the DLCI establishment put pending
+ *
+ * Expected outcome:
+ * - Requested DLCI established
+ */
+TEST(MultiplexerOpenTestGroup, user_tx_dlci_establish_during_user_tx)
+{
+    mbed::FileHandleMock fh_mock;
+    mbed::EventQueueMock eq_mock;
+
+    mbed::Mux::eventqueue_attach(&eq_mock);
+
+    mock_t * mock_sigio = mock_free_get("sigio");
+    CHECK(mock_sigio != NULL);
+    mbed::Mux::serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    mbed::Mux::callback_attach(callback);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA);
+
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    FileHandle *fh = callback.file_handle_get();
+    CHECK(fh != NULL);
+
+    fh->sigio(user_tx_dlci_establish_during_user_tx_tx_callback);
+
+    /* Start user TX write cycle, not finished. */
+
+    const uint8_t user_data         = 0xA5u;
+    const uint8_t write_byte_uih[7] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (DLCI_ID_LOWER_BOUND << 2),
+        FRAME_TYPE_UIH,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&write_byte_uih[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL);
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte_uih[0]);
+    mock_write->input_param[1].param        = sizeof(write_byte_uih);
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 1;
+
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL);
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte_uih[1]);
+    mock_write->input_param[1].param        = sizeof(write_byte_uih) - sizeof(write_byte_uih[0]);
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;
+
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+
+    const ssize_t write_ret = fh->write(&user_data, sizeof(user_data));
+    CHECK_EQUAL(sizeof(user_data), write_ret);
+
+    /* Start new DLCI establishment while user TX in progress, put pending. */
+
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+
+    const nsapi_error channel_open_err = mbed::Mux::channel_open();
+    CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
+
+    /* Finish TX cycle for user TX. */
+
+    const uint8_t write_byte_sabm[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | ((DLCI_ID_LOWER_BOUND + 1u) << 2),
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_sabm[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    single_complete_write_cycle(&(write_byte_uih[1]), (UIH_FRAME_LEN - 1u), &(write_byte_sabm[0]));
+
+    /* Finish the pending DLCI establishment cycle. */
+
+    const uint8_t read_byte_sabm[5] =
+    {
+        3u | ((DLCI_ID_LOWER_BOUND + 1u) << 2),
+        (FRAME_TYPE_UA | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_sabm[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    callback.callback_arm();
+    self_iniated_response_rx(&(read_byte_sabm[0]),
+                             NULL,
+                             SKIP_FLAG_SEQUENCE_OCTET,
+                             STRIP_FLAG_FIELD_NO);
+
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    fh = callback.file_handle_get();
+    CHECK(fh != NULL);
 }
 
 } // namespace mbed

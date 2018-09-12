@@ -56,9 +56,9 @@ typedef struct
 MuxCallback *Mux::_cb = NULL;
 
 uint8_t Mux::_dlci   = 1u;
-#if 0    
+#if 0
 uint8_t Mux::_shared_memory   = 0;
-#endif 
+#endif
 FileHandle *Mux::_serial      = NULL;
 EventQueueMock *Mux::_event_q = NULL;
 MuxDataService Mux::_mux_objects[MBED_CONF_MUX_DLCI_COUNT];
@@ -66,7 +66,7 @@ MuxDataService Mux::_mux_objects[MBED_CONF_MUX_DLCI_COUNT];
 #if 0
 //rtos::Semaphore Mux::_semaphore(0);
 SemaphoreMock Mux::_semaphore;
-#endif 
+#endif
 PlatformMutexMock Mux::_mutex;
 
 Mux::tx_context_t Mux::_tx_context;
@@ -99,7 +99,7 @@ extern void trace(char *string, int data);
 void Mux::module_init()
 {
     _dlci = 1u;
-    
+
     _state.is_mux_open              = 0;
     _state.is_mux_open_pending      = 0;
     _state.is_mux_open_running      = 0;
@@ -149,17 +149,17 @@ void Mux::on_timeout()
                 tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, null_action);
             } else {
                 /* Retransmission limit reached, change state and complete the operation with appropriate status code. */
-#if 0                   
+#if 0
                 _shared_memory           = MUX_ESTABLISH_TIMEOUT;
                 const osStatus os_status = _semaphore.release();
                 MBED_ASSERT(os_status == osOK);
-#endif                 
+#endif
 // @todo: clear op running bits? => always do in tx_idle entry? NOT as app can call back in callback context!
 
                 _state.is_mux_open_running  = 0;
-                _state.is_dlci_open_running = 0;                
-                
-                _cb->channel_open_run(NULL);         
+                _state.is_dlci_open_running = 0;
+
+                _cb->channel_open_run(NULL);
                 tx_state_change(TX_IDLE, tx_idle_entry_run, null_action);
             }
             break;
@@ -209,35 +209,35 @@ void Mux::on_rx_frame_ua()
             is_pf_bit_set = _rx_context.buffer[FRAME_CONTROL_FIELD_INDEX] & PF_BIT;
 
             // @todo: add logic to verify that we have started a mux/channel open procedure? */
-            
+
             if (is_cr_bit_set && is_pf_bit_set) {
                 tx_dlci_id = _tx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] >> 2;
                 rx_dlci_id = _rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] >> 2;
                 if (tx_dlci_id == rx_dlci_id) {
                     _event_q->cancel(_tx_context.timer_id);
-#if 0                    
+#if 0
                     _shared_memory = MUX_ESTABLISH_SUCCESS;
-#endif                     
+#endif
                     if (rx_dlci_id != 0) {
-                        _state.is_dlci_open_running = 0; 
+                        _state.is_dlci_open_running = 0;
                         dlci_id_append(rx_dlci_id);
                         ++_dlci;
-                        
+
                         FileHandle *fh = file_handle_get(rx_dlci_id);
                         MBED_ASSERT(fh != NULL);
-                
+
                         _cb->channel_open_run(fh);
-                    } else { 
+                    } else {
                         /* Store current state and request scheduling of channel creation procedure. */
                         _state.is_mux_open_running  = 0;
-                        _state.is_mux_open          = 1u;    
+                        _state.is_mux_open          = 1u;
                         _state.is_dlci_open_pending = 1u;
                     }
 #if 0
                     os_status = _semaphore.release();
                     MBED_ASSERT(os_status == osOK);
 #endif
-                    
+
                     tx_state_change(TX_IDLE, tx_idle_entry_run, null_action);
                 }
             }
@@ -268,15 +268,15 @@ void Mux::on_rx_frame_dm()
                 rx_dlci_id = _rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] >> 2;
                 if (tx_dlci_id == rx_dlci_id) {
                     _event_q->cancel(_tx_context.timer_id);
-#if 0                    
+#if 0
                     _shared_memory = MUX_ESTABLISH_REJECT;
                     os_status      = _semaphore.release();
                     MBED_ASSERT(os_status == osOK);
-#endif                                
+#endif
                     _state.is_mux_open_running  = 0;
                     _state.is_dlci_open_running = 0;
-                    
-                    _cb->channel_open_run(NULL);         
+
+                    _cb->channel_open_run(NULL);
                     tx_state_change(TX_IDLE, tx_idle_entry_run, null_action);
                 }
             }
@@ -304,7 +304,7 @@ void Mux::dm_response_send()
 
 
 void Mux::on_rx_frame_disc()
-{    
+{
     /* Follow the specification: DM response generated for those DLCI IDs which are not established. */
 
     switch (_tx_context.tx_state) {
@@ -408,9 +408,9 @@ Mux::FrameRxType Mux::frame_rx_type_resolve()
 
 void Mux::tx_state_change(TxState new_state, tx_state_entry_func_t entry_func, tx_state_exit_func_t exit_func)
 {
-#if 0    
+#if 0
 trace("TX-state new state: ", new_state);
-#endif 
+#endif
     exit_func();
     _tx_context.tx_state = new_state;
     entry_func();
@@ -822,9 +822,9 @@ void Mux::rx_event_do(RxEvent event)
         rx_read_func_t func;
         case RX_READ:
             do {
-#if 0                
-trace("RX-event state: ", _rx_context.rx_state);                
-#endif 
+#if 0
+trace("RX-event state: ", _rx_context.rx_state);
+#endif
                 func     = rx_read_func[_rx_context.rx_state];
                 read_err = func();
             } while (read_err != -EAGAIN);
@@ -1152,63 +1152,64 @@ nsapi_error Mux::channel_open()
 Code needs to added wich returns NSAPI_ERROR_IN_PROGRESS when TX state is 1 of below
 TX_RETRANSMIT_ENQUEUE,
 TX_RETRANSMIT_DONE
-#endif         
-    
+#endif
+
     _mutex.lock();
-    
+
     if (_state.is_mux_open_running) {
         _mutex.unlock();
-        
+
         return NSAPI_ERROR_IN_PROGRESS;
     }
     if (_state.is_dlci_open_running) {
         _mutex.unlock();
-        
+
         return NSAPI_ERROR_IN_PROGRESS;
-    }    
+    }
     if (_state.is_mux_open_pending) {
         _mutex.unlock();
-        
+
         return NSAPI_ERROR_IN_PROGRESS;
-    } 
+    }
     if (_state.is_dlci_open_pending) {
         _mutex.unlock();
-        
+
         return NSAPI_ERROR_IN_PROGRESS;
-    }     
+    }
     if (is_dlci_q_full()) {
         _mutex.unlock();
 
         return NSAPI_ERROR_NO_MEMORY;
-    }    
+    }
     // @todo: add is_dlci_open_pending check
-    
+
     switch (_tx_context.tx_state) {
         int ret_wait;
         case TX_IDLE:
             if (_state.is_mux_open) {
-                /* Multiplexer control channel exists, start creation of user channel. */                
-                
+                /* Multiplexer control channel exists, start creation of user channel. */
+
                 sabm_request_construct(_dlci);
-                _state.is_dlci_open_running = 1u;                                
+                _state.is_dlci_open_running = 1u;
             } else {
                 /* Start creation of multiplexer control channel. */
-            
+
                 sabm_request_construct(0);
-                _state.is_mux_open_running = 1u;                                     
+                _state.is_mux_open_running = 1u;
             }
-            
+
             _tx_context.retransmit_counter = RETRANSMIT_COUNT;
-            tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);  
-            
+            tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
+
             break;
+        case TX_NORETRANSMIT:
         case TX_INTERNAL_RESP:
             if (!_state.is_mux_open) {
                 _state.is_mux_open_pending = 1u;
             } else {
                 _state.is_dlci_open_pending = 1u;
             }
-#if 0            
+#if 0
             _state.is_mux_open_pending = 1u;
 
             _mutex.unlock();
@@ -1218,20 +1219,20 @@ TX_RETRANSMIT_DONE
             if (status == MUX_ESTABLISH_SUCCESS) {
                 _state.is_mux_open = 1u;
             }
-#endif 
+#endif
             break;
         default:
             /* Code that should never be reached. */
             MBED_ASSERT(false);
             break;
     };
-    
+
     _mutex.unlock();
-    
+
     return NSAPI_ERROR_OK;
 }
-    
-    
+
+
 void Mux::user_information_construct(uint8_t dlci_id, const void* buffer, size_t size)
 {
     frame_hdr_t *frame_hdr =
