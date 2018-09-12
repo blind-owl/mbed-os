@@ -6003,7 +6003,7 @@ void channel_open(uint8_t dlci, MuxCallbackTest &callback)
         fcs_calculate(&read_byte_channel_open[0], 3),
         FLAG_SEQUENCE_OCTET
     };
-    callback.callback_arm(); 
+    callback.callback_arm();
     self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
 }
 
@@ -7238,9 +7238,9 @@ TEST(MultiplexerOpenTestGroup, channel_open_all_channel_ids_used_ensure_uniqueue
  * - Establish multiplexer control channel
  * - Send open user channel request message
  * - Peer rejects user channel request message with appropriate response message
- * - Generate channel open callback with a invalid FileHandle  
+ * - Generate channel open callback with a invalid FileHandle
  * - Establish user channel
- * - Generate channel open callback with a valid FileHandle 
+ * - Generate channel open callback with a valid FileHandle
  *
  * Expected outcome:
  * - As specified above
@@ -7260,7 +7260,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_rejected_by_peer)
     MuxCallbackTest callback;
     mbed::Mux::callback_attach(callback);
 
-    /* Establish multiplexer control channel. Peer rejects user channel request message with appropriate response 
+    /* Establish multiplexer control channel. Peer rejects user channel request message with appropriate response
        message. */
 
     mux_self_iniated_open(callback, FRAME_TYPE_DM);
@@ -7269,19 +7269,19 @@ TEST(MultiplexerOpenTestGroup, channel_open_rejected_by_peer)
     CHECK(callback.is_callback_called());
     FileHandle *fh = callback.file_handle_get();
     CHECK_EQUAL(NULL, fh);
-    
+
     /* Establish user channel. */
-    
+
     channel_open(1, callback);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
     fh = callback.file_handle_get();
-    CHECK(fh != NULL);    
+    CHECK(fh != NULL);
 }
 
 /*
- * TC - Ensure proper behaviour when multiplexer control channel is established and user channel open request is 
+ * TC - Ensure proper behaviour when multiplexer control channel is established and user channel open request is
  *      received from the peer
  *
  * Test sequence:
@@ -7313,8 +7313,8 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated)
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
     FileHandle *fh = callback.file_handle_get();
-    CHECK(fh != NULL);    
-    
+    CHECK(fh != NULL);
+
     const uint8_t read_byte[5] =
     {
         1u | ((DLCI_ID_LOWER_BOUND + 1u) << 2),
@@ -7323,7 +7323,7 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated)
         fcs_calculate(&read_byte[0], 3),
         FLAG_SEQUENCE_OCTET
     };
-    peer_iniated_request_rx(&(read_byte[0]), SKIP_FLAG_SEQUENCE_OCTET, NULL, NULL, 0);    
+    peer_iniated_request_rx(&(read_byte[0]), SKIP_FLAG_SEQUENCE_OCTET, NULL, NULL, 0);
 }
 
 /*
@@ -7438,7 +7438,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_dm_tx_currently_running)
     self_iniated_request_tx(&(write_byte_channel_open[1]),
                             (sizeof(write_byte_channel_open) - sizeof(write_byte_channel_open[0])),
                             FRAME_HEADER_READ_LEN);
-    callback.callback_arm();                            
+    callback.callback_arm();
     self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
 
     /* Validate Filehandle generation. */
@@ -7480,20 +7480,20 @@ TEST(MultiplexerOpenTestGroup, user_tx_0_length_user_payload)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA);    
-    
+    mux_self_iniated_open(callback, FRAME_TYPE_UA);
+
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
     FileHandle *fh = callback.file_handle_get();
-    CHECK(fh != NULL);  
+    CHECK(fh != NULL);
 
     fh->sigio(user_tx_0_length_user_payload_callback);
 
     /* Issue 0 length write request to the channel. */
-    
+
     const uint8_t write_dummy = 0xA5u;
     const ssize_t ret         = fh->write(&write_dummy, 0);
-    CHECK_EQUAL(0, ret);    
+    CHECK_EQUAL(0, ret);
 }
 
 
@@ -7528,17 +7528,17 @@ TEST(MultiplexerOpenTestGroup, user_tx_size_lower_bound)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA);    
-    
+    mux_self_iniated_open(callback, FRAME_TYPE_UA);
+
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
     FileHandle *fh = callback.file_handle_get();
-    CHECK(fh != NULL);  
+    CHECK(fh != NULL);
 
     fh->sigio(user_tx_size_lower_bound_tx_callback);
 
     /* Program write cycle. */
-    const uint8_t dlci_id       = 1u;        
+    const uint8_t dlci_id       = 1u;
     uint8_t user_data           = 0xA5u;
     const uint8_t write_byte[7] =
     {
@@ -7564,6 +7564,83 @@ TEST(MultiplexerOpenTestGroup, user_tx_size_lower_bound)
     CHECK(mock_unlock != NULL);
     const ssize_t write_ret = fh->write(&user_data, sizeof(user_data));
     CHECK_EQUAL(sizeof(user_data), write_ret);
+}
+
+
+static void sequence_generate(uint8_t* write_byte, uint8_t count)
+{
+    while (count != 0) {
+        *write_byte = count;
+
+        ++write_byte;
+        --count;
+    }
+}
+
+ /*
+ * TC - Ensure proper behaviour when MAX length UIH frame TX in 1 write call is done
+ *
+ * Test sequence:
+ * - Establish  a user channel
+ * - Issue MAX length UIH frame write request to the channel
+ *
+ * Expected outcome:
+ * - Request accepted by the implementation
+ * - write done in 1 write call
+ */
+TEST(MultiplexerOpenTestGroup, user_tx_size_upper_bound)
+{
+    mbed::FileHandleMock fh_mock;
+    mbed::EventQueueMock eq_mock;
+
+    mbed::Mux::eventqueue_attach(&eq_mock);
+
+    mock_t * mock_sigio = mock_free_get("sigio");
+    CHECK(mock_sigio != NULL);
+    mbed::Mux::serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    mbed::Mux::callback_attach(callback);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA);
+
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    FileHandle *fh = callback.file_handle_get();
+    CHECK(fh != NULL);
+
+    fh->sigio(user_tx_size_lower_bound_tx_callback);
+
+    /* Program write cycle. */
+    const uint8_t dlci_id              = 1u;
+    uint8_t write_byte[TX_BUFFER_SIZE] = {0};
+    write_byte[0]                      = FLAG_SEQUENCE_OCTET;
+    write_byte[1]                      = 3u | (dlci_id << 2);
+    write_byte[2]                      = FRAME_TYPE_UIH;
+    write_byte[3]                      = LENGTH_INDICATOR_OCTET | ((TX_BUFFER_SIZE - 6u) << 1);
+
+    sequence_generate(&(write_byte[4]), (sizeof(write_byte) - 6u));
+
+    write_byte[TX_BUFFER_SIZE - 2] = fcs_calculate(&write_byte[1], 3u);
+    write_byte[TX_BUFFER_SIZE - 1] = FLAG_SEQUENCE_OCTET;
+
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL);
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);
+    mock_write->input_param[1].param        = sizeof(write_byte);
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = mock_write->input_param[1].param;
+
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+
+    const ssize_t ret = fh->write(&(write_byte[4]), (TX_BUFFER_SIZE - 6u));
+    CHECK_EQUAL((TX_BUFFER_SIZE - 6u), ret);
 }
 
 } // namespace mbed
