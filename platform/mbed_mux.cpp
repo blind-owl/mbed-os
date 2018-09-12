@@ -1148,6 +1148,12 @@ Mux::MuxReturnStatus Mux::mux_start(Mux::MuxEstablishStatus &status)
 
 nsapi_error Mux::channel_open()
 {
+#if 0
+Code needs to added wich returns NSAPI_ERROR_IN_PROGRESS when TX state is 1 of below
+TX_RETRANSMIT_ENQUEUE,
+TX_RETRANSMIT_DONE
+#endif         
+    
     _mutex.lock();
     
     if (_state.is_mux_open_running) {
