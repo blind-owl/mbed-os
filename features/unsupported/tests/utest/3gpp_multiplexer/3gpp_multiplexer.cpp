@@ -4365,7 +4365,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_rx_suspend_rx_resume_cycle)
     read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
     CHECK_EQUAL(-EAGAIN, read_ret);
 }
-
+#endif
 
 void single_byte_read_cycle(const uint8_t *read_byte,
                             uint8_t        length)
@@ -4462,7 +4462,7 @@ void single_byte_read_cycle(const uint8_t *read_byte,
     } while (rx_count != length);
 }
 
-
+#if 0
 static uint8_t m_user_rx_read_1_byte_per_run_context_check_value = 0;
 static void user_rx_read_1_byte_per_run_context_callback()
 {
@@ -9171,6 +9171,83 @@ TEST(MultiplexerOpenTestGroup, user_rx_rx_suspend_rx_resume_cycle)
     CHECK(mock_unlock != NULL);
     read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
     CHECK_EQUAL(-EAGAIN, read_ret);
+}
+
+static uint8_t m_user_rx_read_1_byte_per_run_context_check_value = 0;
+static void user_rx_read_1_byte_per_run_context_callback()
+{
+    ++m_user_rx_read_1_byte_per_run_context_check_value;
+}
+
+
+/*
+ * TC - Ensure that Rx frame read works correctly when only 1 byte can be read from lower layer within run context.
+ *
+ * Test sequence:
+ * - Establish 1 DLCI
+ * - Generate user RX data frame
+ * - Generate read cycles which only supply 1 byte at a time from lower layer
+ * - Verify read buffer upon frame read complete
+ *
+ * Expected outcome:
+ * - Read buffer verified
+ * - Correct callback count
+ */
+TEST(MultiplexerOpenTestGroup, user_rx_read_1_byte_per_run_context)
+{
+    m_user_rx_read_1_byte_per_run_context_check_value = 0;
+
+    mbed::FileHandleMock fh_mock;
+    mbed::EventQueueMock eq_mock;
+
+    mbed::Mux::eventqueue_attach(&eq_mock);
+
+    mock_t * mock_sigio = mock_free_get("sigio");
+    CHECK(mock_sigio != NULL);
+    mbed::Mux::serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    mbed::Mux::callback_attach(callback);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA);
+
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    m_file_handle[0] = callback.file_handle_get();
+    CHECK(m_file_handle[0] != NULL);
+
+    m_file_handle[0]->sigio(user_rx_read_1_byte_per_run_context_callback);
+
+    /* Start read cycle for the DLCI. */
+    const uint8_t user_data    = 0xA5u;
+    const uint8_t read_byte[6] =
+    {
+        1u | (DLCI_ID_LOWER_BOUND << 2),
+        FRAME_TYPE_UIH,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&read_byte[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    single_byte_read_cycle(&(read_byte[0]), sizeof(read_byte));
+
+    /* Verify read buffer. */
+    mock_t * mock_call = mock_free_get("call");
+    CHECK(mock_call != NULL);
+    mock_call->return_value = 1;
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+    uint8_t buffer[1]       = {0};
+    const ssize_t read_ret  = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
+    CHECK_EQUAL(sizeof(buffer), read_ret);
+    CHECK_EQUAL(user_data, buffer[0]);
+
+    /* Validate proper callback callcount. */
+    CHECK_EQUAL(1, m_user_rx_read_1_byte_per_run_context_check_value);
 }
 
 } // namespace mbed
