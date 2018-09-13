@@ -8889,4 +8889,93 @@ TEST(MultiplexerOpenTestGroup, user_rx_0_length_user_payload)
     CHECK_EQUAL(-EAGAIN, read_ret);
 }
 
+
+static uint8_t m_user_rx_single_read_check_value = 0;
+static void user_rx_single_read_callback()
+{
+    ++m_user_rx_single_read_check_value;
+
+    mock_t * mock_call = mock_free_get("call");
+    CHECK(mock_call != NULL);
+    mock_call->return_value = 1;
+    uint8_t buffer[1]       = {0};
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+    ssize_t read_ret        = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
+    CHECK(read_ret == sizeof(buffer));
+    CHECK_EQUAL(0xA5u, buffer[0]);
+
+    /* Verify failure after successfull read cycle. */
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+    read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
+    CHECK_EQUAL(-EAGAIN, read_ret);
+}
+
+/*
+ * TC - Ensure the following for a single complete user data read cycle:
+ * - correct RX callback count
+ * - correct user payload content
+ * - correct user payload length
+ * - 2nd read request will return appropriate error to inform no data available for read
+ *
+ * Test sequence:
+ * 1. Establish 1 DLCI
+ * 2. Generate user RX data
+ * 3. Issue 1st read in the callback
+ * 4. Issue 2nd read in the callback
+ *
+ * Expected outcome:
+ * - as specified in TC description
+ */
+TEST(MultiplexerOpenTestGroup, user_rx_single_read)
+{
+    m_user_rx_single_read_check_value = 0;
+
+    mbed::FileHandleMock fh_mock;
+    mbed::EventQueueMock eq_mock;
+
+    mbed::Mux::eventqueue_attach(&eq_mock);
+
+    mock_t * mock_sigio = mock_free_get("sigio");
+    CHECK(mock_sigio != NULL);
+    mbed::Mux::serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    mbed::Mux::callback_attach(callback);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA);
+
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    m_file_handle[0] = callback.file_handle_get();
+    CHECK(m_file_handle[0] != NULL);
+
+    m_file_handle[0]->sigio(user_rx_single_read_callback);
+
+    /* Start read cycle for the DLCI. */
+    const uint8_t user_data    = 0xA5u;
+    const uint8_t read_byte[6] =
+    {
+        1u | (DLCI_ID_LOWER_BOUND << 2),
+        FRAME_TYPE_UIH,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&read_byte[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+
+    /* Rx user data is read completely within callback context, thus Rx cycle is resumed. */
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE);
+
+    /* Validate proper callback callcount. */
+    CHECK_EQUAL(1, m_user_rx_single_read_check_value);
+}
+
 } // namespace mbed
