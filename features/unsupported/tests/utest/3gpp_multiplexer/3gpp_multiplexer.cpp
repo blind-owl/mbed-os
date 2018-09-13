@@ -3978,13 +3978,14 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_tx_to_different_dlci_not_wit
     /* Validate proper TX callback callcount. */
     CHECK_EQUAL(2u, m_user_tx_callback_tx_to_different_dlci_not_within_current_context_check_value);
 }
-
+#endif
 
 typedef enum
 {
     RESUME_RX_CYCLE = 0,
     SUSPEND_RX_CYCLE
 } RxCycleContinueType;
+
 
 void single_complete_read_cycle(const uint8_t*      read_byte,
                                 uint8_t             length,
@@ -4041,6 +4042,7 @@ void single_complete_read_cycle(const uint8_t*      read_byte,
     mbed::EventQueueMock::io_control(eq_io_control);
 }
 
+#if 0
 
 static void user_rx_0_length_user_payload_callback()
 {
@@ -8824,5 +8826,67 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_tx_to_different_dlci_not_wit
     CHECK_EQUAL(2u, m_user_tx_callback_tx_to_different_dlci_not_within_current_context_check_value);
 }
 
+
+static void user_rx_0_length_user_payload_callback()
+{
+    FAIL("TC FAILURE IF CALLED");
+}
+
+/*
+ * TC - Ensure read failure for 0 user data length Rx cycle
+ *
+ * Test sequence:
+ * - Establish 1 DLCI
+ * - Generate user RX data with 0 length user data
+ *
+ * Expected outcome:
+ * - User read return -EAGAIN
+ * - No callback called
+ */
+TEST(MultiplexerOpenTestGroup, user_rx_0_length_user_payload)
+{
+    mbed::FileHandleMock fh_mock;
+    mbed::EventQueueMock eq_mock;
+
+    mbed::Mux::eventqueue_attach(&eq_mock);
+
+    mock_t * mock_sigio = mock_free_get("sigio");
+    CHECK(mock_sigio != NULL);
+    mbed::Mux::serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    mbed::Mux::callback_attach(callback);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA);
+
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    m_file_handle[0] = callback.file_handle_get();
+    CHECK(m_file_handle[0] != NULL);
+
+    m_file_handle[0]->sigio(user_rx_0_length_user_payload_callback);
+
+    /* Start read cycle for the DLCI. */
+    const uint8_t read_byte[5] =
+    {
+        1u | (DLCI_ID_LOWER_BOUND << 2),
+        FRAME_TYPE_UIH,
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE);
+
+    /* Verify read failure after successfull read cycle. */
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+    uint8_t buffer[1]      = {0};
+    const ssize_t read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
+    CHECK_EQUAL(-EAGAIN, read_ret);
+}
 
 } // namespace mbed
