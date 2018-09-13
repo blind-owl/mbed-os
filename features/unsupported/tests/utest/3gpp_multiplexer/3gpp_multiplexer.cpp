@@ -8193,4 +8193,124 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_set_pending_multiple_times_f
     CHECK_EQUAL(1u, m_user_tx_callback_set_pending_multiple_times_for_same_dlci_only_1_callback_generated_value);
 }
 
+
+static uint8_t m_user_tx_callback_set_pending_for_all_dlcis_check_value = 0;
+static void tx_callback_dispatch_set_pending_for_all_dlcis_tx_callback()
+{
+    ++m_user_tx_callback_set_pending_for_all_dlcis_check_value;
+}
+
+ /*
+ * TC - Ensure proper behaviour when all all channels have TX callback pending
+ *
+ * Expected outcome:
+ * - Correct amount of callbacks executed
+ */
+TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_set_pending_for_all_dlcis)
+{
+    m_user_tx_callback_set_pending_for_all_dlcis_check_value = 0;
+
+    mbed::FileHandleMock fh_mock;
+    mbed::EventQueueMock eq_mock;
+
+    mbed::Mux::eventqueue_attach(&eq_mock);
+
+    mock_t * mock_sigio = mock_free_get("sigio");
+    CHECK(mock_sigio != NULL);
+    mbed::Mux::serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    mbed::Mux::callback_attach(callback);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA);
+
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    m_file_handle[0] = callback.file_handle_get();
+    CHECK(m_file_handle[0] != NULL);
+
+    (m_file_handle[0])->sigio(tx_callback_dispatch_set_pending_for_all_dlcis_tx_callback);
+
+    /* Create max amount of DLCIs and collect the handles */
+    uint8_t dlci_id = DLCI_ID_LOWER_BOUND + 1u;
+    for (uint8_t i = 1u; i!= MAX_DLCI_COUNT; ++i) {
+        channel_open(dlci_id, callback);
+
+        /* Validate Filehandle generation. */
+        CHECK(callback.is_callback_called());
+        m_file_handle[i] = callback.file_handle_get();
+        CHECK(m_file_handle[i] != NULL);
+
+        (m_file_handle[i])->sigio(tx_callback_dispatch_set_pending_for_all_dlcis_tx_callback);
+
+        ++dlci_id;
+    }
+
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+
+    /* All available DLCI ids consumed. Next request will fail. */
+    nsapi_error channel_open_err = mbed::Mux::channel_open();
+    CHECK_EQUAL(NSAPI_ERROR_NO_MEMORY, channel_open_err);
+
+    /* Program write cycle. */
+    dlci_id                     = DLCI_ID_LOWER_BOUND;
+    const uint8_t user_data     = 1u;
+    const uint8_t write_byte[7] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (dlci_id << 2),
+        FRAME_TYPE_UIH,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&write_byte[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL);
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);
+    mock_write->input_param[1].param        = sizeof(write_byte);
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 1;
+
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL);
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[1]);
+    mock_write->input_param[1].param        = sizeof(write_byte) - sizeof(write_byte[0]);
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;
+
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+
+    /* 1st write request accepted by the implementation. */
+    ssize_t write_ret = (m_file_handle[0])->write(&user_data, sizeof(user_data));
+    CHECK_EQUAL(sizeof(user_data), write_ret);
+
+    /* TX cycle in progress, all further write request will fail. */
+    for (uint8_t i = 0; i!= MAX_DLCI_COUNT; ++i) {
+        mock_lock = mock_free_get("lock");
+        CHECK(mock_lock != NULL);
+        mock_unlock = mock_free_get("unlock");
+        CHECK(mock_unlock != NULL);
+        ssize_t write_ret = (m_file_handle[i])->write(&user_data, sizeof(user_data));
+        CHECK_EQUAL(0, write_ret);
+    }
+
+    /* Begin sequence: Complete the 1st write, which triggers the pending TX callback. */
+
+    single_complete_write_cycle(&(write_byte[1]), (sizeof(write_byte) - sizeof(write_byte[0])), NULL);
+
+    /* Validate proper callback sequence. */
+    CHECK_EQUAL(MAX_DLCI_COUNT, m_user_tx_callback_set_pending_for_all_dlcis_check_value);
+}
+
 } // namespace mbed
