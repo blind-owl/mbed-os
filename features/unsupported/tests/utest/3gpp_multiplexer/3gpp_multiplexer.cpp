@@ -8978,4 +8978,55 @@ TEST(MultiplexerOpenTestGroup, user_rx_single_read)
     CHECK_EQUAL(1, m_user_rx_single_read_check_value);
 }
 
+
+static void user_rx_single_read_no_data_available_callback()
+{
+    FAIL("TC FAILURE IF CALLED");
+}
+
+/*
+ * TC - Ensure the following for a single complete user data read request:
+ * - read request will return appropriate error to inform no data available for read
+ *
+ * Test sequence:
+ * 1. Establish 1 DLCI
+ * 2. Issue read request
+ *
+ * Expected outcome:
+ * - as specified in TC description
+ */
+TEST(MultiplexerOpenTestGroup, user_rx_single_read_no_data_available)
+{
+    mbed::FileHandleMock fh_mock;
+    mbed::EventQueueMock eq_mock;
+
+    mbed::Mux::eventqueue_attach(&eq_mock);
+
+    mock_t * mock_sigio = mock_free_get("sigio");
+    CHECK(mock_sigio != NULL);
+    mbed::Mux::serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    mbed::Mux::callback_attach(callback);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA);
+
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    m_file_handle[0] = callback.file_handle_get();
+    CHECK(m_file_handle[0] != NULL);
+
+    m_file_handle[0]->sigio(user_rx_single_read_no_data_available_callback);
+
+    uint8_t buffer[1]      = {0};
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+    const ssize_t read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
+    CHECK(read_ret == -EAGAIN);
+}
+
 } // namespace mbed
