@@ -216,7 +216,7 @@ typedef enum
 /* Read complete response frame from the peer
  */
 void self_iniated_response_rx(const uint8_t            *rx_buf,
-                              const uint8_t            *write_byte,
+                              const uint8_t            *resp_write_byte,
                               FlagSequenceOctetReadType read_type,
                               StripFlagFieldType        strip_flag_field_type)
 {
@@ -305,12 +305,47 @@ void self_iniated_response_rx(const uint8_t            *rx_buf,
     CHECK(mock_cancel != NULL);
     mock_cancel->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_cancel->input_param[0].param        = T1_TIMER_EVENT_ID;
+
+    mock_t * mock_write;
+    if (resp_write_byte != NULL)  {
+        /* RX frame completed, start the response frame TX sequence inside the current RX cycle. */
+
+        const uint8_t length_of_frame = 4u + (resp_write_byte[3] & ~1) + 2u; // @todo: FIX ME: magic numbers.
+
+        mock_write = mock_free_get("write");
+        CHECK(mock_write != NULL);
+        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->input_param[0].param        = (uint32_t)&(resp_write_byte[0]);
+        mock_write->input_param[1].param        = length_of_frame;
+        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->return_value                = 1;
+
+        /* End TX sequence: this call orginates from tx_internal_resp_entry_run(). */
+        mock_write = mock_free_get("write");
+        CHECK(mock_write != NULL);
+        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->input_param[0].param        = (uint32_t)&(resp_write_byte[1]);
+        mock_write->input_param[1].param        = (length_of_frame - 1u);
+        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->return_value                = 0;
+
+        /* End TX sequence: this call orginates from on_deferred_call(). */
+        mock_write = mock_free_get("write");
+        CHECK(mock_write != NULL);
+        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->input_param[0].param        = (uint32_t)&(resp_write_byte[1]);
+        mock_write->input_param[1].param        = (length_of_frame - 1u);
+        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->return_value                = 0;
+    }
+
 #if 0
     /* Release the semaphore blocking the call thread. */
     mock_t * mock_release = mock_free_get("release");
     CHECK(mock_release != NULL);
     mock_release->return_value = osOK;
 #endif
+
     /* Resume the Rx cycle and stop it. */
     mock_read = mock_free_get("read");
     CHECK(mock_read != NULL);
@@ -3989,7 +4024,9 @@ typedef enum
 
 void single_complete_read_cycle(const uint8_t*      read_byte,
                                 uint8_t             length,
-                                RxCycleContinueType rx_cycle_continue)
+                                RxCycleContinueType rx_cycle_continue,
+                                const uint8_t*      tx_frame,
+                                uint8_t             tx_frame_length)
 {
     mock_t * mock_call = mock_free_get("call");
     CHECK(mock_call != NULL);
@@ -4031,6 +4068,17 @@ void single_complete_read_cycle(const uint8_t*      read_byte,
         mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_read->input_param[0].param        = FRAME_HEADER_READ_LEN;
         mock_read->return_value                = -EAGAIN;
+    }
+    if (tx_frame != NULL) {
+        /* Resume TX of current frame in the TX buffer. */
+
+        mock_t * mock_write = mock_free_get("write");
+        CHECK(mock_write != NULL);
+        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->input_param[0].param        = (uint32_t)&(tx_frame[0]);
+        mock_write->input_param[1].param        = tx_frame_length;
+        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->return_value                = 0;
     }
 
     mock_t * mock_lock = mock_free_get("lock");
@@ -8877,7 +8925,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_0_length_user_payload)
         fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
     };
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE);
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE, NULL, 0);
 
     /* Verify read failure after successfull read cycle. */
     mock_t * mock_lock = mock_free_get("lock");
@@ -8972,7 +9020,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_single_read)
     };
 
     /* Rx user data is read completely within callback context, thus Rx cycle is resumed. */
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE);
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE, NULL, 0);
 
     /* Validate proper callback callcount. */
     CHECK_EQUAL(1, m_user_rx_single_read_check_value);
@@ -9091,7 +9139,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_rx_suspend_rx_resume_cycle)
         fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
     };
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE);
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE, NULL, 0);
 
     /* Validate proper callback callcount. */
     CHECK_EQUAL(1, m_user_rx_rx_suspend_rx_resume_cycle_check_value );
@@ -9136,7 +9184,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_rx_suspend_rx_resume_cycle)
     read_byte[3] = user_data;
     read_byte[4] = fcs_calculate(&read_byte[0], 3u);
 
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE);
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE, NULL, 0);
 
     /* Validate proper callback callcount. */
     CHECK_EQUAL(2, m_user_rx_rx_suspend_rx_resume_cycle_check_value );
@@ -9308,7 +9356,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_max_size_user_payload_in_1_read_call
     read_byte[sizeof(read_byte) - 2] = fcs_calculate(&read_byte[0], 3u);
     read_byte[sizeof(read_byte) - 1] = FLAG_SEQUENCE_OCTET;
 
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE);
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE, NULL, 0);
 
     /* Verify read buffer. */
     mock_t * mock_call = mock_free_get("call");
@@ -9387,7 +9435,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_1_byte_per_read_call_max_size_user_p
     read_byte[sizeof(read_byte) - 2] = fcs_calculate(&read_byte[0], 3u);
     read_byte[sizeof(read_byte) - 1] = FLAG_SEQUENCE_OCTET;
 
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE);
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE, NULL, 0);
 
     /* Verify read buffer: do reads 1 byte a time until all of the data is read. */
     mock_t * mock_lock;
@@ -9495,7 +9543,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_dlci_not_established)
     for (uint8_t i = 0; i != (MAX_DLCI_COUNT - 1u); ++i) {
 
         /* Start read cycle for the not established DLCI. */
-        single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE);
+        single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE, NULL, 0);
 
         /* Validate proper callback callcount. */
         CHECK_EQUAL(i, m_user_rx_dlci_not_established_check_value);
@@ -9504,7 +9552,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_dlci_not_established)
         read_byte[0] = 1u | ((dlci_id - 1u) << 2);
         read_byte[3] = ++user_data;
         read_byte[4] = fcs_calculate(&read_byte[0], 3u);
-        single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE);
+        single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE, NULL, 0);
 
         /* Validate proper callback callcount. */
         CHECK_EQUAL((i + 1), m_user_rx_dlci_not_established_check_value);
@@ -9551,6 +9599,184 @@ TEST(MultiplexerOpenTestGroup, user_rx_dlci_not_established)
 
     const nsapi_error channel_open_err = mbed::Mux::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_NO_MEMORY, channel_open_err);
+}
+
+static uint8_t m_user_rx_invalidate_dlci_id_used_check_value = 0;
+static void user_rx_invalidate_dlci_id_used_callback()
+{
+    ++m_user_rx_invalidate_dlci_id_used_check_value;
+}
+
+/*
+ * TC - Ensure proper behaviour when user data Rx frame received to DLCI ID value, which implementation uses internally
+ *      to invalidate a DLCI ID object.
+ *
+ * Test sequence:
+ * - Mux open
+ * - Rx user data frame to invalidate ID DLCI: silently discarded by the implementation
+ * - Establish a DLCI
+ * - Rx user data frame to invalidate ID DLCI: silently discarded by the implementation
+ * - Rx user data frame to established DLCI: accepted by the implementation.
+ *
+ * Expected outcome:
+ * - The invalidate ID DLCI Rx frame is dropped by the implementation
+ * - The Rx frame is accepted by the implementation for the established DLCI
+ * - Validate proper callback callcount
+ * - Validate read buffer
+ */
+TEST(MultiplexerOpenTestGroup, user_rx_invalidate_dlci_id_used)
+{
+    m_user_rx_invalidate_dlci_id_used_check_value = 0;
+
+    mbed::FileHandleMock fh_mock;
+    mbed::EventQueueMock eq_mock;
+
+    mbed::Mux::eventqueue_attach(&eq_mock);
+
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");
+    CHECK(mock_sigio != NULL);
+    mbed::Mux::serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    mbed::Mux::callback_attach(callback);
+
+    /* Send multiplexer open request within the call context. */
+
+    const uint8_t write_byte_mux_open[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET,
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_mux_open[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL);
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte_mux_open[0]);
+    mock_write->input_param[1].param        = SABM_FRAME_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = SABM_FRAME_LEN;
+
+    /* Start frame write sequence gets completed, now start T1 timer. */
+    mock_t * mock_call_in = mock_free_get("call_in");
+    CHECK(mock_call_in != NULL);
+    mock_call_in->return_value                = T1_TIMER_EVENT_ID;
+    mock_call_in->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_call_in->input_param[0].param        = T1_TIMER_VALUE;
+
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+
+    const nsapi_error channel_open_err = mbed::Mux::channel_open();
+    CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
+
+    /* Receive multiplexer open response, and start TX of open user channel request. */
+
+    const uint8_t read_byte_mux_open[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_RESP_OCTET,
+        (FRAME_TYPE_UA | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_mux_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    uint8_t dlci_id                          = (3u) | (1u << 2);
+    const uint8_t write_byte_channel_open[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        dlci_id,
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_channel_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    self_iniated_response_rx(&(read_byte_mux_open[0]), &(write_byte_channel_open[0]),
+                             READ_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+
+    /* Rx user data frame to invalidate ID DLCI: silently discarded by the implementation. */
+
+    const uint8_t user_data = 0xA5u;
+    dlci_id                 = DLCI_INVALID_ID;
+    uint8_t read_byte[6]    =
+    {
+        1u | (dlci_id << 2),
+        FRAME_TYPE_UIH,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&read_byte[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE,
+                               &(write_byte_channel_open[1]),
+                               sizeof(write_byte_channel_open) - sizeof(write_byte_channel_open[1]));
+
+    /* Finish the DLCI establishment procedure. */
+
+    /* Finish sending open channel request message. */
+    self_iniated_request_tx(&write_byte_channel_open[1], (SABM_FRAME_LEN - 1u), FRAME_HEADER_READ_LEN);
+    /* Read the channel open response frame. */
+    callback.callback_arm();
+    const uint8_t read_byte_channel_open[5] =
+    {
+        (3u | (1u << 2)),
+        (FRAME_TYPE_UA | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_channel_open[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    m_file_handle[0] = callback.file_handle_get();
+    CHECK(m_file_handle[0] != NULL);
+
+    m_file_handle[0]->sigio(user_rx_invalidate_dlci_id_used_callback);
+
+    /* Rx user data frame to invalidate ID DLCI: silently discarded by the implementation. */
+
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE, NULL, 0);
+
+    /* Validate proper callback callcount. */
+    CHECK_EQUAL(0, m_user_rx_invalidate_dlci_id_used_check_value);
+
+    /* Rx user data frame to established DLCI: accepted by the implementation. */
+
+    dlci_id      = DLCI_ID_LOWER_BOUND;
+    read_byte[0] = 1u | (dlci_id << 2);
+    read_byte[4] = fcs_calculate(&read_byte[0], 3u);
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE, NULL, 0);
+
+    /* Validate proper callback callcount. */
+    CHECK_EQUAL(1, m_user_rx_invalidate_dlci_id_used_check_value);
+
+    /* Validate read buffer. */
+    mock_t * mock_call = mock_free_get("call");
+    CHECK(mock_call != NULL);
+    mock_call->return_value = 1;
+    uint8_t test_buffer[1]  = {0};
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+    ssize_t read_ret = m_file_handle[0]->read(&(test_buffer[0]), 1u);
+    CHECK_EQUAL(1, read_ret);
+    CHECK_EQUAL(user_data, test_buffer[0]);
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+    read_ret = m_file_handle[0]->read(&(test_buffer[0]), 1u);
+    CHECK_EQUAL(-EAGAIN, read_ret);
+
+    /* Validate proper callback callcount. */
+    CHECK_EQUAL(1, m_user_rx_invalidate_dlci_id_used_check_value);
 }
 
 } // namespace mbed
