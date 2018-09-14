@@ -9373,7 +9373,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_1_byte_per_read_call_max_size_user_p
     CHECK(callback.is_callback_called());
     m_file_handle[0] = callback.file_handle_get();
     CHECK(m_file_handle[0] != NULL);
-    
+
     m_file_handle[0]->sigio(rx_read_1_byte_per_read_call_max_size_user_payload_available_callback);
 
     /* Program read cycle. */
@@ -9424,6 +9424,133 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_1_byte_per_read_call_max_size_user_p
 
     /* Validate proper callback callcount. */
     CHECK_EQUAL(1, m_user_rx_read_1_byte_per_read_call_max_size_user_payload_available_check_value);
+}
+
+static uint8_t m_user_rx_dlci_not_established_check_value = 0;
+static void user_rx_dlci_not_established_callback()
+{
+    ++m_user_rx_dlci_not_established_check_value;
+}
+
+
+/*
+ * TC - Ensure proper behaviour when user data Rx frame received to DLCI ID, which is not established.
+ *
+ * Test sequence:
+ * - Mux open
+ * - Iterate through max amount of supported DLCI IDs following sequence:
+ * - start read cycle for the not established DLCI
+ * - start read cycle for the established DLCI
+ *
+ * Expected outcome:
+ * - The Rx frame is dropped by the implementation for the not established DLCI
+ * - The Rx frame is accepted by the implementation for the established DLCI
+ * - Validate proper callback callcount
+ * - Validate read buffer
+ */
+TEST(MultiplexerOpenTestGroup, user_rx_dlci_not_established)
+{
+    m_user_rx_dlci_not_established_check_value = 0;
+
+    mbed::FileHandleMock fh_mock;
+    mbed::EventQueueMock eq_mock;
+
+    mbed::Mux::eventqueue_attach(&eq_mock);
+
+    mock_t * mock_sigio = mock_free_get("sigio");
+    CHECK(mock_sigio != NULL);
+    mbed::Mux::serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    mbed::Mux::callback_attach(callback);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA);
+
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    m_file_handle[0] = callback.file_handle_get();
+    CHECK(m_file_handle[0] != NULL);
+
+    m_file_handle[0]->sigio(user_rx_dlci_not_established_callback);
+
+    uint8_t dlci_id      = DLCI_ID_LOWER_BOUND + 1u;
+    uint8_t user_data    = 0xA5u;
+    uint8_t read_byte[6] =
+    {
+        1u | (dlci_id << 2),
+        FRAME_TYPE_UIH,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&read_byte[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+
+    mock_t * mock_lock;
+    mock_t * mock_unlock;
+    mock_t * mock_call;
+    ssize_t  read_ret;
+    uint8_t  test_buffer[1] = {0};
+    for (uint8_t i = 0; i != (MAX_DLCI_COUNT - 1u); ++i) {
+
+        /* Start read cycle for the not established DLCI. */
+        single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE);
+
+        /* Validate proper callback callcount. */
+        CHECK_EQUAL(i, m_user_rx_dlci_not_established_check_value);
+
+        /* Start read cycle for the established DLCI. */
+        read_byte[0] = 1u | ((dlci_id - 1u) << 2);
+        read_byte[3] = ++user_data;
+        read_byte[4] = fcs_calculate(&read_byte[0], 3u);
+        single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE);
+
+        /* Validate proper callback callcount. */
+        CHECK_EQUAL((i + 1), m_user_rx_dlci_not_established_check_value);
+
+        /* Validate read buffer. */
+        mock_call = mock_free_get("call");
+        CHECK(mock_call != NULL);
+        mock_call->return_value = 1;
+        mock_lock = mock_free_get("lock");
+        CHECK(mock_lock != NULL);
+        mock_unlock = mock_free_get("unlock");
+        CHECK(mock_unlock != NULL);
+        read_ret = m_file_handle[i]->read(&(test_buffer[0]), 1u);
+        CHECK_EQUAL(1, read_ret);
+        CHECK_EQUAL(user_data, test_buffer[0]);
+        mock_lock = mock_free_get("lock");
+        CHECK(mock_lock != NULL);
+        mock_unlock = mock_free_get("unlock");
+        CHECK(mock_unlock != NULL);
+        read_ret = m_file_handle[i]->read(&(test_buffer[0]), 1u);
+        CHECK_EQUAL(-EAGAIN, read_ret);
+
+        /* Establish a DLCI. */
+        channel_open(dlci_id, callback);
+
+        /* Validate Filehandle generation. */
+        CHECK(callback.is_callback_called());
+        m_file_handle[i + 1] = callback.file_handle_get();
+        CHECK(m_file_handle[i + 1] != NULL);
+
+        m_file_handle[i + 1]->sigio(user_rx_dlci_not_established_callback);
+
+        /* Construct new buffer, for not established DLCI, for the next iteration. */
+        read_byte[0] = 1u | (++dlci_id << 2);
+        read_byte[3] = ++user_data;
+        read_byte[4] = fcs_calculate(&read_byte[0], 3u);
+    }
+
+    /* All available DLCI ids consumed. Next request will fail. */
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+
+    const nsapi_error channel_open_err = mbed::Mux::channel_open();
+    CHECK_EQUAL(NSAPI_ERROR_NO_MEMORY, channel_open_err);
 }
 
 } // namespace mbed
