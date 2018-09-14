@@ -9250,4 +9250,83 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_1_byte_per_run_context)
     CHECK_EQUAL(1, m_user_rx_read_1_byte_per_run_context_check_value);
 }
 
+
+static uint8_t m_user_rx_read_max_size_user_payload_in_1_read_call_check_value = 0;
+static void user_rx_read_max_size_user_payload_in_1_read_call_callback()
+{
+    ++m_user_rx_read_max_size_user_payload_in_1_read_call_check_value;
+}
+
+
+/*
+ * TC - Ensure that Rx frame read works correctly when max amount of user data is received.
+ *
+ * Test sequence:
+ * - Establish 1 DLCI
+ * - Generate user RX data frame
+ * - Verify read buffer upon frame read complete
+ *
+ * Expected outcome:
+ * - Read buffer verified
+ * - Correct callback count
+ */
+TEST(MultiplexerOpenTestGroup, user_rx_read_max_size_user_payload_in_1_read_call)
+{
+    m_user_rx_read_max_size_user_payload_in_1_read_call_check_value = 0;
+
+    mbed::FileHandleMock fh_mock;
+    mbed::EventQueueMock eq_mock;
+
+    mbed::Mux::eventqueue_attach(&eq_mock);
+
+    mock_t * mock_sigio = mock_free_get("sigio");
+    CHECK(mock_sigio != NULL);
+    mbed::Mux::serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    mbed::Mux::callback_attach(callback);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA);
+
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    m_file_handle[0] = callback.file_handle_get();
+    CHECK(m_file_handle[0] != NULL);
+
+    m_file_handle[0]->sigio(user_rx_read_max_size_user_payload_in_1_read_call_callback);
+
+    /* Program read cycle. */
+    uint8_t read_byte[RX_BUFFER_SIZE - 1u] = {0};
+    read_byte[0]                           = 1u | (DLCI_ID_LOWER_BOUND << 2);
+    read_byte[1]                           = FRAME_TYPE_UIH;
+    read_byte[2]                           = LENGTH_INDICATOR_OCTET | ((sizeof(read_byte) - 5u) << 1);
+
+    sequence_generate(&(read_byte[3]), (sizeof(read_byte) - 5u));
+
+    read_byte[sizeof(read_byte) - 2] = fcs_calculate(&read_byte[0], 3u);
+    read_byte[sizeof(read_byte) - 1] = FLAG_SEQUENCE_OCTET;
+
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE);
+
+    /* Verify read buffer. */
+    mock_t * mock_call = mock_free_get("call");
+    CHECK(mock_call != NULL);
+    mock_call->return_value             = 1;
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+    uint8_t buffer[RX_BUFFER_SIZE - 6u] = {0};
+    CHECK_EQUAL(sizeof(buffer), (sizeof(read_byte) - 5u));
+    const ssize_t read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
+    CHECK_EQUAL(sizeof(buffer), read_ret);
+    const int buffer_compare = memcmp(&(buffer[0]), &(read_byte[3]), sizeof(buffer));
+    CHECK_EQUAL(0, buffer_compare);
+
+    /* Validate proper callback callcount. */
+    CHECK_EQUAL(1, m_user_rx_read_max_size_user_payload_in_1_read_call_check_value);
+}
+
 } // namespace mbed
