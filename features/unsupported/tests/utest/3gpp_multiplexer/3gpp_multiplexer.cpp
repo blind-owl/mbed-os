@@ -9976,4 +9976,65 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_not_supported)
     CHECK_EQUAL(1, m_rx_frame_type_not_supported_check_value);
 }
 
+/*
+ * TC - Ensure proper behaviour when Rx frame type UA received when no SABM has been send
+ * Test sequence:
+ * - Mux open
+ * - Establish 1st DLCI
+ * - Rx frame type UA received, without pending SABM frame, to the established DLCI: silently discarded by the
+ *   implementation
+ * - Establish 2nd DLCI
+ *
+ * Expected outcome:
+ * - Rx frame type UA received is dropped by the implementation
+ * - Validate DLCI establishment
+ */
+TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_when_no_sabm_send)
+{
+    mbed::FileHandleMock fh_mock;
+    mbed::EventQueueMock eq_mock;
+
+    mbed::Mux::eventqueue_attach(&eq_mock);
+
+    mock_t * mock_sigio = mock_free_get("sigio");
+    CHECK(mock_sigio != NULL);
+    mbed::Mux::serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    mbed::Mux::callback_attach(callback);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA);
+
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    m_file_handle[0] = callback.file_handle_get();
+    CHECK(m_file_handle[0] != NULL);
+
+    m_file_handle[0]->sigio(NULL);
+
+    /* Rx frame type UA received, without pending SABM frame, to the established DLCI: silently discarded by the
+       implementation. */
+    const uint8_t dlci_id      = DLCI_ID_LOWER_BOUND;
+    const uint8_t read_byte[5] =
+    {
+        3u | (dlci_id << 2),
+        (FRAME_TYPE_UA | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE, NULL, 0);
+
+    /* Establish 2nd DLCI. */
+
+    channel_open(2, callback);
+
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    m_file_handle[1] = callback.file_handle_get();
+    CHECK(m_file_handle[1] != NULL);
+}
+
 } // namespace mbed
