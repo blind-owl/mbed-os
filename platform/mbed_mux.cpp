@@ -1138,11 +1138,6 @@ Mux::MuxReturnStatus Mux::mux_start(Mux::MuxEstablishStatus &status)
 
 nsapi_error Mux::channel_open()
 {
-#if 0
-Code needs to added wich returns NSAPI_ERROR_IN_PROGRESS when TX state is 1 of below
-TX_RETRANSMIT_DONE
-#endif
-
     _mutex.lock();
 
     if (_state.is_mux_open_pending) {
@@ -1190,17 +1185,7 @@ TX_RETRANSMIT_DONE
             } else {
                 _state.is_dlci_open_pending = 1u;
             }
-#if 0
-            _state.is_mux_open_pending = 1u;
 
-            _mutex.unlock();
-            ret_wait = _semaphore.wait();
-            MBED_ASSERT(ret_wait == 1);
-            status = static_cast<MuxEstablishStatus>(_shared_memory);
-            if (status == MUX_ESTABLISH_SUCCESS) {
-                _state.is_mux_open = 1u;
-            }
-#endif
             break;
         default:
             /* Code that should never be reached. */
