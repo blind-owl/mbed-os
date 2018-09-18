@@ -55,18 +55,11 @@ typedef struct
 
 MuxCallback *Mux::_cb = NULL;
 
-uint8_t Mux::_dlci   = 1u;
-#if 0
-uint8_t Mux::_shared_memory   = 0;
-#endif
+uint8_t Mux::_dlci            = 1u;
 FileHandle *Mux::_serial      = NULL;
 EventQueueMock *Mux::_event_q = NULL;
 MuxDataService Mux::_mux_objects[MBED_CONF_MUX_DLCI_COUNT];
 
-#if 0
-//rtos::Semaphore Mux::_semaphore(0);
-SemaphoreMock Mux::_semaphore;
-#endif
 PlatformMutexMock Mux::_mutex;
 
 Mux::tx_context_t Mux::_tx_context;
@@ -147,11 +140,7 @@ void Mux::on_timeout()
                 tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, null_action);
             } else {
                 /* Retransmission limit reached, change state and complete the operation with appropriate status code. */
-#if 0
-                _shared_memory           = MUX_ESTABLISH_TIMEOUT;
-                const osStatus os_status = _semaphore.release();
-                MBED_ASSERT(os_status == osOK);
-#endif
+
 // @todo: clear op running bits? => always do in tx_idle entry? NOT as app can call back in callback context!
 
                 _cb->channel_open_run(NULL);
@@ -194,7 +183,6 @@ void Mux::on_rx_frame_sabm()
 void Mux::on_rx_frame_ua()
 {
     switch (_tx_context.tx_state) {
-        osStatus os_status;
         uint8_t  rx_dlci_id;
         uint8_t  tx_dlci_id;
         bool     is_cr_bit_set;
@@ -210,9 +198,7 @@ void Mux::on_rx_frame_ua()
                 rx_dlci_id = _rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] >> 2;
                 if (tx_dlci_id == rx_dlci_id) {
                     _event_q->cancel(_tx_context.timer_id);
-#if 0
-                    _shared_memory = MUX_ESTABLISH_SUCCESS;
-#endif
+
                     if (rx_dlci_id != 0) {
                         dlci_id_append(rx_dlci_id);
                         ++_dlci;
@@ -227,10 +213,6 @@ void Mux::on_rx_frame_ua()
                         _state.is_mux_open          = 1u;
                         _state.is_dlci_open_pending = 1u;
                     }
-#if 0
-                    os_status = _semaphore.release();
-                    MBED_ASSERT(os_status == osOK);
-#endif
 
                     tx_state_change(TX_IDLE, tx_idle_entry_run, null_action);
                 }
@@ -248,7 +230,6 @@ void Mux::on_rx_frame_ua()
 void Mux::on_rx_frame_dm()
 {
     switch (_tx_context.tx_state) {
-        osStatus os_status;
         uint8_t  rx_dlci_id;
         uint8_t  tx_dlci_id;
         bool     is_cr_bit_set;
@@ -262,11 +243,6 @@ void Mux::on_rx_frame_dm()
                 rx_dlci_id = _rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] >> 2;
                 if (tx_dlci_id == rx_dlci_id) {
                     _event_q->cancel(_tx_context.timer_id);
-#if 0
-                    _shared_memory = MUX_ESTABLISH_REJECT;
-                    os_status      = _semaphore.release();
-                    MBED_ASSERT(os_status == osOK);
-#endif
 
                     _cb->channel_open_run(NULL);
                     tx_state_change(TX_IDLE, tx_idle_entry_run, null_action);
@@ -984,157 +960,12 @@ MuxDataService *Mux::file_handle_get(uint8_t dlci_id)
     return obj;
 }
 
-#if 0
-Mux::MuxReturnStatus Mux::dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHandle **obj)
-{
-    if ((dlci_id < DLCI_ID_LOWER_BOUND) || (dlci_id > DLCI_ID_UPPER_BOUND)) {
-        return MUX_STATUS_INVALID_RANGE;
-    }
-
-    _mutex.lock();
-
-    MBED_ASSERT(!_state.is_system_thread_context);
-
-    if (!_state.is_mux_open) {
-        _mutex.unlock();
-
-        return MUX_STATUS_MUX_NOT_OPEN;
-    }
-    if (is_dlci_q_full()) {
-        _mutex.unlock();
-
-        return MUX_STATUS_NO_RESOURCE;
-    }
-    if (is_dlci_in_use(dlci_id)) {
-        _mutex.unlock();
-
-        return MUX_STATUS_NO_RESOURCE;
-    }
-    if (_state.is_dlci_open_pending) {
-        _mutex.unlock();
-
-        return MUX_STATUS_INPROGRESS;
-    }
-    if (_state.is_dlci_open_running) {
-        _mutex.unlock();
-
-        return MUX_STATUS_INPROGRESS;
-    }
-
-    switch (_tx_context.tx_state) {
-        int ret_wait;
-        case TX_IDLE:
-            /* Construct the frame, start the tx sequence, and suspend the call thread upon write sequence success. */
-            sabm_request_construct(dlci_id);
-            _tx_context.retransmit_counter = RETRANSMIT_COUNT;
-            tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
-            _state.is_dlci_open_running = 1u;
-
-            _mutex.unlock();
-            ret_wait = _semaphore.wait();
-            MBED_ASSERT(ret_wait == 1);
-            status = static_cast<MuxEstablishStatus>(_shared_memory);
-            if (status == MUX_ESTABLISH_SUCCESS) {
-                *obj = file_handle_get(dlci_id);
-                MBED_ASSERT(*obj != NULL);
-            }
-
-            break;
-        case TX_INTERNAL_RESP:
-        case TX_NORETRANSMIT:
-            _state.is_dlci_open_pending = 1u;
-            _shared_memory              = dlci_id;
-
-            _mutex.unlock();
-            ret_wait = _semaphore.wait();
-            MBED_ASSERT(ret_wait == 1);
-            status = static_cast<MuxEstablishStatus>(_shared_memory);
-            if (status == MUX_ESTABLISH_SUCCESS) {
-                *obj = file_handle_get(dlci_id);
-                MBED_ASSERT(*obj != NULL);
-            }
-
-            break;
-        default:
-            /* Code that should never be reached. */
-            MBED_ASSERT(false);
-
-            break;
-    }
-
-    _state.is_dlci_open_running = 0;
-
-    return MUX_STATUS_SUCCESS;
-}
-#endif // 0
 
 void Mux::tx_retransmit_enqueu_entry_run()
 {
     write_do();
 }
 
-#if 0
-Mux::MuxReturnStatus Mux::mux_start(Mux::MuxEstablishStatus &status)
-{
-    _mutex.lock();
-
-    if (_state.is_mux_open) {
-        _mutex.unlock();
-
-        return MUX_STATUS_NO_RESOURCE;
-    }
-    if (_state.is_mux_open_pending) {
-        _mutex.unlock();
-
-        return MUX_STATUS_INPROGRESS;
-    }
-    if (_state.is_mux_open_running ) {
-        _mutex.unlock();
-
-        return MUX_STATUS_INPROGRESS;
-    }
-
-    switch (_tx_context.tx_state) {
-        int ret_wait;
-        case TX_IDLE:
-            /* Construct the frame, start the tx sequence, and suspend the call thread upon write sequence success. */
-            sabm_request_construct(0);
-            _tx_context.retransmit_counter = RETRANSMIT_COUNT;
-            tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
-            _state.is_mux_open_running = 1u;
-
-            _mutex.unlock();
-            ret_wait = _semaphore.wait();
-            MBED_ASSERT(ret_wait == 1);
-            status = static_cast<MuxEstablishStatus>(_shared_memory);
-            if (status == MUX_ESTABLISH_SUCCESS) {
-                _state.is_mux_open = 1u;
-            }
-
-            break;
-        case TX_INTERNAL_RESP:
-            _state.is_mux_open_pending = 1u;
-
-            _mutex.unlock();
-            ret_wait = _semaphore.wait();
-            MBED_ASSERT(ret_wait == 1);
-            status = static_cast<MuxEstablishStatus>(_shared_memory);
-            if (status == MUX_ESTABLISH_SUCCESS) {
-                _state.is_mux_open = 1u;
-            }
-
-            break;
-        default:
-            /* Code that should never be reached. */
-            MBED_ASSERT(false);
-            break;
-    };
-
-    _state.is_mux_open_running = 0;
-
-    return MUX_STATUS_SUCCESS;
-}
-#endif // 0
 
 nsapi_error Mux::channel_open()
 {

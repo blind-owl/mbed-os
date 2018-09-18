@@ -46,16 +46,7 @@ enum nsapi_error {
     NSAPI_ERROR_CONNECTION_TIMEOUT  = -3017,     /*!< connection timed out */
 };
 
-#include "SemaphoreMock.h"
 #include "PlatformMutexMock.h"
-
-#if 0
-#include "rtos/Semaphore.h"
-#endif // 0
-/*
-#define MBED_CONF_RTOS_PRESENT
-#include "mbed.h"
-*/
 
 #define MUX_DLCI_INVALID_ID       0    /* Invalid DLCI ID. Used to invalidate MuxDataService object. */
 #define MUX_CRC_TABLE_LEN         256u /* CRC table length in number of bytes. */
@@ -150,30 +141,6 @@ class Mux {
 friend class MuxDataService;
 public:
 
-/* Definition for multiplexer establishment status type. */
-typedef enum
-{
-    MUX_ESTABLISH_SUCCESS = 0, /* Peer accepted the request. */
-    MUX_ESTABLISH_REJECT,      /* Peer rejected the request. */
-    MUX_ESTABLISH_TIMEOUT,     /* Timeout occurred for the request. */
-    MUX_ESTABLISH_MAX          /* Enumeration upper bound. */
-} MuxEstablishStatus;
-
-/* @ref MuxEstablishStatus type assigned to _shared_memory variable, which has sizeof(uint8_t) storage class. Enforce
-   expected behaviour compile time. */
-MBED_STATIC_ASSERT(sizeof(MuxEstablishStatus) == sizeof(uint8_t), "");
-
-/* Definition for multiplexer establishment return code type. */
-typedef enum
-{
-    MUX_STATUS_SUCCESS = 0,
-    MUX_STATUS_INPROGRESS,
-    MUX_STATUS_INVALID_RANGE,
-    MUX_STATUS_MUX_NOT_OPEN,
-    MUX_STATUS_NO_RESOURCE,
-    MUX_STATUS_MAX
-} MuxReturnStatus;
-
     /** Module init. */
     static void module_init();
 
@@ -187,40 +154,6 @@ typedef enum
      *                                 completion callback will not be called.
      */
     static nsapi_error channel_open();
-#if 0
-    /** Establish the multiplexer control channel.
-     *
-     *  @note: Relevant request specific parameters are fixed at compile time within multiplexer component.
-     *  @note: Call returns when response from the peer is received, timeout or write error occurs.
-     *
-     *  @param status Operation completion code.
-     *
-     *  @return MUX_STATUS_SUCCESS     Operation completed, check @ref status for completion code.
-     *  @return MUX_STATUS_INPROGRESS  Operation not started, control channel open allready in progress.
-     *  @return MUX_STATUS_NO_RESOURCE Operation not started, multiplexer control channel allready open.
-     */
-    static MuxReturnStatus mux_start(MuxEstablishStatus &status);
-
-    /** Establish a DLCI.
-     *
-     *  @note: Relevant request specific parameters are fixed at compile time within multiplexer component.
-     *  @note: Call returns when response from the peer is received or timeout occurs.
-     *
-     *  @warning: Not allowed to be called from callback context.
-     *
-     *  @param dlci_id ID of the DLCI to establish. Valid range 1 - 63.
-     *  @param status  Operation completion code.
-     *  @param obj     Valid object upon @ref status having @ref MUX_ESTABLISH_SUCCESS, NULL upon failure.
-     *
-     *  @return MUX_STATUS_SUCCESS       Operation completed, check @ref status for completion code.
-     *  @return MUX_STATUS_INPROGRESS    Operation not started, DLCI establishment allready in progress.
-     *  @return MUX_STATUS_INVALID_RANGE Operation not started, DLCI ID not in valid range.
-     *  @return MUX_STATUS_MUX_NOT_OPEN  Operation not started, no established multiplexer control channel exists.
-     *  @return MUX_STATUS_NO_RESOURCE   Operation not started, @ref dlci_id, or all available DLCI ID resources,
-     *                                   allready in use.
-     */
-    static MuxReturnStatus dlci_establish(uint8_t dlci_id, MuxEstablishStatus &status, FileHandle **obj);
-#endif // 0
 
     /** Attach serial interface to the object.
      *
@@ -614,19 +547,12 @@ private:
 
     static FileHandle      *_serial;                                /* Serial used. */
     static EventQueueMock  *_event_q;                               /* Event queue used. */
-#if 0
-    static SemaphoreMock    _semaphore;                             /* Semaphore used. */
-#endif
     static PlatformMutexMock _mutex;                                /* Mutex used. */
     static MuxDataService   _mux_objects[MBED_CONF_MUX_DLCI_COUNT]; /* Number of supported DLCIs. */
     static tx_context_t     _tx_context;                            /* Tx context. */
     static rx_context_t     _rx_context;                            /* Rx context. */
     static state_t          _state;                                 /* General state context. */
     static const uint8_t    _crctable[MUX_CRC_TABLE_LEN];           /* CRC table used for frame FCS. */
-#if 0
-    static uint8_t          _shared_memory;                         /* Shared memory used passing data between user and
-                                                                       system threads. */
-#endif
     static uint8_t _dlci;
 };
 
