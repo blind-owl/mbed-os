@@ -96,7 +96,6 @@ void Mux::module_init()
     _state.is_mux_open              = 0;
     _state.is_mux_open_pending      = 0;
     _state.is_dlci_open_pending     = 0;
-    _state.is_system_thread_context = 0;
     _state.is_tx_callback_context   = 0;
     _state.is_user_tx_pending       = 0;
     _state.is_user_rx_ready         = 0;
@@ -130,8 +129,6 @@ void Mux::on_timeout()
 {
     _mutex.lock();
 
-    _state.is_system_thread_context = 1u;
-
     switch (_tx_context.tx_state) {
         case TX_RETRANSMIT_DONE:
             if (_tx_context.retransmit_counter != 0) {
@@ -151,8 +148,6 @@ void Mux::on_timeout()
             /* No implementation required. */
             break;
     }
-
-    _state.is_system_thread_context = 0;
 
     _mutex.unlock();
 }
@@ -851,12 +846,8 @@ void Mux::on_deferred_call()
 {
     _mutex.lock();
 
-    _state.is_system_thread_context = 1u;
-
     rx_event_do(RX_READ);
     write_do();
-
-    _state.is_system_thread_context = 0;
 
     _mutex.unlock();
 }

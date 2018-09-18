@@ -537,7 +537,6 @@ private:
         uint8_t is_mux_open              : 1; /* True when multiplexer is open. */
         uint8_t is_mux_open_pending      : 1; /* True when multiplexer open is pending. */
         uint8_t is_dlci_open_pending     : 1; /* True when DLCI open is pending. */
-        uint8_t is_system_thread_context : 1; /* True when current context is system thread context. */
         uint8_t is_tx_callback_context   : 1; /* True when current context is TX callback context. */
         uint8_t is_user_tx_pending       : 1; /* True when user TX is pending. */
         uint8_t is_user_rx_ready         : 1; /* True when user RX is ready/available. */
