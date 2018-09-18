@@ -10808,4 +10808,98 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_dlci_id_mismatch)
     CHECK(fh != NULL);
 }
 
+/*
+ * TC - Ensure proper behaviour when DM frame received to pending SABM request and there is a DLCI ID mismatch
+ *
+ * Test sequence:
+ * - Send SABM frame
+ * - Receive DM frame which has a different DLCI ID than the SABM frame: silently discarded
+ * - Receive valid DM frame: establishment rejected
+ *
+ * Expected outcome:
+ * - As specified above
+ */
+TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_dlci_id_mismatch)
+{
+    mbed::FileHandleMock fh_mock;
+    mbed::EventQueueMock eq_mock;
+
+    mock_t * mock_sigio = mock_free_get("sigio");
+    CHECK(mock_sigio != NULL);
+    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux::eventqueue_attach(&eq_mock);
+
+    MuxCallbackTest callback;
+    mbed::Mux::callback_attach(callback);
+
+    const uint8_t write_byte_mux_open[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET,
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_mux_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+
+    /* Set mock. */
+    mock_t *mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL);
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_mux_open[0];
+    mock_write->input_param[1].param        = SABM_FRAME_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = sizeof(write_byte_mux_open);
+
+    mock_t * mock_call_in = mock_free_get("call_in");
+    CHECK(mock_call_in != NULL);
+    mock_call_in->return_value                = T1_TIMER_EVENT_ID;
+    mock_call_in->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_call_in->input_param[0].param        = T1_TIMER_VALUE;
+
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+
+    /* Start test sequence. Test set mocks. */
+    const nsapi_error channel_open_err = mbed::Mux::channel_open();
+    CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
+
+    /* Receive DM frame which has a different DLCI ID than the SABM frame: silently discarded. */
+
+    const uint8_t read_byte_invalid_dlci_id[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        (1u | CR_BIT | (DLCI_ID_LOWER_BOUND << 2)),
+        (FRAME_TYPE_DM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_invalid_dlci_id[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    peer_iniated_request_rx(&(read_byte_invalid_dlci_id[0]),
+                            READ_FLAG_SEQUENCE_OCTET,
+                            NULL,   // No TX response frame within the RX cycle.
+                            NULL,   // No current frame in the TX pipeline.
+                            0);
+
+    /* Receive valid DM frame: establishment rejected. */
+
+    const uint8_t read_byte[5] =
+    {
+        (1u | CR_BIT),
+        (FRAME_TYPE_DM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    callback.callback_arm();
+    self_iniated_response_rx(&(read_byte[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    FileHandle *fh = callback.file_handle_get();
+    CHECK_EQUAL(NULL, fh);
+}
+
 } // namespace mbed
