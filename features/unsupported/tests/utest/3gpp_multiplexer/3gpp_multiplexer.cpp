@@ -6253,6 +6253,8 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_not_open)
  * - Start sending open multiplexer control channel request message, but do not finish it
  * - Issue new channel_open API call => fails with NSAPI_ERROR_IN_PROGRESS
  * - Finish sending open multiplexer control channel request message
+
+
  * - Receive open multiplexer control channel response message
  * - Send open user channel request message
  * - Receive open user channel response message
@@ -6307,8 +6309,6 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_currently_running)
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 0;
 
-    /* Program channel_open API mutex usage. */
-
     mock_t * mock_lock = mock_free_get("lock");
     CHECK(mock_lock != NULL);
     mock_t * mock_unlock = mock_free_get("unlock");
@@ -6317,8 +6317,6 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_currently_running)
     /* Start test sequence. */
     nsapi_error channel_open_err = mbed::Mux::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
-
-    /* Program channel_open API mutex usage. */
 
     mock_lock = mock_free_get("lock");
     CHECK(mock_lock != NULL);
@@ -6332,6 +6330,15 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_currently_running)
     /* Finish sending open multiplexer control channel request message. */
 
     self_iniated_request_tx(&write_byte_mux_open[1], (SABM_FRAME_LEN - 1u), FLAG_SEQUENCE_OCTET_LEN);
+
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+
+    /* Issue new channel open, while previous one is still running. */
+    channel_open_err = mbed::Mux::channel_open();
+    CHECK_EQUAL(NSAPI_ERROR_IN_PROGRESS, channel_open_err);
 
     /* Receive open multiplexer control channel response message. */
 
@@ -6406,8 +6413,6 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_currently_running)
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
     mock_write->return_value                = 0;
 
-    /* Program channel_open API mutex usage. */
-
     mock_lock = mock_free_get("lock");
     CHECK(mock_lock != NULL);
     mock_unlock = mock_free_get("unlock");
@@ -6416,8 +6421,6 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_currently_running)
     /* Start test sequence. */
     channel_open_err = mbed::Mux::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
-
-    /* Program channel_open API mutex usage. */
 
     mock_lock = mock_free_get("lock");
     CHECK(mock_lock != NULL);

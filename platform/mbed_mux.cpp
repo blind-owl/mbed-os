@@ -102,9 +102,7 @@ void Mux::module_init()
 
     _state.is_mux_open              = 0;
     _state.is_mux_open_pending      = 0;
-    _state.is_mux_open_running      = 0;
     _state.is_dlci_open_pending     = 0;
-    _state.is_dlci_open_running     = 0;
     _state.is_system_thread_context = 0;
     _state.is_tx_callback_context   = 0;
     _state.is_user_tx_pending       = 0;
@@ -155,9 +153,6 @@ void Mux::on_timeout()
                 MBED_ASSERT(os_status == osOK);
 #endif
 // @todo: clear op running bits? => always do in tx_idle entry? NOT as app can call back in callback context!
-
-                _state.is_mux_open_running  = 0;
-                _state.is_dlci_open_running = 0;
 
                 _cb->channel_open_run(NULL);
                 tx_state_change(TX_IDLE, tx_idle_entry_run, null_action);
@@ -219,7 +214,6 @@ void Mux::on_rx_frame_ua()
                     _shared_memory = MUX_ESTABLISH_SUCCESS;
 #endif
                     if (rx_dlci_id != 0) {
-                        _state.is_dlci_open_running = 0;
                         dlci_id_append(rx_dlci_id);
                         ++_dlci;
 
@@ -229,7 +223,7 @@ void Mux::on_rx_frame_ua()
                         _cb->channel_open_run(fh);
                     } else {
                         /* Store current state and request scheduling of channel creation procedure. */
-                        _state.is_mux_open_running  = 0;
+
                         _state.is_mux_open          = 1u;
                         _state.is_dlci_open_pending = 1u;
                     }
@@ -273,8 +267,6 @@ void Mux::on_rx_frame_dm()
                     os_status      = _semaphore.release();
                     MBED_ASSERT(os_status == osOK);
 #endif
-                    _state.is_mux_open_running  = 0;
-                    _state.is_dlci_open_running = 0;
 
                     _cb->channel_open_run(NULL);
                     tx_state_change(TX_IDLE, tx_idle_entry_run, null_action);
@@ -462,7 +454,6 @@ void Mux::on_post_tx_frame_sabm()
 void Mux::pending_self_iniated_mux_open_start()
 {
     /* Construct the frame, start the tx sequence, set and reset relevant state contexts. */
-    _state.is_mux_open_running = 1u;
     _state.is_mux_open_pending = 0;
 
     sabm_request_construct(0);
@@ -474,7 +465,6 @@ void Mux::pending_self_iniated_mux_open_start()
 void Mux::pending_self_iniated_dlci_open_start()
 {
     /* Construct the frame, start the tx sequence, set and reset relevant state contexts. */
-    _state.is_dlci_open_running = 1u;
     _state.is_dlci_open_pending = 0;
 
     sabm_request_construct(/*_shared_memory*/_dlci); // @todo: make dlci_incerement(), which wrap-around?
@@ -1150,22 +1140,11 @@ nsapi_error Mux::channel_open()
 {
 #if 0
 Code needs to added wich returns NSAPI_ERROR_IN_PROGRESS when TX state is 1 of below
-TX_RETRANSMIT_ENQUEUE,
 TX_RETRANSMIT_DONE
 #endif
 
     _mutex.lock();
 
-    if (_state.is_mux_open_running) {
-        _mutex.unlock();
-
-        return NSAPI_ERROR_IN_PROGRESS;
-    }
-    if (_state.is_dlci_open_running) {
-        _mutex.unlock();
-
-        return NSAPI_ERROR_IN_PROGRESS;
-    }
     if (_state.is_mux_open_pending) {
         _mutex.unlock();
 
@@ -1181,25 +1160,27 @@ TX_RETRANSMIT_DONE
 
         return NSAPI_ERROR_NO_MEMORY;
     }
-    // @todo: add is_dlci_open_pending check
 
+    nsapi_error err = NSAPI_ERROR_OK;
     switch (_tx_context.tx_state) {
-        int ret_wait;
         case TX_IDLE:
             if (_state.is_mux_open) {
                 /* Multiplexer control channel exists, start creation of user channel. */
 
                 sabm_request_construct(_dlci);
-                _state.is_dlci_open_running = 1u;
             } else {
                 /* Start creation of multiplexer control channel. */
 
                 sabm_request_construct(0);
-                _state.is_mux_open_running = 1u;
             }
 
             _tx_context.retransmit_counter = RETRANSMIT_COUNT;
             tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
+
+            break;
+        case TX_RETRANSMIT_ENQUEUE:
+        case TX_RETRANSMIT_DONE:
+            err = NSAPI_ERROR_IN_PROGRESS;
 
             break;
         case TX_NORETRANSMIT:
@@ -1229,7 +1210,7 @@ TX_RETRANSMIT_DONE
 
     _mutex.unlock();
 
-    return NSAPI_ERROR_OK;
+    return err;
 }
 
 
