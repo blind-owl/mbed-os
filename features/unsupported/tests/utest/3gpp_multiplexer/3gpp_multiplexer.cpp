@@ -24,7 +24,7 @@ TEST_GROUP(MultiplexerOpenTestGroup)
         }
 
         mock_init();
-        Mux::module_init();
+        Mux3GPP::module_init();
     }
 
     void teardown()
@@ -146,7 +146,7 @@ void self_iniated_request_tx(const uint8_t *tx_buf, uint8_t tx_buf_len, uint8_t 
     const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};
     do {
         /* Enqueue deferred call to EventQueue.
-         * Trigger sigio callback from the Filehandle used by the Mux (component under test). */
+         * Trigger sigio callback from the Filehandle used by the Mux3GPP (component under test). */
         mock_t * mock = mock_free_get("call");
         CHECK(mock != NULL);
         mock->return_value = 1;
@@ -230,7 +230,7 @@ void self_iniated_response_rx(const uint8_t            *rx_buf,
     const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};
 
     /* Enqueue deferred call to EventQueue.
-     * Trigger sigio callback from the Filehandle used by the Mux (component under test). */
+     * Trigger sigio callback from the Filehandle used by the Mux3GPP (component under test). */
     mock_t * mock = mock_free_get("call");
     CHECK(mock != NULL);
     mock->return_value = 1;
@@ -393,7 +393,7 @@ void peer_iniated_request_rx(const uint8_t            *rx_buf,
     const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};
 
     /* Enqueue deferred call to EventQueue.
-     * Trigger sigio callback from the Filehandle used by the Mux (component under test). */
+     * Trigger sigio callback from the Filehandle used by the Mux3GPP (component under test). */
     mock_t * mock = mock_free_get("call");
     CHECK(mock != NULL);
     mock->return_value = 1;
@@ -552,7 +552,7 @@ void peer_iniated_request_rx_full_frame_tx(FlagSequenceOctetReadType read_type,
     CHECK(!((read_type == READ_FLAG_SEQUENCE_OCTET) && (strip_flag_field_type == STRIP_FLAG_FIELD_YES)));
 
     /* Enqueue deferred call to EventQueue.
-     * Trigger sigio callback from the Filehandle used by the Mux (component under test). */
+     * Trigger sigio callback from the Filehandle used by the Mux3GPP (component under test). */
     mock_t * mock = mock_free_get("call");
     CHECK(mock != NULL);
     mock->return_value = 1;
@@ -700,7 +700,7 @@ void peer_iniated_response_tx(const uint8_t *buf,
     /* Write the complete response frame in do...while. */
     do {
         /* Enqueue deferred call to EventQueue.
-         * Trigger sigio callback from the Filehandle used by the Mux (component under test). */
+         * Trigger sigio callback from the Filehandle used by the Mux3GPP (component under test). */
         mock_t * mock = mock_free_get("call");
         CHECK(mock != NULL);
         mock->return_value = 1;
@@ -803,7 +803,7 @@ void peer_iniated_response_tx_no_pending_tx(const uint8_t *buf,
     /* Write the complete response frame in do...while. */
     do {
         /* Enqueue deferred call to EventQueue.
-         * Trigger sigio callback event from the Filehandle used by the Mux (component under test). */
+         * Trigger sigio callback event from the Filehandle used by the Mux3GPP (component under test). */
         mock_t * mock = mock_free_get("call");
         CHECK(mock != NULL);
         mock->return_value = 1;
@@ -6101,7 +6101,7 @@ void channel_open(uint8_t dlci, MuxCallbackTest &callback)
     CHECK(mock_unlock != NULL);
 
     /* Start test sequence. Test set mocks. */
-    const nsapi_error channel_open_err = mbed::Mux::channel_open();
+    const nsapi_error channel_open_err = mbed::Mux3GPP::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
 
     /* Read the channel open response frame. */
@@ -6157,7 +6157,7 @@ void mux_self_iniated_open(uint8_t                   tx_cycle_read_len,
     CHECK(mock_unlock != NULL);
 
     /* Start test sequence. Test set mocks. */
-    const nsapi_error channel_open_err = mbed::Mux::channel_open();
+    const nsapi_error channel_open_err = mbed::Mux3GPP::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
 
     /* Finish the frame write sequence. */
@@ -6227,15 +6227,15 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_not_open)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     /* Set and test mock. */
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     mux_self_iniated_open(callback, FRAME_TYPE_UA);
@@ -6272,15 +6272,15 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_currently_running)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     /* Set and test mock. */
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     const uint8_t write_byte_mux_open[6] =
@@ -6317,7 +6317,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_currently_running)
     CHECK(mock_unlock != NULL);
 
     /* Start test sequence. */
-    nsapi_error channel_open_err = mbed::Mux::channel_open();
+    nsapi_error channel_open_err = mbed::Mux3GPP::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
 
     mock_lock = mock_free_get("lock");
@@ -6326,7 +6326,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_currently_running)
     CHECK(mock_unlock != NULL);
 
     /* Issue new channel open, while previous one is still running. */
-    channel_open_err = mbed::Mux::channel_open();
+    channel_open_err = mbed::Mux3GPP::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_IN_PROGRESS, channel_open_err);
 
     /* Finish sending open multiplexer control channel request message. */
@@ -6339,7 +6339,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_currently_running)
     CHECK(mock_unlock != NULL);
 
     /* Issue new channel open, while previous one is still running. */
-    channel_open_err = mbed::Mux::channel_open();
+    channel_open_err = mbed::Mux3GPP::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_IN_PROGRESS, channel_open_err);
 
     /* Receive open multiplexer control channel response message. */
@@ -6421,7 +6421,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_currently_running)
     CHECK(mock_unlock != NULL);
 
     /* Start test sequence. */
-    channel_open_err = mbed::Mux::channel_open();
+    channel_open_err = mbed::Mux3GPP::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
 
     mock_lock = mock_free_get("lock");
@@ -6430,7 +6430,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_currently_running)
     CHECK(mock_unlock != NULL);
 
     /* Issue new channel open, while previous one is still running. */
-    channel_open_err = mbed::Mux::channel_open();
+    channel_open_err = mbed::Mux3GPP::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_IN_PROGRESS, channel_open_err);
 }
 
@@ -6459,15 +6459,15 @@ TEST(MultiplexerOpenTestGroup, mux_open_dm_tx_currently_running)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     /* Set and test mock. */
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
     const uint8_t dlci_id      = 0;
     const uint8_t read_byte[6] =
@@ -6504,7 +6504,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_dm_tx_currently_running)
     CHECK(mock_unlock != NULL);
 
     /* Start test sequence. */
-    nsapi_error channel_open_err = mbed::Mux::channel_open();
+    nsapi_error channel_open_err = mbed::Mux3GPP::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
 
     /* Issue new channel open, while pending exists. */
@@ -6516,7 +6516,7 @@ TEST(MultiplexerOpenTestGroup, mux_open_dm_tx_currently_running)
     mock_unlock = mock_free_get("unlock");
     CHECK(mock_unlock != NULL);
 
-    channel_open_err = mbed::Mux::channel_open();
+    channel_open_err = mbed::Mux3GPP::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_IN_PROGRESS, channel_open_err);
 
     /* Finish sending DM response message and start TX of 1st byte of the pending open multiplexer control channel
@@ -6607,15 +6607,15 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_rejected_by_peer)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     /* Set and test mock. */
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
     const uint8_t write_byte_mux_open[6] =
     {
@@ -6650,7 +6650,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_rejected_by_peer)
     CHECK(mock_unlock != NULL);
 
     /* Start test sequence. Test set mocks. */
-    const nsapi_error channel_open_err = mbed::Mux::channel_open();
+    const nsapi_error channel_open_err = mbed::Mux3GPP::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
 
     /* Finish the frame write sequence. */
@@ -6702,17 +6702,17 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_success_after_timeout)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     /* Set and test mock. */
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
-                               
+
     const uint8_t write_byte_mux_open[6] =
     {
         FLAG_SEQUENCE_OCTET,
@@ -6746,7 +6746,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_success_after_timeout)
     CHECK(mock_unlock != NULL);
 
     /* Start test sequence. Test set mocks. */
-    const nsapi_error channel_open_err = mbed::Mux::channel_open();
+    const nsapi_error channel_open_err = mbed::Mux3GPP::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
 
     /* Generate maxium amount of timeout events, which trigger retransmission of open multiplexer control channel
@@ -6825,17 +6825,17 @@ TEST(MultiplexerOpenTestGroup, mux_open_peer_initiated)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     /* Set and test mock. */
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
-                               
+
     const uint8_t read_byte[6] =
     {
         FLAG_SEQUENCE_OCTET,
@@ -6864,17 +6864,17 @@ TEST(MultiplexerOpenTestGroup, mux_open_rx_disc_dlci_0)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     /* Set and test mock. */
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
-                               
+
     /* Open multiplexer control channel and user channel. */
 
     mux_self_iniated_open(callback, FRAME_TYPE_UA);
@@ -6918,15 +6918,15 @@ TEST(MultiplexerOpenTestGroup, mux_open_rx_disc_dlci_in_use)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     /* Set and test mock. */
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Open multiplexer control channel and user channel. */
@@ -6971,17 +6971,17 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_tx_in_call_context)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     /* Set and test mock. */
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
-                               
+
     /* Send multiplexer open request within the call context. */
 
     const uint8_t write_byte_mux_open[6] =
@@ -7019,7 +7019,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_tx_in_call_context)
     mock_t * mock_unlock = mock_free_get("unlock");
     CHECK(mock_unlock != NULL);
 
-    const nsapi_error channel_open_err = mbed::Mux::channel_open();
+    const nsapi_error channel_open_err = mbed::Mux3GPP::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
 
     /* Receive multiplexer open response, and send open user channel request. */
@@ -7087,17 +7087,17 @@ TEST(MultiplexerOpenTestGroup, channel_open_success_after_timeout)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     /* Set and test mock. */
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
-                               
+
     /* Establish user channel. */
 
     mux_self_iniated_open(callback, FRAME_TYPE_UA);
@@ -7141,7 +7141,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_success_after_timeout)
     CHECK(mock_unlock != NULL);
 
     /* Start test sequence. Test set mocks. */
-    const nsapi_error channel_open_err = mbed::Mux::channel_open();
+    const nsapi_error channel_open_err = mbed::Mux3GPP::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
 
     /* Generate maxium amount of timeout events, which trigger retransmission of open channel request message. */
@@ -7218,15 +7218,15 @@ TEST(MultiplexerOpenTestGroup, channel_open_all_channel_ids_used)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     /* Set and test mock. */
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -7261,7 +7261,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_all_channel_ids_used)
     mock_t * mock_unlock = mock_free_get("unlock");
     CHECK(mock_unlock != NULL);
 
-    const nsapi_error channel_open_err = mbed::Mux::channel_open();
+    const nsapi_error channel_open_err = mbed::Mux3GPP::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_NO_MEMORY, channel_open_err);
 }
 
@@ -7297,15 +7297,15 @@ TEST(MultiplexerOpenTestGroup, channel_open_all_channel_ids_used_ensure_uniqueue
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     /* Set and test mock. */
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -7349,7 +7349,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_all_channel_ids_used_ensure_uniqueue
     mock_t * mock_unlock = mock_free_get("unlock");
     CHECK(mock_unlock != NULL);
 
-    const nsapi_error channel_open_err = mbed::Mux::channel_open();
+    const nsapi_error channel_open_err = mbed::Mux3GPP::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_NO_MEMORY, channel_open_err);
 }
 
@@ -7372,15 +7372,15 @@ TEST(MultiplexerOpenTestGroup, channel_open_rejected_by_peer)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     /* Set and test mock. */
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish multiplexer control channel. Peer rejects user channel request message with appropriate response
@@ -7419,15 +7419,15 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     /* Set and test mock. */
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -7473,14 +7473,14 @@ TEST(MultiplexerOpenTestGroup, channel_open_dm_tx_currently_running)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -7523,7 +7523,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_dm_tx_currently_running)
     CHECK(mock_unlock != NULL);
 
     /* Start test sequence. */
-    nsapi_error channel_open_err = mbed::Mux::channel_open();
+    nsapi_error channel_open_err = mbed::Mux3GPP::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
 
     /* Issue new channel open, while pending exists. */
@@ -7533,7 +7533,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_dm_tx_currently_running)
     mock_unlock = mock_free_get("unlock");
     CHECK(mock_unlock != NULL);
 
-    channel_open_err = mbed::Mux::channel_open();
+    channel_open_err = mbed::Mux3GPP::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_IN_PROGRESS, channel_open_err);
 
     /* Finish sending DM response message and start TX of 1st byte of the pending open user channel request message. */
@@ -7594,14 +7594,14 @@ TEST(MultiplexerOpenTestGroup, user_tx_0_length_user_payload)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -7643,14 +7643,14 @@ TEST(MultiplexerOpenTestGroup, user_tx_size_lower_bound)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -7720,14 +7720,14 @@ TEST(MultiplexerOpenTestGroup, user_tx_size_upper_bound)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -7794,14 +7794,14 @@ TEST(MultiplexerOpenTestGroup, user_tx_2_full_frame_writes)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -7896,14 +7896,14 @@ TEST(MultiplexerOpenTestGroup, user_tx_dlci_establish_during_user_tx)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -7961,7 +7961,7 @@ TEST(MultiplexerOpenTestGroup, user_tx_dlci_establish_during_user_tx)
     mock_unlock = mock_free_get("unlock");
     CHECK(mock_unlock != NULL);
 
-    const nsapi_error channel_open_err = mbed::Mux::channel_open();
+    const nsapi_error channel_open_err = mbed::Mux3GPP::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
 
     /* Finish TX cycle for user TX. */
@@ -8080,14 +8080,14 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_triggered_tx_within_callback
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -8182,14 +8182,14 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_set_pending_multiple_times_f
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -8285,14 +8285,14 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_set_pending_for_all_dlcis)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -8327,7 +8327,7 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_set_pending_for_all_dlcis)
     CHECK(mock_unlock != NULL);
 
     /* All available DLCI ids consumed. Next request will fail. */
-    nsapi_error channel_open_err = mbed::Mux::channel_open();
+    nsapi_error channel_open_err = mbed::Mux3GPP::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_NO_MEMORY, channel_open_err);
 
     /* Program write cycle. */
@@ -8456,14 +8456,14 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_rollover_tx_pending_bitmask)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -8614,7 +8614,7 @@ static void tx_callback_dispatch_tx_to_different_dlci_tx_callback()
  *
  * @note: The current implementation is not optimal as If user is starting a TX to a DLCI, which is after the current
  *        DLCI TX callback within the stored sequence this will result to dispatching 1 unnecessary TX callback, if this
- *        is a issue one should clear the TX callback pending bit marker for this DLCI in @ref Mux::user_data_tx(...)
+ *        is a issue one should clear the TX callback pending bit marker for this DLCI in @ref Mux3GPP::user_data_tx(...)
  *        in the place having @note and update this TC accordingly
  *
  * Test sequence:
@@ -8633,14 +8633,14 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_tx_to_different_dlci_within_
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -8789,7 +8789,7 @@ static void tx_callback_dispatch_tx_to_different_dlci_not_within_current_context
  *
  * @note: The current implementation is not optimal as If user is starting a TX to a DLCI, which is after the current
  *        DLCI TX callback within the stored sequence this will result to dispatching 1 unnecessary TX callback, if this
- *        is a issue one should clear the TX callback pending bit marker for this DLCI in @ref Mux::user_data_tx(...)
+ *        is a issue one should clear the TX callback pending bit marker for this DLCI in @ref Mux3GPP::user_data_tx(...)
  *        in the place having @note and update this TC accordingly
  *
  * Test sequence:
@@ -8809,14 +8809,14 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_tx_to_different_dlci_not_wit
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -8922,14 +8922,14 @@ TEST(MultiplexerOpenTestGroup, user_rx_0_length_user_payload)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -9014,14 +9014,14 @@ TEST(MultiplexerOpenTestGroup, user_rx_single_read)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -9076,14 +9076,14 @@ TEST(MultiplexerOpenTestGroup, user_rx_single_read_no_data_available)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -9137,14 +9137,14 @@ TEST(MultiplexerOpenTestGroup, user_rx_rx_suspend_rx_resume_cycle)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -9278,14 +9278,14 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_1_byte_per_run_context)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -9356,14 +9356,14 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_max_size_user_payload_in_1_read_call
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -9436,14 +9436,14 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_1_byte_per_read_call_max_size_user_p
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -9518,7 +9518,7 @@ static void user_rx_dlci_not_established_callback()
  * TC - Ensure proper behaviour when user data Rx frame received to DLCI ID, which is not established.
  *
  * Test sequence:
- * - Mux open
+ * - Mux3GPP open
  * - Iterate through max amount of supported DLCI IDs following sequence:
  * - start read cycle for the not established DLCI
  * - start read cycle for the established DLCI
@@ -9536,14 +9536,14 @@ TEST(MultiplexerOpenTestGroup, user_rx_dlci_not_established)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -9631,7 +9631,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_dlci_not_established)
     mock_unlock = mock_free_get("unlock");
     CHECK(mock_unlock != NULL);
 
-    const nsapi_error channel_open_err = mbed::Mux::channel_open();
+    const nsapi_error channel_open_err = mbed::Mux3GPP::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_NO_MEMORY, channel_open_err);
 }
 
@@ -9646,7 +9646,7 @@ static void user_rx_invalidate_dlci_id_used_callback()
  *      to invalidate a DLCI ID object.
  *
  * Test sequence:
- * - Mux open
+ * - Mux3GPP open
  * - Rx user data frame to invalidate ID DLCI: silently discarded by the implementation
  * - Establish a DLCI
  * - Rx user data frame to invalidate ID DLCI: silently discarded by the implementation
@@ -9665,15 +9665,15 @@ TEST(MultiplexerOpenTestGroup, user_rx_invalidate_dlci_id_used)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     /* Set and test mock. */
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Send multiplexer open request within the call context. */
@@ -9707,7 +9707,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_invalidate_dlci_id_used)
     mock_t * mock_unlock = mock_free_get("unlock");
     CHECK(mock_unlock != NULL);
 
-    const nsapi_error channel_open_err = mbed::Mux::channel_open();
+    const nsapi_error channel_open_err = mbed::Mux3GPP::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
 
     /* Receive multiplexer open response, and start TX of open user channel request. */
@@ -9825,7 +9825,7 @@ static void user_rx_invalid_fcs_callback()
  * TC - Ensure proper behaviour when user data Rx frame received with invalid FCS
  *
  * Test sequence:
- * - Mux open
+ * - Mux3GPP open
  * - Establish a DLCI
  * - Rx user data frame with invalid FCS: silently discarded by the implementation
  * - Rx user data frame with valid FCS: accepted by the implementation.
@@ -9843,14 +9843,14 @@ TEST(MultiplexerOpenTestGroup, user_rx_invalid_fcs)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -9924,7 +9924,7 @@ static void rx_frame_type_not_supported_callback()
  * TC - Ensure proper behaviour when Rx frame received with invalid frame type ID
  *
  * Test sequence:
- * - Mux open
+ * - Mux3GPP open
  * - Establish a DLCI
  * - Rx frame with invalid frame type ID: silently discarded by the implementation
  * - Rx frame with valid frame type ID: accepted by the implementation.
@@ -9942,14 +9942,14 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_not_supported)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -10016,7 +10016,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_not_supported)
 /*
  * TC - Ensure proper behaviour when Rx frame type UA received when no SABM has been send
  * Test sequence:
- * - Mux open
+ * - Mux3GPP open
  * - Establish 1st DLCI
  * - Rx frame type UA received, without pending SABM frame, to the established DLCI: silently discarded by the
  *   implementation
@@ -10031,14 +10031,14 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_when_no_sabm_send)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -10078,7 +10078,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_when_no_sabm_send)
 /*
  * TC - Ensure proper behaviour when Rx frame type DM received when no SABM has been send
  * Test sequence:
- * - Mux open
+ * - Mux3GPP open
  * - Establish 1st DLCI
  * - Rx frame type DM received, without pending SABM frame, to the established DLCI: silently discarded by the
  *   implementation
@@ -10093,14 +10093,14 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_when_no_sabm_send)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -10141,7 +10141,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_when_no_sabm_send)
  * TC - Ensure proper behaviour when Rx frame type UA received with invalid C/R and P/F bit
  *
  * Test sequence:
- * - Mux open
+ * - Mux3GPP open
  * - Send DLCI establishment request
  * - Rx frame type UA received with invalid C/R bit: silently discarded by the implementation
  * - Rx frame type UA received with invalid P/F bit: silently discarded by the implementation.
@@ -10157,14 +10157,14 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_invalid_cr_and_pf_bit)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     const uint8_t write_byte_mux_open[6] =
@@ -10198,7 +10198,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_invalid_cr_and_pf_bit)
     CHECK(mock_unlock != NULL);
 
     /* Start test sequence. Test set mocks. */
-    const nsapi_error channel_open_err = mbed::Mux::channel_open();
+    const nsapi_error channel_open_err = mbed::Mux3GPP::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
 
     /* Read the mux open response frame. */
@@ -10286,7 +10286,7 @@ static void rx_frame_type_uih_invalid_cr_and_pf_bit_callback()
  * TC - Ensure proper behaviour when user data Rx frame received with invalid P/F bit
  *
  * Test sequence:
- * - Mux open
+ * - Mux3GPP open
  * - Establish a DLCI
  * - Rx user data frame with invalid P/F bit: silently discarded by the implementation
  * - Rx user data frame with invalid C/R bit: silently discarded by the implementation
@@ -10306,14 +10306,14 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_uih_invalid_cr_and_pf_bit)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -10406,7 +10406,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_uih_invalid_cr_and_pf_bit)
  * TC - Ensure proper behaviour when DM frame received with invalid C/R and P/F bit
  *
  * Test sequence:
- * - Mux open
+ * - Mux3GPP open
  * - Send DLCI establishment request
  * - Rx frame type DM received with invalid C/R bit: silently discarded by the implementation
  * - Rx frame type DM received with invalid P/F bit: silently discarded by the implementation.
@@ -10422,14 +10422,14 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_invalid_cr_and_pf_bit)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     const uint8_t write_byte_mux_open[6] =
@@ -10463,7 +10463,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_invalid_cr_and_pf_bit)
     CHECK(mock_unlock != NULL);
 
     /* Start test sequence. Test set mocks. */
-    const nsapi_error channel_open_err = mbed::Mux::channel_open();
+    const nsapi_error channel_open_err = mbed::Mux3GPP::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
 
     /* Read the mux open response frame. */
@@ -10562,14 +10562,14 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_disc_invalid_cr_and_pf_bit)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
@@ -10655,18 +10655,18 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_disc_while_tx_in_progress)
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
-                               
+
     /* Establish a user channel. */
 
     mux_self_iniated_open(callback, FRAME_TYPE_UA);
@@ -10752,13 +10752,13 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_dlci_id_mismatch)
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
-                               
+
     const uint8_t write_byte_mux_open[6] =
     {
         FLAG_SEQUENCE_OCTET,
@@ -10790,7 +10790,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_dlci_id_mismatch)
     CHECK(mock_unlock != NULL);
 
     /* Start test sequence. Test set mocks. */
-    const nsapi_error channel_open_err = mbed::Mux::channel_open();
+    const nsapi_error channel_open_err = mbed::Mux3GPP::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
 
     /* Receive UA frame which has a different DLCI ID than the SABM frame: silently discarded. */
@@ -10872,13 +10872,13 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_dlci_id_mismatch)
 
     mock_t * mock_sigio = mock_free_get("sigio");
     CHECK(mock_sigio != NULL);
-    mbed::Mux::serial_attach(&fh_mock);
-    mbed::Mux::eventqueue_attach(&eq_mock);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
                                mbed::MuxBase::CHANNEL_TYPE_AT);
-                               
+
     const uint8_t write_byte_mux_open[6] =
     {
         FLAG_SEQUENCE_OCTET,
@@ -10910,7 +10910,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_dlci_id_mismatch)
     CHECK(mock_unlock != NULL);
 
     /* Start test sequence. Test set mocks. */
-    const nsapi_error channel_open_err = mbed::Mux::channel_open();
+    const nsapi_error channel_open_err = mbed::Mux3GPP::channel_open();
     CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
 
     /* Receive DM frame which has a different DLCI ID than the SABM frame: silently discarded. */

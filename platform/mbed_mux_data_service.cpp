@@ -2,36 +2,36 @@
 #include "mbed_mux.h"
 
 namespace mbed {
-   
-ssize_t MuxDataService::write(const void* buffer, size_t size)
-{
-    return Mux::user_data_tx(_dlci, buffer, size);
-}
-    
 
-ssize_t MuxDataService::read(void *buffer, size_t size)
+ssize_t MuxDataService3GPP::write(const void* buffer, size_t size)
 {
-    return Mux::user_data_rx(buffer, size);
+    return Mux3GPP::user_data_tx(_dlci, buffer, size);
 }
-    
-    
-off_t MuxDataService::seek(off_t offset, int whence)
+
+
+ssize_t MuxDataService3GPP::read(void *buffer, size_t size)
+{
+    return Mux3GPP::user_data_rx(buffer, size);
+}
+
+
+off_t MuxDataService3GPP::seek(off_t offset, int whence)
 {
     MBED_ASSERT(false);
     return 0;
 }
-    
 
-int MuxDataService::close()
+
+int MuxDataService3GPP::close()
 {
-    MBED_ASSERT(false);    
+    MBED_ASSERT(false);
     return 0;
 }
-    
 
-void MuxDataService::sigio(Callback<void()> func)
+
+void MuxDataService3GPP::sigio(Callback<void()> func)
 {
     _sigio_cb = func;
 }
-    
+
 } // namespace mbed

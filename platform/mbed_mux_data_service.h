@@ -14,8 +14,8 @@
 * limitations under the License.
 */
 
-#ifndef MUXDATASERVICE_H
-#define MUXDATASERVICE_H
+#ifndef MUXDATASERVICE3GPP_H
+#define MUXDATASERVICE3GPP_H
 
 #include <stdint.h>
 #include "mbed_mux_data_service_base.h"
@@ -24,9 +24,9 @@
 
 namespace mbed {
 
-class MuxDataService : public MuxDataServiceBase {
+class MuxDataService3GPP : public MuxDataServiceBase {
 
-friend class Mux;
+friend class Mux3GPP;
 public:
 
     /** Enqueue user data for transmission.
@@ -65,15 +65,15 @@ public:
     virtual void sigio(Callback<void()> func);
 
     /** Constructor. */
-    MuxDataService() : _dlci(MUX_DLCI_INVALID_ID) {};
+    MuxDataService3GPP() : _dlci(MUX_DLCI_INVALID_ID) {};
 
 private:
 
     /* Deny copy constructor. */
-    MuxDataService(const MuxDataService &obj);
+    MuxDataService3GPP(const MuxDataService3GPP &obj);
 
     /* Deny assignment operator. */
-    MuxDataService &operator=(const MuxDataService &obj);
+    MuxDataService3GPP &operator=(const MuxDataService3GPP &obj);
 
     uint8_t _dlci;     /* DLCI number. Valid range 1 - 63. */
 };

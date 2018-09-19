@@ -53,19 +53,19 @@ typedef struct
     uint8_t information[1]; /* Begin of the information field if present. */
 } frame_hdr_t;
 
-uint8_t Mux::_dlci            = 1u;
-FileHandle *Mux::_serial      = NULL;
-EventQueueMock *Mux::_event_q = NULL;
-MuxDataService Mux::_mux_objects[MBED_CONF_MUX_DLCI_COUNT];
+uint8_t Mux3GPP::_dlci            = 1u;
+FileHandle *Mux3GPP::_serial      = NULL;
+EventQueueMock *Mux3GPP::_event_q = NULL;
+MuxDataService3GPP Mux3GPP::_mux_objects[MBED_CONF_MUX_DLCI_COUNT];
 
-PlatformMutexMock Mux::_mutex;
+PlatformMutexMock Mux3GPP::_mutex;
 
-Callback<void(FileHandle*)> Mux::_cb_func;  
+Callback<void(FileHandle*)> Mux3GPP::_cb_func;  
   
-Mux::tx_context_t Mux::_tx_context;
-Mux::rx_context_t Mux::_rx_context;
-Mux::state_t      Mux::_state;
-const uint8_t     Mux::_crctable[MUX_CRC_TABLE_LEN] = {
+Mux3GPP::tx_context_t Mux3GPP::_tx_context;
+Mux3GPP::rx_context_t Mux3GPP::_rx_context;
+Mux3GPP::state_t      Mux3GPP::_state;
+const uint8_t     Mux3GPP::_crctable[MUX_CRC_TABLE_LEN] = {
     0x00, 0x91, 0xE3, 0x72, 0x07, 0x96, 0xE4, 0x75,  0x0E, 0x9F, 0xED, 0x7C, 0x09, 0x98, 0xEA, 0x7B,
     0x1C, 0x8D, 0xFF, 0x6E, 0x1B, 0x8A, 0xF8, 0x69,  0x12, 0x83, 0xF1, 0x60, 0x15, 0x84, 0xF6, 0x67,
     0x38, 0xA9, 0xDB, 0x4A, 0x3F, 0xAE, 0xDC, 0x4D,  0x36, 0xA7, 0xD5, 0x44, 0x31, 0xA0, 0xD2, 0x43,
@@ -89,7 +89,7 @@ const uint8_t     Mux::_crctable[MUX_CRC_TABLE_LEN] = {
 
 extern void trace(char *string, int data);
 
-void Mux::module_init()
+void Mux3GPP::module_init()
 {
     _dlci = 1u;
 
@@ -108,7 +108,7 @@ void Mux::module_init()
     _tx_context.tx_callback_context = 0;
 
     frame_hdr_t* frame_hdr =
-        reinterpret_cast<frame_hdr_t *>(&(Mux::_tx_context.buffer[FRAME_FLAG_SEQUENCE_FIELD_INDEX]));
+        reinterpret_cast<frame_hdr_t *>(&(Mux3GPP::_tx_context.buffer[FRAME_FLAG_SEQUENCE_FIELD_INDEX]));
     frame_hdr->flag_seq    = FLAG_SEQUENCE_OCTET;
 
     const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);
@@ -118,14 +118,14 @@ void Mux::module_init()
 }
 
 
-void Mux::frame_retransmit_begin()
+void Mux3GPP::frame_retransmit_begin()
 {
     _tx_context.bytes_remaining = _tx_context.offset;
     _tx_context.offset          = 0;
 }
 
 
-void Mux::on_timeout()
+void Mux3GPP::on_timeout()
 {
     _mutex.lock();
 
@@ -153,29 +153,29 @@ void Mux::on_timeout()
 }
 
 
-void Mux::dm_response_construct()
+void Mux3GPP::dm_response_construct()
 {
     frame_hdr_t* frame_hdr =
-        reinterpret_cast<frame_hdr_t *>(&(Mux::_tx_context.buffer[FRAME_FLAG_SEQUENCE_FIELD_INDEX]));
+        reinterpret_cast<frame_hdr_t *>(&(Mux3GPP::_tx_context.buffer[FRAME_FLAG_SEQUENCE_FIELD_INDEX]));
 
     frame_hdr->address        = _rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX];
     frame_hdr->control        = (FRAME_TYPE_DM | PF_BIT);
     frame_hdr->length         = LENGTH_INDICATOR_OCTET;
-    frame_hdr->information[0] = fcs_calculate(&(Mux::_tx_context.buffer[FRAME_ADDRESS_FIELD_INDEX]), FCS_INPUT_LEN);
+    frame_hdr->information[0] = fcs_calculate(&(Mux3GPP::_tx_context.buffer[FRAME_ADDRESS_FIELD_INDEX]), FCS_INPUT_LEN);
     (++frame_hdr)->flag_seq   = FLAG_SEQUENCE_OCTET;
 
     _tx_context.bytes_remaining = DM_FRAME_LEN;
 }
 
 
-void Mux::on_rx_frame_sabm()
+void Mux3GPP::on_rx_frame_sabm()
 {
     /* Peer iniated open/establishment is not supported. */
     rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);
 }
 
 
-void Mux::on_rx_frame_ua()
+void Mux3GPP::on_rx_frame_ua()
 {
     switch (_tx_context.tx_state) {
         uint8_t  rx_dlci_id;
@@ -222,7 +222,7 @@ void Mux::on_rx_frame_ua()
 }
 
 
-void Mux::on_rx_frame_dm()
+void Mux3GPP::on_rx_frame_dm()
 {
     switch (_tx_context.tx_state) {
         uint8_t  rx_dlci_id;
@@ -253,20 +253,20 @@ void Mux::on_rx_frame_dm()
 }
 
 
-void Mux::tx_internal_resp_entry_run()
+void Mux3GPP::tx_internal_resp_entry_run()
 {
     write_do();
 }
 
 
-void Mux::dm_response_send()
+void Mux3GPP::dm_response_send()
 {
     dm_response_construct();
     tx_state_change(TX_INTERNAL_RESP, tx_internal_resp_entry_run, tx_idle_exit_run);
 }
 
 
-void Mux::on_rx_frame_disc()
+void Mux3GPP::on_rx_frame_disc()
 {
     /* Follow the specification: DM response generated for those DLCI IDs which are not established. */
 
@@ -290,7 +290,7 @@ void Mux::on_rx_frame_disc()
                             /* DLCI close not supported and silently discarded. */
                         }
                     } else {
-                        /* Mux close not supported and silently discarded. */
+                        /* Mux3GPP close not supported and silently discarded. */
                     }
                 }
             }
@@ -304,7 +304,7 @@ void Mux::on_rx_frame_disc()
 }
 
 
-void Mux::on_rx_frame_uih()
+void Mux3GPP::on_rx_frame_uih()
 {
     const uint8_t length = (_rx_context.buffer[FRAME_LENGTH_FIELD_INDEX] >> 1);
     if (length != 0) {
@@ -319,7 +319,7 @@ void Mux::on_rx_frame_uih()
             if (dlci_id != MUX_DLCI_INVALID_ID) {
                 /* Proceed with processing for non internal invalidate ID type. */
 
-                MuxDataService* obj = file_handle_get(dlci_id);
+                MuxDataService3GPP* obj = file_handle_get(dlci_id);
                 if (obj != NULL) {
                     /* Established DLCI exists, proceed with processing. */
 
@@ -341,13 +341,13 @@ void Mux::on_rx_frame_uih()
 }
 
 
-void Mux::on_rx_frame_not_supported()
+void Mux3GPP::on_rx_frame_not_supported()
 {
     rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);
 }
 
 
-Mux::FrameRxType Mux::frame_rx_type_resolve()
+Mux3GPP::FrameRxType Mux3GPP::frame_rx_type_resolve()
 {
     const uint8_t frame_type = (_rx_context.buffer[FRAME_CONTROL_FIELD_INDEX] & ~PF_BIT);
 
@@ -369,7 +369,7 @@ Mux::FrameRxType Mux::frame_rx_type_resolve()
 
 
 
-void Mux::tx_state_change(TxState new_state, tx_state_entry_func_t entry_func, tx_state_exit_func_t exit_func)
+void Mux3GPP::tx_state_change(TxState new_state, tx_state_entry_func_t entry_func, tx_state_exit_func_t exit_func)
 {
 #if 0
 trace("TX-state new state: ", new_state);
@@ -380,21 +380,21 @@ trace("TX-state new state: ", new_state);
 }
 
 
-void Mux::event_queue_enqueue()
+void Mux3GPP::event_queue_enqueue()
 {
-    const int id = _event_q->call(Mux::on_deferred_call);
+    const int id = _event_q->call(Mux3GPP::on_deferred_call);
     MBED_ASSERT(id != 0);
 }
 
 
-void Mux::tx_retransmit_done_entry_run()
+void Mux3GPP::tx_retransmit_done_entry_run()
 {
-    _tx_context.timer_id = _event_q->call_in(T1_TIMER_VALUE, Mux::on_timeout);
+    _tx_context.timer_id = _event_q->call_in(T1_TIMER_VALUE, Mux3GPP::on_timeout);
     MBED_ASSERT(_tx_context.timer_id != 0);
 }
 
 
-bool Mux::is_dlci_in_use(uint8_t dlci_id)
+bool Mux3GPP::is_dlci_in_use(uint8_t dlci_id)
 {
     const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);
     for (uint8_t i = 0; i != end; ++i) {
@@ -407,7 +407,7 @@ bool Mux::is_dlci_in_use(uint8_t dlci_id)
 }
 
 
-void Mux::on_post_tx_frame_sabm()
+void Mux3GPP::on_post_tx_frame_sabm()
 {
     switch (_tx_context.tx_state) {
         case TX_RETRANSMIT_ENQUEUE:
@@ -422,7 +422,7 @@ void Mux::on_post_tx_frame_sabm()
 }
 
 
-void Mux::pending_self_iniated_mux_open_start()
+void Mux3GPP::pending_self_iniated_mux_open_start()
 {
     /* Construct the frame, start the tx sequence, set and reset relevant state contexts. */
     _state.is_mux_open_pending = 0;
@@ -433,7 +433,7 @@ void Mux::pending_self_iniated_mux_open_start()
 }
 
 
-void Mux::pending_self_iniated_dlci_open_start()
+void Mux3GPP::pending_self_iniated_dlci_open_start()
 {
     /* Construct the frame, start the tx sequence, set and reset relevant state contexts. */
     _state.is_dlci_open_pending = 0;
@@ -444,13 +444,13 @@ void Mux::pending_self_iniated_dlci_open_start()
 }
 
 
-void Mux::tx_idle_exit_run()
+void Mux3GPP::tx_idle_exit_run()
 {
     _tx_context.offset = 0;
 }
 
 
-uint8_t Mux::tx_callback_index_advance()
+uint8_t Mux3GPP::tx_callback_index_advance()
 {
     /* Increment and get the index bit accounting the roll over. */
     uint8_t index = ((_tx_context.tx_callback_context & 0xF0u) >> 4);
@@ -467,19 +467,19 @@ uint8_t Mux::tx_callback_index_advance()
 }
 
 
-uint8_t Mux::tx_callback_pending_mask_get()
+uint8_t Mux3GPP::tx_callback_pending_mask_get()
 {
     return (_tx_context.tx_callback_context & 0x0Fu);
 }
 
 
-void Mux::tx_callback_pending_bit_clear(uint8_t bit)
+void Mux3GPP::tx_callback_pending_bit_clear(uint8_t bit)
 {
     _tx_context.tx_callback_context &= ~bit;
 }
 
 
-void Mux::tx_callback_pending_bit_set(uint8_t dlci_id)
+void Mux3GPP::tx_callback_pending_bit_set(uint8_t dlci_id)
 {
     uint8_t i         = 0;
     uint8_t bit       = 1u;
@@ -500,7 +500,7 @@ void Mux::tx_callback_pending_bit_set(uint8_t dlci_id)
 }
 
 
-MuxDataService& Mux::tx_callback_lookup(uint8_t bit)
+MuxDataService3GPP& Mux3GPP::tx_callback_lookup(uint8_t bit)
 {
     uint8_t i         = 0;
     const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);
@@ -520,14 +520,14 @@ MuxDataService& Mux::tx_callback_lookup(uint8_t bit)
 }
 
 
-void Mux::tx_callback_dispatch(uint8_t bit)
+void Mux3GPP::tx_callback_dispatch(uint8_t bit)
 {
-    MuxDataService& obj = tx_callback_lookup(bit);
+    MuxDataService3GPP& obj = tx_callback_lookup(bit);
     obj._sigio_cb();
 }
 
 
-void Mux::tx_callbacks_run()
+void Mux3GPP::tx_callbacks_run()
 {
     uint8_t current_tx_index;
     uint8_t tx_callback_pending_mask = tx_callback_pending_mask_get();
@@ -568,7 +568,7 @@ void Mux::tx_callbacks_run()
 }
 
 
-void Mux::tx_idle_entry_run()
+void Mux3GPP::tx_idle_entry_run()
 {
     if (_state.is_mux_open_pending) {
         pending_self_iniated_mux_open_start();
@@ -590,7 +590,7 @@ void Mux::tx_idle_entry_run()
 }
 
 
-void Mux::on_post_tx_frame_dm()
+void Mux3GPP::on_post_tx_frame_dm()
 {
     switch (_tx_context.tx_state) {
         case TX_INTERNAL_RESP:
@@ -604,7 +604,7 @@ void Mux::on_post_tx_frame_dm()
 }
 
 
-void Mux::on_post_tx_frame_uih()
+void Mux3GPP::on_post_tx_frame_uih()
 {
     switch (_tx_context.tx_state) {
         case TX_NORETRANSMIT:
@@ -618,7 +618,7 @@ void Mux::on_post_tx_frame_uih()
 }
 
 
-Mux::FrameTxType Mux::frame_tx_type_resolve()
+Mux3GPP::FrameTxType Mux3GPP::frame_tx_type_resolve()
 {
     const uint8_t frame_type = (_tx_context.buffer[FRAME_CONTROL_FIELD_INDEX] & ~PF_BIT);
 
@@ -635,27 +635,27 @@ Mux::FrameTxType Mux::frame_tx_type_resolve()
 }
 
 
-void Mux::null_action()
+void Mux3GPP::null_action()
 {
 
 }
 
 
-void Mux::rx_header_read_entry_run()
+void Mux3GPP::rx_header_read_entry_run()
 {
     _rx_context.offset      = FRAME_ADDRESS_FIELD_INDEX;
     _rx_context.read_length = FRAME_HEADER_READ_LEN;
 }
 
 
-void Mux::rx_state_change(RxState new_state, rx_state_entry_func_t entry_func)
+void Mux3GPP::rx_state_change(RxState new_state, rx_state_entry_func_t entry_func)
 {
     entry_func();
     _rx_context.rx_state = new_state;
 }
 
 
-ssize_t Mux::on_rx_read_state_frame_start()
+ssize_t Mux3GPP::on_rx_read_state_frame_start()
 {
     ssize_t read_err;
     _rx_context.buffer[_rx_context.offset] = static_cast<uint8_t>(~FLAG_SEQUENCE_OCTET);
@@ -674,7 +674,7 @@ ssize_t Mux::on_rx_read_state_frame_start()
 }
 
 
-ssize_t Mux::on_rx_read_state_header_read()
+ssize_t Mux3GPP::on_rx_read_state_header_read()
 {
     ssize_t read_err;
 
@@ -714,7 +714,7 @@ ssize_t Mux::on_rx_read_state_header_read()
 }
 
 
-bool Mux::is_rx_fcs_valid()
+bool Mux3GPP::is_rx_fcs_valid()
 {
     const uint8_t expected_fcs = fcs_calculate(&(_rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX]), FCS_INPUT_LEN);
     const uint8_t actual_fcs   =
@@ -724,7 +724,7 @@ bool Mux::is_rx_fcs_valid()
 }
 
 
-ssize_t Mux::on_rx_read_state_trailer_read()
+ssize_t Mux3GPP::on_rx_read_state_trailer_read()
 {
     typedef void (*rx_frame_decoder_func_t)();
     static const rx_frame_decoder_func_t rx_frame_decoder_func[FRAME_RX_TYPE_MAX] = {
@@ -749,7 +749,7 @@ ssize_t Mux::on_rx_read_state_trailer_read()
         /* Complete frame received, verify FCS and if valid proceed with processing. */
 
         if (is_rx_fcs_valid()) {
-            const Mux::FrameRxType frame_type  = frame_rx_type_resolve();
+            const Mux3GPP::FrameRxType frame_type  = frame_rx_type_resolve();
             const rx_frame_decoder_func_t func = rx_frame_decoder_func[frame_type];
 
             func();
@@ -762,13 +762,13 @@ ssize_t Mux::on_rx_read_state_trailer_read()
 }
 
 
-ssize_t Mux::on_rx_read_state_suspend()
+ssize_t Mux3GPP::on_rx_read_state_suspend()
 {
     return -EAGAIN;
 }
 
 
-void Mux::rx_event_do(RxEvent event)
+void Mux3GPP::rx_event_do(RxEvent event)
 {
     typedef ssize_t (*rx_read_func_t)();
     static const rx_read_func_t rx_read_func[RX_STATE_MAX] = {
@@ -805,7 +805,7 @@ trace("RX-event state: ", _rx_context.rx_state);
 }
 
 
-void Mux::write_do()
+void Mux3GPP::write_do()
 {
     switch (_tx_context.tx_state) {
         ssize_t write_err;
@@ -829,7 +829,7 @@ void Mux::write_do()
                     on_post_tx_frame_dm,
                     on_post_tx_frame_uih
                 };
-                const Mux::FrameTxType     frame_type = frame_tx_type_resolve();
+                const Mux3GPP::FrameTxType     frame_type = frame_tx_type_resolve();
                 const post_tx_frame_func_t func       = post_tx_func[frame_type];
                 func();
             }
@@ -842,7 +842,7 @@ void Mux::write_do()
 }
 
 
-void Mux::on_deferred_call()
+void Mux3GPP::on_deferred_call()
 {
     _mutex.lock();
 
@@ -853,28 +853,28 @@ void Mux::on_deferred_call()
 }
 
 
-void Mux::on_sigio()
+void Mux3GPP::on_sigio()
 {
     event_queue_enqueue();
 }
 
 
-void Mux::eventqueue_attach(EventQueueMock *event_queue)
+void Mux3GPP::eventqueue_attach(EventQueueMock *event_queue)
 {
     _event_q = event_queue;
 }
 
 
-void Mux::serial_attach(FileHandle *serial)
+void Mux3GPP::serial_attach(FileHandle *serial)
 {
     _serial = serial;
 
-    _serial->sigio(Mux::on_sigio);
+    _serial->sigio(Mux3GPP::on_sigio);
     _serial->set_blocking(false);
 }
 
 
-uint8_t Mux::fcs_calculate(const uint8_t *buffer,  uint8_t input_len)
+uint8_t Mux3GPP::fcs_calculate(const uint8_t *buffer,  uint8_t input_len)
 {
     uint8_t fcs = 0xFFu;
 
@@ -889,22 +889,22 @@ uint8_t Mux::fcs_calculate(const uint8_t *buffer,  uint8_t input_len)
 }
 
 
-void Mux::sabm_request_construct(uint8_t dlci_id)
+void Mux3GPP::sabm_request_construct(uint8_t dlci_id)
 {
     frame_hdr_t *frame_hdr =
-        reinterpret_cast<frame_hdr_t *>(&(Mux::_tx_context.buffer[FRAME_FLAG_SEQUENCE_FIELD_INDEX]));
+        reinterpret_cast<frame_hdr_t *>(&(Mux3GPP::_tx_context.buffer[FRAME_FLAG_SEQUENCE_FIELD_INDEX]));
 
     frame_hdr->address        = EA_BIT | CR_BIT | (dlci_id << 2);
     frame_hdr->control        = (FRAME_TYPE_SABM | PF_BIT);
     frame_hdr->length         = LENGTH_INDICATOR_OCTET;
-    frame_hdr->information[0] = fcs_calculate(&(Mux::_tx_context.buffer[FRAME_ADDRESS_FIELD_INDEX]), FCS_INPUT_LEN);
+    frame_hdr->information[0] = fcs_calculate(&(Mux3GPP::_tx_context.buffer[FRAME_ADDRESS_FIELD_INDEX]), FCS_INPUT_LEN);
     (++frame_hdr)->flag_seq   = FLAG_SEQUENCE_OCTET;
 
     _tx_context.bytes_remaining = SABM_FRAME_LEN;
 }
 
 
-bool Mux::is_dlci_q_full()
+bool Mux3GPP::is_dlci_q_full()
 {
     const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);
     for (uint8_t i = 0; i != end; ++i) {
@@ -917,7 +917,7 @@ bool Mux::is_dlci_q_full()
 }
 
 
-void Mux::dlci_id_append(uint8_t dlci_id)
+void Mux3GPP::dlci_id_append(uint8_t dlci_id)
 {
     uint8_t i         = 0;
     const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);
@@ -936,10 +936,10 @@ void Mux::dlci_id_append(uint8_t dlci_id)
 }
 
 
-MuxDataService *Mux::file_handle_get(uint8_t dlci_id)
+MuxDataService3GPP *Mux3GPP::file_handle_get(uint8_t dlci_id)
 {
-    MuxDataService* obj = NULL;
-    const uint8_t end = sizeof(_mux_objects) / sizeof(_mux_objects[0]);
+    MuxDataService3GPP* obj = NULL;
+    const uint8_t end       = sizeof(_mux_objects) / sizeof(_mux_objects[0]);
     for (uint8_t i = 0; i != end; ++i) {
         if (_mux_objects[i]._dlci== dlci_id) {
             obj = &(_mux_objects[i]);
@@ -952,13 +952,13 @@ MuxDataService *Mux::file_handle_get(uint8_t dlci_id)
 }
 
 
-void Mux::tx_retransmit_enqueu_entry_run()
+void Mux3GPP::tx_retransmit_enqueu_entry_run()
 {
     write_do();
 }
 
 
-nsapi_error Mux::channel_open()
+nsapi_error Mux3GPP::channel_open()
 {
     _mutex.lock();
 
@@ -1021,10 +1021,10 @@ nsapi_error Mux::channel_open()
 }
 
 
-void Mux::user_information_construct(uint8_t dlci_id, const void* buffer, size_t size)
+void Mux3GPP::user_information_construct(uint8_t dlci_id, const void* buffer, size_t size)
 {
     frame_hdr_t *frame_hdr =
-        reinterpret_cast<frame_hdr_t *>(&(Mux::_tx_context.buffer[FRAME_FLAG_SEQUENCE_FIELD_INDEX]));
+        reinterpret_cast<frame_hdr_t *>(&(Mux3GPP::_tx_context.buffer[FRAME_FLAG_SEQUENCE_FIELD_INDEX]));
 
     frame_hdr->address  = EA_BIT | CR_BIT | (dlci_id << 2);
     frame_hdr->control  = FRAME_TYPE_UIH;
@@ -1033,20 +1033,20 @@ void Mux::user_information_construct(uint8_t dlci_id, const void* buffer, size_t
     memmove(&(frame_hdr->information[0]), buffer, size);
 
     uint8_t* fcs_pos = (&(frame_hdr->information[0]) + size);
-    *fcs_pos         = fcs_calculate(&(Mux::_tx_context.buffer[FRAME_ADDRESS_FIELD_INDEX]), FCS_INPUT_LEN);
+    *fcs_pos         = fcs_calculate(&(Mux3GPP::_tx_context.buffer[FRAME_ADDRESS_FIELD_INDEX]), FCS_INPUT_LEN);
     *(++fcs_pos)     = FLAG_SEQUENCE_OCTET;
 
     _tx_context.bytes_remaining = UIH_FRAME_MIN_LEN + size;
 }
 
 
-void Mux::tx_noretransmit_entry_run()
+void Mux3GPP::tx_noretransmit_entry_run()
 {
     write_do();
 }
 
 
-ssize_t Mux::user_data_tx(uint8_t dlci_id, const void* buffer, size_t size)
+ssize_t Mux3GPP::user_data_tx(uint8_t dlci_id, const void* buffer, size_t size)
 {
     MBED_ASSERT(size <=
         (MBED_CONF_MUX_BUFFER_SIZE - (FRAME_START_READ_LEN + FRAME_HEADER_READ_LEN + FRAME_TRAILER_LEN)));
@@ -1107,13 +1107,13 @@ ssize_t Mux::user_data_tx(uint8_t dlci_id, const void* buffer, size_t size)
 }
 
 
-size_t Mux::min(uint8_t size_1, size_t size_2)
+size_t Mux3GPP::min(uint8_t size_1, size_t size_2)
 {
     return (size_1 < size_2) ? size_1 : size_2;
 }
 
 
-ssize_t Mux::user_data_rx(void* buffer, size_t size)
+ssize_t Mux3GPP::user_data_rx(void* buffer, size_t size)
 {
     MBED_ASSERT(buffer != NULL);
 

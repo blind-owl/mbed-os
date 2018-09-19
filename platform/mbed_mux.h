@@ -73,8 +73,8 @@ namespace mbed {
 
 class EventQueueMock;
 class FileHandle;
-class Mux : protected MuxBase {
-friend class MuxDataService;
+class Mux3GPP : protected MuxBase {
+friend class MuxDataService3GPP;
 public:
 
     /** Module init. */
@@ -264,13 +264,13 @@ private:
      *
      *  @return Frame type.
      */
-    static Mux::FrameRxType frame_rx_type_resolve();
+    static Mux3GPP::FrameRxType frame_rx_type_resolve();
 
     /** Resolve tx frame type.
      *
      *  @return Frame type.
      */
-    static Mux::FrameTxType frame_tx_type_resolve();
+    static Mux3GPP::FrameTxType frame_tx_type_resolve();
 
     /** Begin the frame retransmit sequence. */
     static void frame_retransmit_begin();
@@ -324,7 +324,7 @@ private:
      *
      *  @return Valid object reference or NULL if not found.
      */
-    static MuxDataService *file_handle_get(uint8_t dlci_id);
+    static MuxDataService3GPP *file_handle_get(uint8_t dlci_id);
 
     /** Evaluate is DLCI ID in use.
      *
@@ -413,7 +413,7 @@ private:
      *  @param bit Bit indetifier of data service object to get.
      *  @return    Data service object reference.
      */
-    static MuxDataService& tx_callback_lookup(uint8_t bit);
+    static MuxDataService3GPP& tx_callback_lookup(uint8_t bit);
 
     /** Get minimum of 2 supplied paramaters.
      *
@@ -434,13 +434,13 @@ private:
     static bool is_rx_fcs_valid();
 
     /* Deny object creation. */
-    Mux();
+    Mux3GPP();
 
     /* Deny copy constructor. */
-    Mux(const Mux& obj);
+    Mux3GPP(const Mux3GPP& obj);
 
     /* Deny assignment operator. */
-    Mux& operator=(const Mux& obj);
+    Mux3GPP& operator=(const Mux3GPP& obj);
 
     /* Definition for Tx context type. */
     typedef struct
@@ -483,14 +483,14 @@ private:
         uint8_t is_user_rx_ready         : 1; /* True when user RX is ready/available. */
     } state_t;
 
-    static FileHandle      *_serial;                                /* Serial used. */
-    static EventQueueMock  *_event_q;                               /* Event queue used. */
-    static PlatformMutexMock _mutex;                                /* Mutex used. */
-    static MuxDataService   _mux_objects[MBED_CONF_MUX_DLCI_COUNT]; /* Number of supported DLCIs. */
-    static tx_context_t     _tx_context;                            /* Tx context. */
-    static rx_context_t     _rx_context;                            /* Rx context. */
-    static state_t          _state;                                 /* General state context. */
-    static const uint8_t    _crctable[MUX_CRC_TABLE_LEN];           /* CRC table used for frame FCS. */
+    static FileHandle        *_serial;                                /* Serial used. */
+    static EventQueueMock    *_event_q;                               /* Event queue used. */
+    static PlatformMutexMock  _mutex;                                 /* Mutex used. */
+    static MuxDataService3GPP _mux_objects[MBED_CONF_MUX_DLCI_COUNT]; /* Number of supported DLCIs. */
+    static tx_context_t       _tx_context;                            /* Tx context. */
+    static rx_context_t       _rx_context;                            /* Rx context. */
+    static state_t            _state;                                 /* General state context. */
+    static const uint8_t      _crctable[MUX_CRC_TABLE_LEN];           /* CRC table used for frame FCS. */
 
     static uint8_t                     _dlci;                       /* User channel id. */
     static Callback<void(FileHandle*)> _cb_func;                    /* @ref channel_open completion function. */
