@@ -1,3 +1,4 @@
+#include "mbed_mux_data_service.h"
 #include "mbed_mux.h"
 
 namespace mbed {
