@@ -6014,7 +6014,7 @@ void single_complete_write_cycle(const uint8_t *write_byte,
     mbed::EventQueueMock::io_control(eq_io_control);
 }
 
-class MuxCallbackTest : public MuxCallback {
+class MuxCallbackTest {
 
 public:
 
@@ -6235,7 +6235,8 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_not_open)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     mux_self_iniated_open(callback, FRAME_TYPE_UA);
 
@@ -6279,7 +6280,8 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_currently_running)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     const uint8_t write_byte_mux_open[6] =
     {
@@ -6465,8 +6467,8 @@ TEST(MultiplexerOpenTestGroup, mux_open_dm_tx_currently_running)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
-
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
     const uint8_t dlci_id      = 0;
     const uint8_t read_byte[6] =
     {
@@ -6613,8 +6615,8 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_rejected_by_peer)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
-
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
     const uint8_t write_byte_mux_open[6] =
     {
         FLAG_SEQUENCE_OCTET,
@@ -6708,8 +6710,9 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_success_after_timeout)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
-
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
+                               
     const uint8_t write_byte_mux_open[6] =
     {
         FLAG_SEQUENCE_OCTET,
@@ -6830,8 +6833,9 @@ TEST(MultiplexerOpenTestGroup, mux_open_peer_initiated)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
-
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
+                               
     const uint8_t read_byte[6] =
     {
         FLAG_SEQUENCE_OCTET,
@@ -6868,8 +6872,9 @@ TEST(MultiplexerOpenTestGroup, mux_open_rx_disc_dlci_0)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
-
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
+                               
     /* Open multiplexer control channel and user channel. */
 
     mux_self_iniated_open(callback, FRAME_TYPE_UA);
@@ -6921,7 +6926,8 @@ TEST(MultiplexerOpenTestGroup, mux_open_rx_disc_dlci_in_use)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Open multiplexer control channel and user channel. */
 
@@ -6973,8 +6979,9 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_tx_in_call_context)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
-
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
+                               
     /* Send multiplexer open request within the call context. */
 
     const uint8_t write_byte_mux_open[6] =
@@ -7088,8 +7095,9 @@ TEST(MultiplexerOpenTestGroup, channel_open_success_after_timeout)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
-
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
+                               
     /* Establish user channel. */
 
     mux_self_iniated_open(callback, FRAME_TYPE_UA);
@@ -7218,7 +7226,8 @@ TEST(MultiplexerOpenTestGroup, channel_open_all_channel_ids_used)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -7296,7 +7305,8 @@ TEST(MultiplexerOpenTestGroup, channel_open_all_channel_ids_used_ensure_uniqueue
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -7370,7 +7380,8 @@ TEST(MultiplexerOpenTestGroup, channel_open_rejected_by_peer)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish multiplexer control channel. Peer rejects user channel request message with appropriate response
        message. */
@@ -7416,7 +7427,8 @@ TEST(MultiplexerOpenTestGroup, dlci_establish_peer_initiated)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -7468,7 +7480,8 @@ TEST(MultiplexerOpenTestGroup, channel_open_dm_tx_currently_running)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -7588,7 +7601,8 @@ TEST(MultiplexerOpenTestGroup, user_tx_0_length_user_payload)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -7636,7 +7650,8 @@ TEST(MultiplexerOpenTestGroup, user_tx_size_lower_bound)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -7712,7 +7727,8 @@ TEST(MultiplexerOpenTestGroup, user_tx_size_upper_bound)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -7785,7 +7801,8 @@ TEST(MultiplexerOpenTestGroup, user_tx_2_full_frame_writes)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -7886,7 +7903,8 @@ TEST(MultiplexerOpenTestGroup, user_tx_dlci_establish_during_user_tx)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -8069,7 +8087,8 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_triggered_tx_within_callback
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -8170,7 +8189,8 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_set_pending_multiple_times_f
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -8272,7 +8292,8 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_set_pending_for_all_dlcis)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -8442,7 +8463,8 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_rollover_tx_pending_bitmask)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -8618,7 +8640,8 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_tx_to_different_dlci_within_
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -8793,7 +8816,8 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_tx_to_different_dlci_not_wit
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -8905,7 +8929,8 @@ TEST(MultiplexerOpenTestGroup, user_rx_0_length_user_payload)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -8996,7 +9021,8 @@ TEST(MultiplexerOpenTestGroup, user_rx_single_read)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -9057,7 +9083,8 @@ TEST(MultiplexerOpenTestGroup, user_rx_single_read_no_data_available)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -9117,7 +9144,8 @@ TEST(MultiplexerOpenTestGroup, user_rx_rx_suspend_rx_resume_cycle)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -9257,7 +9285,8 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_1_byte_per_run_context)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -9334,7 +9363,8 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_max_size_user_payload_in_1_read_call
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -9413,7 +9443,8 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_1_byte_per_read_call_max_size_user_p
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -9512,7 +9543,8 @@ TEST(MultiplexerOpenTestGroup, user_rx_dlci_not_established)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -9641,7 +9673,8 @@ TEST(MultiplexerOpenTestGroup, user_rx_invalidate_dlci_id_used)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Send multiplexer open request within the call context. */
 
@@ -9817,7 +9850,8 @@ TEST(MultiplexerOpenTestGroup, user_rx_invalid_fcs)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -9915,7 +9949,8 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_not_supported)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -10003,7 +10038,8 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_when_no_sabm_send)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -10064,7 +10100,8 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_when_no_sabm_send)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -10127,7 +10164,8 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_invalid_cr_and_pf_bit)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     const uint8_t write_byte_mux_open[6] =
     {
@@ -10275,7 +10313,8 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_uih_invalid_cr_and_pf_bit)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -10390,7 +10429,8 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_invalid_cr_and_pf_bit)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     const uint8_t write_byte_mux_open[6] =
     {
@@ -10529,7 +10569,8 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_disc_invalid_cr_and_pf_bit)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -10623,8 +10664,9 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_disc_while_tx_in_progress)
     mbed::Mux::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
-
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
+                               
     /* Establish a user channel. */
 
     mux_self_iniated_open(callback, FRAME_TYPE_UA);
@@ -10714,8 +10756,9 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_dlci_id_mismatch)
     mbed::Mux::eventqueue_attach(&eq_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
-
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
+                               
     const uint8_t write_byte_mux_open[6] =
     {
         FLAG_SEQUENCE_OCTET,
@@ -10833,8 +10876,9 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_dlci_id_mismatch)
     mbed::Mux::eventqueue_attach(&eq_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux::callback_attach(callback);
-
+    mbed::Mux::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
+                               mbed::MuxBase::CHANNEL_TYPE_AT);
+                               
     const uint8_t write_byte_mux_open[6] =
     {
         FLAG_SEQUENCE_OCTET,

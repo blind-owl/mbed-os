@@ -20,6 +20,7 @@
 
 #include <stdint.h>
 #include "FileHandle.h"
+#include "Callback.h"
 
 #if 0 // @toto: enable when moving to gtest
 #include "nsapi_types.h"
@@ -124,20 +125,21 @@ private:
     Callback<void()> _sigio_cb; /* Registered signal callback. */
 };
 
-class MuxCallback {
-
+class MuxBase {
 public:
 
-    /** Open multiplexer channel completion callback.
-     *
-     * @param obj Valid object upon channel open success, NULL for a failure.
-     */
-    virtual void channel_open_run(FileHandle *obj) = 0;
+typedef enum {
+    CHANNEL_TYPE_AT = 0,
+    CHANNEL_TYPE_NVM,    
+    CHANNEL_TYPE_BIP,
+    CHANNEL_TYPE_MAX  
+} ChannelType;
+
 };
 
 class EventQueueMock;
 class FileHandle;
-class Mux {
+class Mux : protected MuxBase {
 friend class MuxDataService;
 public:
 
@@ -167,7 +169,12 @@ public:
      */
     static void eventqueue_attach(EventQueueMock *event_queue);
 
-    static void callback_attach(MuxCallback &obj) {_cb = &obj;}
+    /** Attach @ref channel_open operation completion callback function.
+     *
+     *  @param func @ref channel_open operation completion callback function.
+     *  @param type Not used by the implementation.
+     */
+    static void callback_attach(Callback<void(FileHandle*)> func, ChannelType type) {_cb_func = func;}
 
 private:
 
@@ -542,8 +549,6 @@ private:
         uint8_t is_user_rx_ready         : 1; /* True when user RX is ready/available. */
     } state_t;
 
-    static MuxCallback     *_cb;
-
     static FileHandle      *_serial;                                /* Serial used. */
     static EventQueueMock  *_event_q;                               /* Event queue used. */
     static PlatformMutexMock _mutex;                                /* Mutex used. */
@@ -552,7 +557,9 @@ private:
     static rx_context_t     _rx_context;                            /* Rx context. */
     static state_t          _state;                                 /* General state context. */
     static const uint8_t    _crctable[MUX_CRC_TABLE_LEN];           /* CRC table used for frame FCS. */
-    static uint8_t _dlci;
+
+    static uint8_t                     _dlci;                       /* User channel id. */
+    static Callback<void(FileHandle*)> _cb_func;                    /* @ref channel_open completion function. */
 };
 
 } // namespace mbed

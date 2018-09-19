@@ -53,8 +53,6 @@ typedef struct
     uint8_t information[1]; /* Begin of the information field if present. */
 } frame_hdr_t;
 
-MuxCallback *Mux::_cb = NULL;
-
 uint8_t Mux::_dlci            = 1u;
 FileHandle *Mux::_serial      = NULL;
 EventQueueMock *Mux::_event_q = NULL;
@@ -62,6 +60,8 @@ MuxDataService Mux::_mux_objects[MBED_CONF_MUX_DLCI_COUNT];
 
 PlatformMutexMock Mux::_mutex;
 
+Callback<void(FileHandle*)> Mux::_cb_func;  
+  
 Mux::tx_context_t Mux::_tx_context;
 Mux::rx_context_t Mux::_rx_context;
 Mux::state_t      Mux::_state;
@@ -140,7 +140,7 @@ void Mux::on_timeout()
 
 // @todo: clear op running bits? => always do in tx_idle entry? NOT as app can call back in callback context!
 
-                _cb->channel_open_run(NULL);
+                _cb_func(NULL);
                 tx_state_change(TX_IDLE, tx_idle_entry_run, null_action);
             }
             break;
@@ -201,7 +201,7 @@ void Mux::on_rx_frame_ua()
                         FileHandle *fh = file_handle_get(rx_dlci_id);
                         MBED_ASSERT(fh != NULL);
 
-                        _cb->channel_open_run(fh);
+                        _cb_func(fh);
                     } else {
                         /* Store current state and request scheduling of channel creation procedure. */
 
@@ -239,7 +239,7 @@ void Mux::on_rx_frame_dm()
                 if (tx_dlci_id == rx_dlci_id) {
                     _event_q->cancel(_tx_context.timer_id);
 
-                    _cb->channel_open_run(NULL);
+                    _cb_func(NULL);
                     tx_state_change(TX_IDLE, tx_idle_entry_run, null_action);
                 }
             }
