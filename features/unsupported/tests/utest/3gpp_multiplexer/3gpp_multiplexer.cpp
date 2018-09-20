@@ -11185,15 +11185,13 @@ TEST(MultiplexerOpenTestGroup, channel_open_inside_the_channel_open_callback_mux
     mock_write->input_param[0].param        = (uint32_t)&write_byte_mux_open[0];
     mock_write->input_param[1].param        = SABM_FRAME_LEN;
     mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->return_value                = 1;
+    mock_write->return_value                = sizeof(write_byte_mux_open);
 
-    mock_write = mock_free_get("write");
-    CHECK(mock_write != NULL);
-    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->input_param[0].param        = (uint32_t)&write_byte_mux_open[1];
-    mock_write->input_param[1].param        = SABM_FRAME_LEN -1u;
-    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_write->return_value                = 0;
+    mock_t *mock_call_in = mock_free_get("call_in");
+    CHECK(mock_call_in != NULL);
+    mock_call_in->return_value                = T1_TIMER_EVENT_ID;
+    mock_call_in->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_call_in->input_param[0].param        = T1_TIMER_VALUE;
 
     mock_t * mock_lock = mock_free_get("lock");
     CHECK(mock_lock != NULL);
@@ -11207,9 +11205,6 @@ TEST(MultiplexerOpenTestGroup, channel_open_inside_the_channel_open_callback_mux
     /* Generate maxium amount of timeout events, which trigger retransmission of open multiplexer control channel
        request message. */
 
-    /* Complete the frame write. */
-    self_iniated_request_tx(&(write_byte_mux_open[1]), (SABM_FRAME_LEN - 1u), FLAG_SEQUENCE_OCTET_LEN);
-
     /* Begin frame re-transmit sequence.*/
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_TIMEOUT_GENERATE};
     uint8_t counter                                        = RETRANSMIT_COUNT;
@@ -11220,25 +11215,21 @@ TEST(MultiplexerOpenTestGroup, channel_open_inside_the_channel_open_callback_mux
         mock_write->input_param[0].param        = (uint32_t)&(write_byte_mux_open[0]);
         mock_write->input_param[1].param        = SABM_FRAME_LEN;
         mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->return_value                = 1;
+        mock_write->return_value                = sizeof(write_byte_mux_open);
 
-        mock_write = mock_free_get("write");
-        CHECK(mock_write != NULL);
-        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->input_param[0].param        = (uint32_t)&(write_byte_mux_open[1]);
-        mock_write->input_param[1].param        = SABM_FRAME_LEN - 1u;
-        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->return_value                = 0;
+        mock_call_in = mock_free_get("call_in");
+        CHECK(mock_call_in != NULL);
+        mock_call_in->return_value                = T1_TIMER_EVENT_ID;
+        mock_call_in->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_call_in->input_param[0].param        = T1_TIMER_VALUE;
 
         mock_lock = mock_free_get("lock");
         CHECK(mock_lock != NULL);
         mock_unlock = mock_free_get("unlock");
         CHECK(mock_unlock != NULL);
+
         /* Trigger timer timeout. */
         mbed::EventQueueMock::io_control(eq_io_control);
-
-        /* Re-transmit the complete remaining part of the frame. */
-        self_iniated_request_tx(&(write_byte_mux_open[1]), (SABM_FRAME_LEN - 1u), FLAG_SEQUENCE_OCTET_LEN);
 
         --counter;
     } while (counter != 0);
