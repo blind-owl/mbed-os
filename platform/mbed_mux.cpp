@@ -246,7 +246,7 @@ void Mux3GPP::on_rx_frame_dm()
                 if (tx_dlci_id == rx_dlci_id) {
                     _event_q->cancel(_tx_context.timer_id);
 
-                    _cb_func(NULL);
+                    operation_complete_dispatch(NULL);
                     tx_state_change(TX_IDLE, tx_idle_entry_run, null_action);
                 }
             }
