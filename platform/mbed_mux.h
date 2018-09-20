@@ -433,6 +433,12 @@ private:
      */
     static bool is_rx_fcs_valid();
 
+    /** Dispatch completion function for running user operation.
+     *
+     *  @param fh FileHandle supplied to the completion function.
+     */
+    static void operation_complete_dispatch(FileHandle *fh);
+
     /* Deny object creation. */
     Mux3GPP();
 
@@ -476,11 +482,15 @@ private:
     typedef struct
     {
         uint8_t is_mux_open              : 1; /* True when multiplexer is open. */
+
+        // @todo: depricate below as we could use is_mux_open state?
         uint8_t is_mux_open_pending      : 1; /* True when multiplexer open is pending. */
+
         uint8_t is_dlci_open_pending     : 1; /* True when DLCI open is pending. */
         uint8_t is_tx_callback_context   : 1; /* True when current context is TX callback context. */
         uint8_t is_user_tx_pending       : 1; /* True when user TX is pending. */
         uint8_t is_user_rx_ready         : 1; /* True when user RX is ready/available. */
+        uint8_t is_op_complete_context   : 1; /* True when current context is operation complete callback context. */
     } state_t;
 
     static FileHandle        *_serial;                                /* Serial used. */

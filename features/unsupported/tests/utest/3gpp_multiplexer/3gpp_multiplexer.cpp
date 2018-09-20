@@ -6025,9 +6025,12 @@ public:
     FileHandle *file_handle_get();
     void callback_arm();
 
+protected:
+
+    bool _is_armed;
+
 private:
 
-    bool        _is_armed;
     bool        _is_callback_set;
     FileHandle *_file_handle;
 };
@@ -6711,7 +6714,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_success_after_timeout)
 
     MuxCallbackTest callback;
     mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback, &MuxCallbackTest::channel_open_run),
-                               mbed::MuxBase::CHANNEL_TYPE_AT);
+                                   mbed::MuxBase::CHANNEL_TYPE_AT);
 
     const uint8_t write_byte_mux_open[6] =
     {
@@ -10947,6 +10950,355 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_dlci_id_mismatch)
     CHECK(callback.is_callback_called());
     FileHandle *fh = callback.file_handle_get();
     CHECK_EQUAL(NULL, fh);
+}
+
+class ChannelOpenInsideCallbackTest : public MuxCallbackTest {
+
+public:
+
+    ChannelOpenInsideCallbackTest() : _completion_count(0) {};
+
+    virtual void channel_open_run(FileHandle *obj);
+    uint8_t completion_count_get() {return _completion_count;}
+
+private:
+
+    uint8_t _completion_count;
+};
+
+
+void ChannelOpenInsideCallbackTest::channel_open_run(FileHandle *obj)
+{
+    CHECK(_is_armed);
+    CHECK(obj != NULL);
+
+    _is_armed = false;
+    ++_completion_count;
+
+    if (_completion_count == 1u) {
+
+        /* Program completion function to start new user channel establishment procedure upon return.*/
+
+        const uint32_t address                          = 3u | ((DLCI_ID_LOWER_BOUND + 1u) << 2);
+        // @note: static needed as needs to be valid after function returns.
+        static const uint8_t write_byte_channel_open[6] =
+        {
+            FLAG_SEQUENCE_OCTET,
+            address,
+            (FRAME_TYPE_SABM | PF_BIT),
+            LENGTH_INDICATOR_OCTET,
+            fcs_calculate(&write_byte_channel_open[1], 3),
+            FLAG_SEQUENCE_OCTET
+        };
+
+        mock_t *mock_write = mock_free_get("write");
+        CHECK(mock_write != NULL);
+        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->input_param[0].param        = (uint32_t)&write_byte_channel_open[0];
+        mock_write->input_param[1].param        = sizeof(write_byte_channel_open);
+        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->return_value                = sizeof(write_byte_channel_open);
+
+        mock_t * mock_call_in = mock_free_get("call_in");
+        CHECK(mock_call_in != NULL);
+        mock_call_in->return_value                = T1_TIMER_EVENT_ID;
+        mock_call_in->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_call_in->input_param[0].param        = T1_TIMER_VALUE;
+
+        mock_t * mock_lock = mock_free_get("lock");
+        CHECK(mock_lock != NULL);
+        mock_t * mock_unlock = mock_free_get("unlock");
+        CHECK(mock_unlock != NULL);
+
+        /* New request will set the operation pending, which will be started when this function returns. */
+        const nsapi_error channel_open_err = mbed::Mux3GPP::channel_open();
+        CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
+    }
+}
+
+
+/*
+ * TC - Ensure proper behaviour when user channel is opened and new user channel open is issued in the operation
+ *      completion callback callback.
+ *
+ * Test sequence:
+ * - Establish a user channel
+ * - Inside the channel open callback issue a new user channel open request
+ * - Receive a open user channel response message
+ *
+ * Expected outcome:
+ * - As specified above
+ */
+TEST(MultiplexerOpenTestGroup, channel_open_inside_the_channel_open_callback)
+{
+    mbed::FileHandleMock fh_mock;
+    mbed::EventQueueMock eq_mock;
+
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
+
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");
+    CHECK(mock_sigio != NULL);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
+
+    ChannelOpenInsideCallbackTest callback;
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback,
+                                   &ChannelOpenInsideCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA);
+
+    /* Read the channel open response frame. */
+    const uint32_t address                   = 3u | ((DLCI_ID_LOWER_BOUND + 1u) << 2);
+    const uint8_t read_byte_channel_open[5]  =
+    {
+        address,
+        (FRAME_TYPE_UA | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_channel_open[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    callback.callback_arm();
+    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+
+    /* Verify correct callback count. */
+    CHECK_EQUAL(2, callback.completion_count_get());
+}
+
+
+class ChannelOpenInsideCallbackMuxOpenTimeoutTest : public MuxCallbackTest {
+
+public:
+
+    ChannelOpenInsideCallbackMuxOpenTimeoutTest() : _completion_count(0) {};
+
+    virtual void channel_open_run(FileHandle *obj);
+    uint8_t completion_count_get() {return _completion_count;}
+
+private:
+
+    uint8_t _completion_count;
+};
+
+void ChannelOpenInsideCallbackMuxOpenTimeoutTest::channel_open_run(FileHandle *obj)
+{
+    CHECK(_is_armed);
+    _is_armed = false;
+
+    ++_completion_count;
+
+    switch (_completion_count) {
+        case 1:
+            CHECK_EQUAL(NULL, obj);
+            /* Program completion function to start new user channel establishment procedure upon return.*/
+
+            // @note: static needed as needs to be valid after function returns.
+            static const uint8_t write_byte_mux_open[6] =
+            {
+                FLAG_SEQUENCE_OCTET,
+                ADDRESS_MUX_START_REQ_OCTET,
+                (FRAME_TYPE_SABM | PF_BIT),
+                LENGTH_INDICATOR_OCTET,
+                fcs_calculate(&write_byte_mux_open[1], 3),
+                FLAG_SEQUENCE_OCTET
+            };
+
+            mock_t *mock_write = mock_free_get("write");
+            CHECK(mock_write != NULL);
+            mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+            mock_write->input_param[0].param        = (uint32_t)&write_byte_mux_open[0];
+            mock_write->input_param[1].param        = sizeof(write_byte_mux_open);
+            mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+            mock_write->return_value                = sizeof(write_byte_mux_open);
+
+            mock_t * mock_call_in = mock_free_get("call_in");
+            CHECK(mock_call_in != NULL);
+            mock_call_in->return_value                = T1_TIMER_EVENT_ID;
+            mock_call_in->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+            mock_call_in->input_param[0].param        = T1_TIMER_VALUE;
+
+            mock_t * mock_lock = mock_free_get("lock");
+            CHECK(mock_lock != NULL);
+            mock_t * mock_unlock = mock_free_get("unlock");
+            CHECK(mock_unlock != NULL);
+
+            /* New request will set the operation pending, which will be started when this function returns. */
+            const nsapi_error channel_open_err = mbed::Mux3GPP::channel_open();
+            CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
+
+            break;
+        case 2:
+            CHECK(obj != NULL);
+
+            break;
+        default:
+            FAIL("TC FAIL");
+
+            break;
+    };
+}
+
+/*
+ * TC - Ensure proper behaviour when multiplexer control channel open fails with timeout and new channel open is issued
+ *      in the operation completion callback.
+ *
+ * Test sequence:
+ * - Multiplexer control channel open fails with timeout
+ * - Inside the channel open callback issue a new user channel open request
+ * - User channel establishment success
+ *
+ * Expected outcome:
+ * - As specified above
+ */
+TEST(MultiplexerOpenTestGroup, channel_open_inside_the_channel_open_callback_mux_open_timeout)
+{
+    mbed::FileHandleMock fh_mock;
+    mbed::EventQueueMock eq_mock;
+
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
+
+    /* Set and test mock. */
+    mock_t * mock_sigio = mock_free_get("sigio");
+    CHECK(mock_sigio != NULL);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
+
+    ChannelOpenInsideCallbackMuxOpenTimeoutTest callback;
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(FileHandle*)>(&callback,
+                                   &ChannelOpenInsideCallbackMuxOpenTimeoutTest::channel_open_run),
+                                   mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    const uint8_t write_byte_mux_open[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET,
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_mux_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+
+    /* Set mock. */
+    mock_t *mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL);
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_mux_open[0];
+    mock_write->input_param[1].param        = SABM_FRAME_LEN;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 1;
+
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL);
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&write_byte_mux_open[1];
+    mock_write->input_param[1].param        = SABM_FRAME_LEN -1u;
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;
+
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+
+    /* Start test sequence. Test set mocks. */
+    const nsapi_error channel_open_err = mbed::Mux3GPP::channel_open();
+    CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
+
+    /* Generate maxium amount of timeout events, which trigger retransmission of open multiplexer control channel
+       request message. */
+
+    /* Complete the frame write. */
+    self_iniated_request_tx(&(write_byte_mux_open[1]), (SABM_FRAME_LEN - 1u), FLAG_SEQUENCE_OCTET_LEN);
+
+    /* Begin frame re-transmit sequence.*/
+    const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_TIMEOUT_GENERATE};
+    uint8_t counter                                        = RETRANSMIT_COUNT;
+    do {
+        mock_write = mock_free_get("write");
+        CHECK(mock_write != NULL);
+        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->input_param[0].param        = (uint32_t)&(write_byte_mux_open[0]);
+        mock_write->input_param[1].param        = SABM_FRAME_LEN;
+        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->return_value                = 1;
+
+        mock_write = mock_free_get("write");
+        CHECK(mock_write != NULL);
+        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->input_param[0].param        = (uint32_t)&(write_byte_mux_open[1]);
+        mock_write->input_param[1].param        = SABM_FRAME_LEN - 1u;
+        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->return_value                = 0;
+
+        mock_lock = mock_free_get("lock");
+        CHECK(mock_lock != NULL);
+        mock_unlock = mock_free_get("unlock");
+        CHECK(mock_unlock != NULL);
+        /* Trigger timer timeout. */
+        mbed::EventQueueMock::io_control(eq_io_control);
+
+        /* Re-transmit the complete remaining part of the frame. */
+        self_iniated_request_tx(&(write_byte_mux_open[1]), (SABM_FRAME_LEN - 1u), FLAG_SEQUENCE_OCTET_LEN);
+
+        --counter;
+    } while (counter != 0);
+
+    /* Trigger timer to finish the re-transmission cycle and the whole open multiplexer control channel request. */
+
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+
+    callback.callback_arm();
+    mbed::EventQueueMock::io_control(eq_io_control);
+
+    /* Verify correct callback count. */
+    CHECK_EQUAL(1, callback.completion_count_get());
+
+    /* Read the mux open response frame. */
+    const uint8_t read_byte_mux_open[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_RESP_OCTET,
+        (FRAME_TYPE_UA | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_mux_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    /* Reception of the mux open response frame starts the channel creation procedure. */
+    const uint32_t address                   = (3u) | (DLCI_ID_LOWER_BOUND << 2);
+    const uint8_t write_byte_channel_open[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        address,
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_channel_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    peer_iniated_request_rx_full_frame_tx(READ_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
+                                          &(read_byte_mux_open[0]), sizeof(read_byte_mux_open),
+                                          &(write_byte_channel_open[0]), sizeof(write_byte_channel_open),
+                                          CANCEL_TIMER_YES, START_TIMER_YES);
+
+    /* Receive user channel response.*/
+    const uint8_t read_byte_channel_open[5] =
+    {
+        write_byte_channel_open[1],
+        (FRAME_TYPE_UA | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_channel_open[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    callback.callback_arm();
+    self_iniated_response_rx(&(read_byte_channel_open[0]),
+                             NULL,
+                             SKIP_FLAG_SEQUENCE_OCTET,
+                             STRIP_FLAG_FIELD_NO);
+
+    /* Verify correct callback count. */
+    CHECK_EQUAL(2, callback.completion_count_get());
 }
 
 } // namespace mbed

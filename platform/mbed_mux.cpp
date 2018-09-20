@@ -60,8 +60,8 @@ MuxDataService3GPP Mux3GPP::_mux_objects[MBED_CONF_MUX_DLCI_COUNT];
 
 PlatformMutexMock Mux3GPP::_mutex;
 
-Callback<void(FileHandle*)> Mux3GPP::_cb_func;  
-  
+Callback<void(FileHandle*)> Mux3GPP::_cb_func;
+
 Mux3GPP::tx_context_t Mux3GPP::_tx_context;
 Mux3GPP::rx_context_t Mux3GPP::_rx_context;
 Mux3GPP::state_t      Mux3GPP::_state;
@@ -99,6 +99,7 @@ void Mux3GPP::module_init()
     _state.is_tx_callback_context   = 0;
     _state.is_user_tx_pending       = 0;
     _state.is_user_rx_ready         = 0;
+    _state.is_op_complete_context   = 0;
 
     _rx_context.offset      = 0;
     _rx_context.read_length = 0;
@@ -140,7 +141,7 @@ void Mux3GPP::on_timeout()
 
 // @todo: clear op running bits? => always do in tx_idle entry? NOT as app can call back in callback context!
 
-                _cb_func(NULL);
+                operation_complete_dispatch(NULL);
                 tx_state_change(TX_IDLE, tx_idle_entry_run, null_action);
             }
             break;
@@ -175,18 +176,24 @@ void Mux3GPP::on_rx_frame_sabm()
 }
 
 
+void Mux3GPP::operation_complete_dispatch(FileHandle *fh)
+{
+    _state.is_op_complete_context = 1u;
+    _cb_func(fh);
+    _state.is_op_complete_context = 0;
+}
+
+
 void Mux3GPP::on_rx_frame_ua()
 {
     switch (_tx_context.tx_state) {
-        uint8_t  rx_dlci_id;
-        uint8_t  tx_dlci_id;
-        bool     is_cr_bit_set;
-        bool     is_pf_bit_set;
+        uint8_t rx_dlci_id;
+        uint8_t tx_dlci_id;
+        bool    is_cr_bit_set;
+        bool    is_pf_bit_set;
         case TX_RETRANSMIT_DONE:
             is_cr_bit_set = _rx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] & CR_BIT;
             is_pf_bit_set = _rx_context.buffer[FRAME_CONTROL_FIELD_INDEX] & PF_BIT;
-
-            // @todo: add logic to verify that we have started a mux/channel open procedure? */
 
             if (is_cr_bit_set && is_pf_bit_set) {
                 tx_dlci_id = _tx_context.buffer[FRAME_ADDRESS_FIELD_INDEX] >> 2;
@@ -201,7 +208,7 @@ void Mux3GPP::on_rx_frame_ua()
                         FileHandle *fh = file_handle_get(rx_dlci_id);
                         MBED_ASSERT(fh != NULL);
 
-                        _cb_func(fh);
+                        operation_complete_dispatch(fh);
                     } else {
                         /* Store current state and request scheduling of channel creation procedure. */
 
@@ -996,8 +1003,20 @@ nsapi_error Mux3GPP::channel_open()
 
             break;
         case TX_RETRANSMIT_ENQUEUE:
-        case TX_RETRANSMIT_DONE:
             err = NSAPI_ERROR_IN_PROGRESS;
+
+            break;
+        case TX_RETRANSMIT_DONE:
+            if (!_state.is_op_complete_context) {
+                err = NSAPI_ERROR_IN_PROGRESS;
+
+                break;
+            }
+            if (_state.is_mux_open) {
+                _state.is_dlci_open_pending = 1u;
+            } else {
+                _state.is_mux_open_pending = 1u;
+            }
 
             break;
         case TX_NORETRANSMIT:
