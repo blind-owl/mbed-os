@@ -29,6 +29,21 @@ typedef enum {
     CHANNEL_TYPE_MAX
 } ChannelType;
 
+typedef enum {
+    EVENT_TYPE_OPEN = 0,
+    EVENT_TYPE_CLOSE,
+    EVENT_TYPE_MAX
+} EventType;
+
+typedef struct {
+    FileHandle *fh;
+} event_data_t;
+
+typedef struct {
+    EventType    event;
+    event_data_t data;
+} event_context_t;
+
 };
 
 } // namespace mbed

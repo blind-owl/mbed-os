@@ -108,7 +108,7 @@ public:
      *  @param func @ref channel_open operation completion callback function.
      *  @param type Not used by the implementation.
      */
-    static void callback_attach(Callback<void(FileHandle*)> func, ChannelType type) {_cb_func = func;}
+    static void callback_attach(Callback<void(event_context_t &)> func, ChannelType type) {_cb_func = func;}
 
 private:
 
@@ -503,7 +503,7 @@ private:
     static const uint8_t      _crctable[MUX_CRC_TABLE_LEN];           /* CRC table used for frame FCS. */
 
     static uint8_t                     _dlci;                       /* User channel id. */
-    static Callback<void(FileHandle*)> _cb_func;                    /* @ref channel_open completion function. */
+    static Callback<void(event_context_t &)> _cb_func;                    /* @ref channel_open completion function. */
 };
 
 } // namespace mbed

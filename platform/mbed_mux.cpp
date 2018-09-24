@@ -60,7 +60,7 @@ MuxDataService3GPP Mux3GPP::_mux_objects[MBED_CONF_MUX_DLCI_COUNT];
 
 PlatformMutexMock Mux3GPP::_mutex;
 
-Callback<void(FileHandle*)> Mux3GPP::_cb_func;
+Callback<void(MuxBase::event_context_t &)> Mux3GPP::_cb_func;
 
 Mux3GPP::tx_context_t Mux3GPP::_tx_context;
 Mux3GPP::rx_context_t Mux3GPP::_rx_context;
@@ -179,7 +179,10 @@ void Mux3GPP::on_rx_frame_sabm()
 void Mux3GPP::operation_complete_dispatch(FileHandle *fh)
 {
     _state.is_op_complete_context = 1u;
-    _cb_func(fh);
+
+    event_context_t ev = {EVENT_TYPE_OPEN, fh};
+    _cb_func(ev);
+
     _state.is_op_complete_context = 0;
 }
 
