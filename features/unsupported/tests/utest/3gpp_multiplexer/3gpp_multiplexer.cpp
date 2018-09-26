@@ -8074,7 +8074,7 @@ static void tx_callback_dispatch_triggered_tx_within_callback_tx_callback()
             /* This write request will set the pending TX callback, and triggers this function to be called 2nd time. */
             const uint8_t user_data_2 = 0xA5u;
             ret                       = m_file_handle[0]->write(&user_data_2, sizeof(user_data_2));
-            CHECK_EQUAL(0, ret);
+            CHECK_EQUAL(-EAGAIN, ret);
 
             break;
         case 1:
@@ -8174,7 +8174,7 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_triggered_tx_within_callback
     */
     const uint8_t user_data_2 = 0xA5u;
     ret                       = (m_file_handle[0])->write(&user_data_2, sizeof(user_data_2));
-    CHECK_EQUAL(0, ret);
+    CHECK_EQUAL(-EAGAIN, ret);
 
     /* Begin sequence: Complete the 1st write, which triggers the pending TX callback. */
 
@@ -8277,7 +8277,7 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_set_pending_multiple_times_f
         mock_unlock = mock_free_get("unlock");
         CHECK(mock_unlock != NULL);
         ret = (m_file_handle[0])->write(&user_data_2, sizeof(user_data_2));
-        CHECK_EQUAL(0, ret);
+        CHECK_EQUAL(-EAGAIN, ret);
 
         ++user_data_2;
         --i;
@@ -8401,7 +8401,7 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_set_pending_for_all_dlcis)
         mock_unlock = mock_free_get("unlock");
         CHECK(mock_unlock != NULL);
         ssize_t write_ret = (m_file_handle[i])->write(&user_data, sizeof(user_data));
-        CHECK_EQUAL(0, write_ret);
+        CHECK_EQUAL(-EAGAIN, write_ret);
     }
 
     /* Begin sequence: Complete the 1st write, which triggers the pending TX callback. */
@@ -8460,7 +8460,7 @@ static void tx_callback_dispatch_rollover_tx_pending_bitmask_tx_callback()
 
         /* TX cycle start requested by write call above, now set pending bit for the 1st DLCI of the sequence. */
         write_ret = (m_file_handle[0])->write(&user_data, sizeof(user_data));
-        CHECK_EQUAL(0, write_ret);
+        CHECK_EQUAL(-EAGAIN, write_ret);
     }
 }
 
@@ -8563,7 +8563,7 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_rollover_tx_pending_bitmask)
         mock_unlock = mock_free_get("unlock");
         CHECK(mock_unlock != NULL);
         write_ret = (m_file_handle[i])->write(&user_data, sizeof(user_data));
-        CHECK_EQUAL(0, write_ret);
+        CHECK_EQUAL(-EAGAIN, write_ret);
     }
 
     /* Begin sequence: Complete the 1st write, which triggers the pending TX callback. */
@@ -8737,7 +8737,7 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_tx_to_different_dlci_within_
         mock_unlock = mock_free_get("unlock");
         CHECK(mock_unlock != NULL);
         write_ret = (m_file_handle[i])->write(&user_data, sizeof(user_data));
-        CHECK_EQUAL(0, write_ret);
+        CHECK_EQUAL(-EAGAIN, write_ret);
     }
 
     /* Begin sequence: Complete the 1st write, which triggers the pending TX callback. */
@@ -8913,7 +8913,7 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_tx_to_different_dlci_not_wit
         mock_unlock = mock_free_get("unlock");
         CHECK(mock_unlock != NULL);
         write_ret = (m_file_handle[i])->write(&user_data, sizeof(user_data));
-        CHECK_EQUAL(0, write_ret);
+        CHECK_EQUAL(-EAGAIN, write_ret);
     }
 
     /* Complete the 1st write, which triggers the pending TX callback. */

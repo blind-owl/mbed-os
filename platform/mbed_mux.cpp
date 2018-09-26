@@ -1113,7 +1113,7 @@ ssize_t Mux3GPP::user_data_tx(uint8_t dlci_id, const void* buffer, size_t size)
                        action was taken. */
 
                     tx_callback_pending_bit_set(dlci_id);
-                    write_ret = 0;
+                    write_ret = -EAGAIN;
                 }
             }
 
@@ -1122,7 +1122,7 @@ ssize_t Mux3GPP::user_data_tx(uint8_t dlci_id, const void* buffer, size_t size)
             /* TX allready in use, set TX callback pending and inform caller by return value that no action was taken.
              */
             tx_callback_pending_bit_set(dlci_id);
-            write_ret = 0;
+            write_ret = -EAGAIN;
 
             break;
     }
