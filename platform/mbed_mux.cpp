@@ -93,13 +93,12 @@ void Mux3GPP::module_init()
 {
     _dlci = 1u;
 
-    _state.is_mux_open              = 0;
-    _state.is_mux_open_pending      = 0;
-    _state.is_dlci_open_pending     = 0;
-    _state.is_tx_callback_context   = 0;
-    _state.is_user_tx_pending       = 0;
-    _state.is_user_rx_ready         = 0;
-    _state.is_op_complete_context   = 0;
+    _state.is_mux_open            = 0;
+    _state.is_mux_open_pending    = 0;
+    _state.is_dlci_open_pending   = 0;
+    _state.is_tx_callback_context = 0;
+    _state.is_user_tx_pending     = 0;
+    _state.is_op_complete_context = 0;
 
     _rx_context.offset      = 0;
     _rx_context.read_length = 0;
@@ -333,7 +332,6 @@ void Mux3GPP::on_rx_frame_uih()
                 if (obj != NULL) {
                     /* Established DLCI exists, proceed with processing. */
 
-                    _state.is_user_rx_ready = 1u;
                     _rx_context.offset      = 0;
                     _rx_context.read_length = length;
 
@@ -824,6 +822,7 @@ void Mux3GPP::write_do()
         case TX_INTERNAL_RESP:
             write_err = 1;
             do {
+                // @todo: handle -EAGAIN return code
                 write_err = _serial->write(&(_tx_context.buffer[_tx_context.offset]), _tx_context.bytes_remaining);
                 MBED_ASSERT(write_err >= 0);
                 _tx_context.bytes_remaining -= write_err;
@@ -1145,15 +1144,14 @@ ssize_t Mux3GPP::user_data_rx(void* buffer, size_t size)
 
     _mutex.lock();
 
-    if (_state.is_user_rx_ready) {
+    if (_rx_context.rx_state == RX_SUSPEND) {
         const size_t read_length = min((_rx_context.read_length - _rx_context.offset), size);
         memcpy(buffer, &(_rx_context.buffer[FRAME_INFORMATION_FIELD_INDEX + _rx_context.offset]), read_length);
         _rx_context.offset += read_length;
 
         if (_rx_context.offset == _rx_context.read_length) {
-            /* Current Rx buffer consumed, disable user reading and resume the Rx path. */
+            /* Current Rx buffer consumed, resume the Rx path. */
 
-            _state.is_user_rx_ready = 0;
             rx_event_do(RX_RESUME);
         }
 
@@ -1167,5 +1165,17 @@ ssize_t Mux3GPP::user_data_rx(void* buffer, size_t size)
     }
 }
 
+
+short Mux3GPP::poll()
+{
+    _mutex.lock();
+
+    const bool writable = (_tx_context.tx_state == TX_IDLE);
+    const bool readable = (_rx_context.rx_state == RX_SUSPEND);
+
+    _mutex.unlock();
+
+    return ((readable ? POLLIN : 0) | (writable ? POLLOUT : 0));
+}
 
 } // namespace mbed

@@ -50,6 +50,16 @@ public:
      */
     virtual ssize_t read(void *buffer, size_t size);
 
+    /** Check for poll event flags
+     *
+     * The input parameter is ignored. Call is non-blocking - returns instantaneous state of events.
+     *
+     * @param events Ignored by the implementation.
+     *
+     * @returns      Bitmask of poll events (POLLIN/POLLOUT) that have occurred.
+     */
+    virtual short poll(short events) const;
+
     /** Not supported by the implementation. */
     virtual off_t seek(off_t offset, int whence = SEEK_SET);
 

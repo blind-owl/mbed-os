@@ -11445,4 +11445,150 @@ TEST(MultiplexerOpenTestGroup, channel_open_inside_the_channel_open_callback_mux
     CHECK_EQUAL(2, callback.completion_count_get());
 }
 
+static uint8_t m_poll_check_value;
+static void poll_file_handle_callback()
+{
+    ++m_poll_check_value;
+}
+
+/*
+ * TC - Ensure proper behaviour of the poll API
+ *
+ * Test sequence:
+ * - Call poll when POLLOUT
+ * - Call poll when POLLOUT | POLLIN
+ * - Call poll when POLLIN
+ * - Call poll when no POLLOUT or POLLIN
+ *
+ * Expected outcome:
+ * - As specified above
+ */
+TEST(MultiplexerOpenTestGroup, poll)
+{
+    m_poll_check_value = 0;
+
+    mbed::FileHandleMock fh_mock;
+    mbed::EventQueueMock eq_mock;
+
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
+
+    mock_t * mock_sigio = mock_free_get("sigio");
+    CHECK(mock_sigio != NULL);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(MuxBase::event_context_t &)>(&callback,
+                                   &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA);
+
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    FileHandle *fh = callback.file_handle_get();
+    CHECK(fh != NULL);
+
+    fh->sigio(poll_file_handle_callback);
+
+    /* Call poll when POLLOUT. */
+
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+
+    short events = fh->poll(0);
+    CHECK_EQUAL(POLLOUT, events);
+
+    /* Call poll when POLLOUT | POLLIN. */
+
+    /* Start read cycle for the DLCI. */
+    const uint8_t user_data    = 0xA5u;
+    const uint8_t read_byte[6] =
+    {
+        1u | (DLCI_ID_LOWER_BOUND << 2),
+        FRAME_TYPE_UIH,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&read_byte[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+
+    /* Rx user data is not read within callback context, thus Rx is suspended. */
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE, NULL, 0);
+
+    /* Validate proper callback callcount. */
+    CHECK_EQUAL(1, m_poll_check_value);
+
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+
+    events = fh->poll(0);
+    CHECK_EQUAL((POLLOUT | POLLIN), events);
+
+    /* Call poll when POLLIN. */
+
+    /* Program write cycle. */
+    const uint8_t write_byte[7] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (DLCI_ID_LOWER_BOUND << 2),
+        FRAME_TYPE_UIH,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&write_byte[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL);
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);
+    mock_write->input_param[1].param        = sizeof(write_byte);
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = 0;
+
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+
+    const ssize_t write_ret = fh->write(&user_data, sizeof(user_data));
+    CHECK_EQUAL(sizeof(user_data), write_ret);
+
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+
+    events = fh->poll(0);
+    CHECK_EQUAL(POLLIN, events);
+
+    /* Call poll when no POLLOUT or POLLIN. */
+
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+
+    mock_t * mock_call = mock_free_get("call");
+    CHECK(mock_call != NULL);
+    mock_call->return_value = 1;
+
+    uint8_t test_buffer[1] = {0};
+    const ssize_t read_ret = fh->read(&(test_buffer[0]), 1u);
+    CHECK_EQUAL(1, read_ret);
+    CHECK_EQUAL(user_data, test_buffer[0]);
+
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+
+    events = fh->poll(0);
+    CHECK_EQUAL(0, events);
+}
+
 } // namespace mbed

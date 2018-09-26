@@ -15,6 +15,12 @@ ssize_t MuxDataService3GPP::read(void *buffer, size_t size)
 }
 
 
+short MuxDataService3GPP::poll(short events) const
+{
+    return Mux3GPP::poll();
+}
+
+
 off_t MuxDataService3GPP::seek(off_t offset, int whence)
 {
     MBED_ASSERT(false);

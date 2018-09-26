@@ -374,6 +374,12 @@ private:
      */
     static ssize_t user_data_rx(void* buffer, size_t size);
 
+    /** Check for poll event flags
+     *
+     * @return Bitmask of poll events (POLLIN/POLLOUT) that have occurred.
+     */
+    static short poll();
+
     /** Clear TX callback pending bit.
      *
      *  @param bit Bit to clear.
@@ -489,7 +495,6 @@ private:
         uint8_t is_dlci_open_pending     : 1; /* True when DLCI open is pending. */
         uint8_t is_tx_callback_context   : 1; /* True when current context is TX callback context. */
         uint8_t is_user_tx_pending       : 1; /* True when user TX is pending. */
-        uint8_t is_user_rx_ready         : 1; /* True when user RX is ready/available. */
         uint8_t is_op_complete_context   : 1; /* True when current context is operation complete callback context. */
     } state_t;
 
