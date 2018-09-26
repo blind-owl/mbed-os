@@ -7709,17 +7709,19 @@ static void sequence_generate(uint8_t* write_byte, uint8_t count)
 }
 
  /*
- * TC - Ensure proper behaviour when MAX length UIH frame TX in 1 write call is done
+ * TC - Ensure proper behaviour when MAX length and out-of-bound length UIH frame TX in 1 write call is done
  *
  * Test sequence:
  * - Establish  a user channel
- * - Issue MAX length UIH frame write request to the channel
+ * - 1) Issue MAX length UIH frame write request to the channel
+ * - 2) Issue out-of-bound length UIH frame write request to the channel.
  *
  * Expected outcome:
  * - Request accepted by the implementation
  * - write done in 1 write call
+ * - For out-of-bound length UIH frame actual write size is adjusted to max available size
  */
-TEST(MultiplexerOpenTestGroup, user_tx_size_upper_bound)
+TEST(MultiplexerOpenTestGroup, user_tx_size_upper_bound_and_oob)
 {
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
@@ -7731,8 +7733,8 @@ TEST(MultiplexerOpenTestGroup, user_tx_size_upper_bound)
     mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux3GPP::callback_attach(mbed::Callback<void(MuxBase::event_context_t &)>(&callback, &MuxCallbackTest::channel_open_run),
-                               mbed::MuxBase::CHANNEL_TYPE_AT);
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(MuxBase::event_context_t &)>(&callback,
+                                   &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -7758,6 +7760,8 @@ TEST(MultiplexerOpenTestGroup, user_tx_size_upper_bound)
     write_byte[TX_BUFFER_SIZE - 2] = fcs_calculate(&write_byte[1], 3u);
     write_byte[TX_BUFFER_SIZE - 1] = FLAG_SEQUENCE_OCTET;
 
+    /* Issue MAX length UIH frame write request to the channel. */
+
     mock_t * mock_write = mock_free_get("write");
     CHECK(mock_write != NULL);
     mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
@@ -7771,7 +7775,25 @@ TEST(MultiplexerOpenTestGroup, user_tx_size_upper_bound)
     mock_t * mock_unlock = mock_free_get("unlock");
     CHECK(mock_unlock != NULL);
 
-    const ssize_t ret = fh->write(&(write_byte[4]), (TX_BUFFER_SIZE - 6u));
+    ssize_t ret = fh->write(&(write_byte[4]), (TX_BUFFER_SIZE - 6u));
+    CHECK_EQUAL((TX_BUFFER_SIZE - 6u), ret);
+
+    /* Issue out-of-bound length UIH frame write request to the channel. */
+
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL);
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);
+    mock_write->input_param[1].param        = sizeof(write_byte);
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = mock_write->input_param[1].param;
+
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+
+    ret = fh->write(&(write_byte[4]), (TX_BUFFER_SIZE - 6u + 1u));
     CHECK_EQUAL((TX_BUFFER_SIZE - 6u), ret);
 }
 

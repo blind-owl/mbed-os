@@ -1070,12 +1070,16 @@ void Mux3GPP::tx_noretransmit_entry_run()
 
 ssize_t Mux3GPP::user_data_tx(uint8_t dlci_id, const void* buffer, size_t size)
 {
-    MBED_ASSERT(size <=
-        (MBED_CONF_MUX_BUFFER_SIZE - (FRAME_START_READ_LEN + FRAME_HEADER_READ_LEN + FRAME_TRAILER_LEN)));
     MBED_ASSERT(buffer != NULL);
 
     if (size == 0) {
         return 0;
+    }
+
+    const size_t max_payload_size = (MBED_CONF_MUX_BUFFER_SIZE -
+                                    (FRAME_START_READ_LEN + FRAME_HEADER_READ_LEN + FRAME_TRAILER_LEN));
+    if (size > max_payload_size) {
+        size = max_payload_size;
     }
 
     _mutex.lock();
