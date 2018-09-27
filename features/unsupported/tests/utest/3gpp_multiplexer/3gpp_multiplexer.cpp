@@ -213,12 +213,19 @@ typedef enum
     STRIP_FLAG_FIELD_YES
 } StripFlagFieldType;
 
+typedef enum
+{
+    ENQUEUE_DEFERRED_CALL_NO = 0,
+    ENQUEUE_DEFERRED_CALL_YES
+} EnqueueDeferredCallType;
+
 /* Read complete response frame from the peer
  */
 void self_iniated_response_rx(const uint8_t            *rx_buf,
                               const uint8_t            *resp_write_byte,
                               FlagSequenceOctetReadType read_type,
-                              StripFlagFieldType        strip_flag_field_type)
+                              StripFlagFieldType        strip_flag_field_type,
+                              EnqueueDeferredCallType   enqueue_deferred_call_type)
 {
     /* Guard against internal logic error. */
     CHECK(!((read_type == READ_FLAG_SEQUENCE_OCTET) && (strip_flag_field_type == STRIP_FLAG_FIELD_YES)));
@@ -227,15 +234,17 @@ void self_iniated_response_rx(const uint8_t            *rx_buf,
     mock_t* mock_unlock;
     uint8_t rx_count                                       = 0;
     const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
-    const mbed::FileHandleMock::io_control_t io_control    = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};
 
-    /* Enqueue deferred call to EventQueue.
-     * Trigger sigio callback from the Filehandle used by the Mux3GPP (component under test). */
-    mock_t * mock = mock_free_get("call");
-    CHECK(mock != NULL);
-    mock->return_value = 1;
+    if (enqueue_deferred_call_type == ENQUEUE_DEFERRED_CALL_YES) {
+        /* Enqueue deferred call to EventQueue.
+         * Trigger sigio callback from the Filehandle used by the Mux3GPP (component under test). */
+        mock_t * mock = mock_free_get("call");
+        CHECK(mock != NULL);
+        mock->return_value = 1;
 
-    mbed::FileHandleMock::io_control(io_control);
+        const mbed::FileHandleMock::io_control_t io_control = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};
+        mbed::FileHandleMock::io_control(io_control);
+    }
 
     mock_t * mock_read;
     if (read_type == READ_FLAG_SEQUENCE_OCTET) {
@@ -338,13 +347,6 @@ void self_iniated_response_rx(const uint8_t            *rx_buf,
         mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
         mock_write->return_value                = 0;
     }
-
-#if 0
-    /* Release the semaphore blocking the call thread. */
-    mock_t * mock_release = mock_free_get("release");
-    CHECK(mock_release != NULL);
-    mock_release->return_value = osOK;
-#endif
 
     /* Resume the Rx cycle and stop it. */
     mock_read = mock_free_get("read");
@@ -4022,17 +4024,23 @@ typedef enum
 } RxCycleContinueType;
 
 
-void single_complete_read_cycle(const uint8_t*      read_byte,
-                                uint8_t             length,
-                                RxCycleContinueType rx_cycle_continue,
-                                const uint8_t*      tx_frame,
-                                uint8_t             tx_frame_length)
+void single_complete_read_cycle(const uint8_t          *read_byte,
+                                uint8_t                 length,
+                                RxCycleContinueType     rx_cycle_continue,
+                                const uint8_t          *tx_frame,
+                                uint8_t                 tx_frame_length,
+                                EnqueueDeferredCallType enqueue_deferred_call_type)
 {
-    mock_t * mock_call = mock_free_get("call");
-    CHECK(mock_call != NULL);
-    mock_call->return_value                             = 1;
-    const mbed::FileHandleMock::io_control_t io_control = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};
-    mbed::FileHandleMock::io_control(io_control);
+    if (enqueue_deferred_call_type == ENQUEUE_DEFERRED_CALL_YES) {
+        /* Enqueue deferred call to EventQueue.
+         * Trigger sigio callback from the Filehandle used by the Mux3GPP (component under test). */
+        mock_t * mock = mock_free_get("call");
+        CHECK(mock != NULL);
+        mock->return_value = 1;
+
+        const mbed::FileHandleMock::io_control_t io_control = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};
+        mbed::FileHandleMock::io_control(io_control);
+    }
 
     /* Phase 1: read header length. */
     uint8_t rx_count = 0;
@@ -6072,7 +6080,7 @@ FileHandle *MuxCallbackTest::file_handle_get()
 }
 
 
-void channel_open(uint8_t dlci, MuxCallbackTest &callback)
+void channel_open(uint8_t dlci, MuxCallbackTest &callback, EnqueueDeferredCallType enqueue_deferred_call_type)
 {
     const uint32_t address                   = (3u) | (dlci << 2);
     const uint8_t write_byte_channel_open[6] =
@@ -6118,7 +6126,8 @@ void channel_open(uint8_t dlci, MuxCallbackTest &callback)
         FLAG_SEQUENCE_OCTET
     };
     callback.callback_arm();
-    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
+                             enqueue_deferred_call_type);
 }
 
 /* Do successfull multiplexer self iniated open.*/
@@ -6203,7 +6212,8 @@ void mux_self_iniated_open(uint8_t                   tx_cycle_read_len,
         FLAG_SEQUENCE_OCTET
     };
     callback.callback_arm();
-    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES);
 }
 
 
@@ -6383,7 +6393,8 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_currently_running)
         fcs_calculate(&read_byte_channel_open[0], 3),
         FLAG_SEQUENCE_OCTET
     };
-    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -6577,7 +6588,8 @@ TEST(MultiplexerOpenTestGroup, mux_open_dm_tx_currently_running)
         fcs_calculate(&read_byte_channel_open[0], 3),
         FLAG_SEQUENCE_OCTET
     };
-    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -6672,7 +6684,8 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_rejected_by_peer)
         FLAG_SEQUENCE_OCTET
     };
     callback.callback_arm();
-    self_iniated_response_rx(&(read_byte_mux_open[0]), NULL, READ_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+    self_iniated_response_rx(&(read_byte_mux_open[0]), NULL, READ_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -7064,7 +7077,8 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_tx_in_call_context)
         fcs_calculate(&read_byte_channel_open[0], 3),
         FLAG_SEQUENCE_OCTET
     };
-    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -7199,7 +7213,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_success_after_timeout)
     CHECK(callback.is_callback_called());
     CHECK_EQUAL(NULL, callback.file_handle_get());
 
-    channel_open(2, callback);
+    channel_open(2, callback, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -7247,7 +7261,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_all_channel_ids_used)
     uint8_t i       = MAX_DLCI_COUNT - 1u;
     uint8_t dlci_id = 2u;
     do {
-        channel_open(dlci_id, callback);
+        channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_YES);
 
         /* Validate Filehandle generation. */
         CHECK(callback.is_callback_called());
@@ -7331,7 +7345,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_all_channel_ids_used_ensure_uniqueue
     uint8_t i       = MAX_DLCI_COUNT - 1u;
     uint8_t dlci_id = 2u;
     do {
-        channel_open(dlci_id, callback);
+        channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_YES);
 
         /* Validate Filehandle generation. */
         CHECK(callback.is_callback_called());
@@ -7399,7 +7413,7 @@ TEST(MultiplexerOpenTestGroup, channel_open_rejected_by_peer)
 
     /* Establish user channel. */
 
-    channel_open(1, callback);
+    channel_open(1, callback, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -7568,7 +7582,8 @@ TEST(MultiplexerOpenTestGroup, channel_open_dm_tx_currently_running)
                             (sizeof(write_byte_channel_open) - sizeof(write_byte_channel_open[0])),
                             FRAME_HEADER_READ_LEN);
     callback.callback_arm();
-    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -8017,7 +8032,8 @@ TEST(MultiplexerOpenTestGroup, user_tx_dlci_establish_during_user_tx)
     self_iniated_response_rx(&(read_byte_sabm[0]),
                              NULL,
                              SKIP_FLAG_SEQUENCE_OCTET,
-                             STRIP_FLAG_FIELD_NO);
+                             STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -8335,7 +8351,7 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_set_pending_for_all_dlcis)
     /* Create max amount of DLCIs and collect the handles */
     uint8_t dlci_id = DLCI_ID_LOWER_BOUND + 1u;
     for (uint8_t i = 1u; i!= MAX_DLCI_COUNT; ++i) {
-        channel_open(dlci_id, callback);
+        channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_YES);
 
         /* Validate Filehandle generation. */
         CHECK(callback.is_callback_called());
@@ -8506,7 +8522,7 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_rollover_tx_pending_bitmask)
     /* Create max amount of DLCIs and collect the handles */
     uint8_t dlci_id = DLCI_ID_LOWER_BOUND + 1u;
     for (uint8_t i = 1u; i!= MAX_DLCI_COUNT; ++i) {
-        channel_open(dlci_id, callback);
+        channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_YES);
 
         /* Validate Filehandle generation. */
         CHECK(callback.is_callback_called());
@@ -8683,7 +8699,7 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_tx_to_different_dlci_within_
     /* Create 2nd channel and collect the handle. */
 
     uint8_t dlci_id = DLCI_ID_LOWER_BOUND + 1u;
-    channel_open(dlci_id, callback);
+    channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -8859,7 +8875,7 @@ TEST(MultiplexerOpenTestGroup, tx_callback_dispatch_tx_to_different_dlci_not_wit
     /* Create 2nd channel and collect the handle. */
 
     uint8_t dlci_id = DLCI_ID_LOWER_BOUND + 1u;
-    channel_open(dlci_id, callback);
+    channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -8978,7 +8994,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_0_length_user_payload)
         fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
     };
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE, NULL, 0);
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE, NULL, 0, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Verify read failure after successfull read cycle. */
     mock_t * mock_lock = mock_free_get("lock");
@@ -9074,7 +9090,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_single_read)
     };
 
     /* Rx user data is read completely within callback context, thus Rx cycle is resumed. */
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE, NULL, 0);
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE, NULL, 0, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate proper callback callcount. */
     CHECK_EQUAL(1, m_user_rx_single_read_check_value);
@@ -9170,8 +9186,8 @@ TEST(MultiplexerOpenTestGroup, user_rx_rx_suspend_rx_resume_cycle)
     mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux3GPP::callback_attach(mbed::Callback<void(MuxBase::event_context_t &)>(&callback, &MuxCallbackTest::channel_open_run),
-                               mbed::MuxBase::CHANNEL_TYPE_AT);
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(MuxBase::event_context_t &)>(&callback,
+                                   &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -9195,7 +9211,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_rx_suspend_rx_resume_cycle)
         fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
     };
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE, NULL, 0);
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE, NULL, 0, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate proper callback callcount. */
     CHECK_EQUAL(1, m_user_rx_rx_suspend_rx_resume_cycle_check_value );
@@ -9240,7 +9256,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_rx_suspend_rx_resume_cycle)
     read_byte[3] = user_data;
     read_byte[4] = fcs_calculate(&read_byte[0], 3u);
 
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE, NULL, 0);
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE, NULL, 0, ENQUEUE_DEFERRED_CALL_NO);
 
     /* Validate proper callback callcount. */
     CHECK_EQUAL(2, m_user_rx_rx_suspend_rx_resume_cycle_check_value );
@@ -9414,7 +9430,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_max_size_user_payload_in_1_read_call
     read_byte[sizeof(read_byte) - 2] = fcs_calculate(&read_byte[0], 3u);
     read_byte[sizeof(read_byte) - 1] = FLAG_SEQUENCE_OCTET;
 
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE, NULL, 0);
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE, NULL, 0, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Verify read buffer. */
     mock_t * mock_call = mock_free_get("call");
@@ -9494,7 +9510,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_read_1_byte_per_read_call_max_size_user_p
     read_byte[sizeof(read_byte) - 2] = fcs_calculate(&read_byte[0], 3u);
     read_byte[sizeof(read_byte) - 1] = FLAG_SEQUENCE_OCTET;
 
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE, NULL, 0);
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE, NULL, 0, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Verify read buffer: do reads 1 byte a time until all of the data is read. */
     mock_t * mock_lock;
@@ -9569,8 +9585,8 @@ TEST(MultiplexerOpenTestGroup, user_rx_dlci_not_established)
     mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux3GPP::callback_attach(mbed::Callback<void(MuxBase::event_context_t &)>(&callback, &MuxCallbackTest::channel_open_run),
-                               mbed::MuxBase::CHANNEL_TYPE_AT);
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(MuxBase::event_context_t &)>(&callback,
+                                   &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -9603,7 +9619,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_dlci_not_established)
     for (uint8_t i = 0; i != (MAX_DLCI_COUNT - 1u); ++i) {
 
         /* Start read cycle for the not established DLCI. */
-        single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE, NULL, 0);
+        single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE, NULL, 0, ENQUEUE_DEFERRED_CALL_YES);
 
         /* Validate proper callback callcount. */
         CHECK_EQUAL(i, m_user_rx_dlci_not_established_check_value);
@@ -9612,7 +9628,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_dlci_not_established)
         read_byte[0] = 1u | ((dlci_id - 1u) << 2);
         read_byte[3] = ++user_data;
         read_byte[4] = fcs_calculate(&read_byte[0], 3u);
-        single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE, NULL, 0);
+        single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE, NULL, 0, ENQUEUE_DEFERRED_CALL_YES);
 
         /* Validate proper callback callcount. */
         CHECK_EQUAL((i + 1), m_user_rx_dlci_not_established_check_value);
@@ -9636,7 +9652,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_dlci_not_established)
         CHECK_EQUAL(-EAGAIN, read_ret);
 
         /* Establish a DLCI. */
-        channel_open(dlci_id, callback);
+        channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_NO);
 
         /* Validate Filehandle generation. */
         CHECK(callback.is_callback_called());
@@ -9758,7 +9774,8 @@ TEST(MultiplexerOpenTestGroup, user_rx_invalidate_dlci_id_used)
         FLAG_SEQUENCE_OCTET
     };
     self_iniated_response_rx(&(read_byte_mux_open[0]), &(write_byte_channel_open[0]),
-                             READ_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+                             READ_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES);
 
     /* Rx user data frame to invalidate ID DLCI: silently discarded by the implementation. */
 
@@ -9775,7 +9792,8 @@ TEST(MultiplexerOpenTestGroup, user_rx_invalidate_dlci_id_used)
     };
     single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE,
                                &(write_byte_channel_open[1]),
-                               sizeof(write_byte_channel_open) - sizeof(write_byte_channel_open[1]));
+                               sizeof(write_byte_channel_open) - sizeof(write_byte_channel_open[1]),
+                               ENQUEUE_DEFERRED_CALL_YES);
 
     /* Finish the DLCI establishment procedure. */
 
@@ -9791,7 +9809,8 @@ TEST(MultiplexerOpenTestGroup, user_rx_invalidate_dlci_id_used)
         fcs_calculate(&read_byte_channel_open[0], 3),
         FLAG_SEQUENCE_OCTET
     };
-    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -9802,7 +9821,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_invalidate_dlci_id_used)
 
     /* Rx user data frame to invalidate ID DLCI: silently discarded by the implementation. */
 
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE, NULL, 0);
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE, NULL, 0, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate proper callback callcount. */
     CHECK_EQUAL(0, m_user_rx_invalidate_dlci_id_used_check_value);
@@ -9812,7 +9831,7 @@ TEST(MultiplexerOpenTestGroup, user_rx_invalidate_dlci_id_used)
     dlci_id      = DLCI_ID_LOWER_BOUND;
     read_byte[0] = 1u | (dlci_id << 2);
     read_byte[4] = fcs_calculate(&read_byte[0], 3u);
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE, NULL, 0);
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE, NULL, 0, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate proper callback callcount. */
     CHECK_EQUAL(1, m_user_rx_invalidate_dlci_id_used_check_value);
@@ -9904,14 +9923,14 @@ TEST(MultiplexerOpenTestGroup, user_rx_invalid_fcs)
         fcs_calculate(&read_byte[0], 3u) + 1u,
         FLAG_SEQUENCE_OCTET
     };
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE, NULL, 0);
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE, NULL, 0, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate proper callback callcount. */
     CHECK_EQUAL(0, m_user_rx_invalid_fcs_check_value);
 
     /* Rx user data frame with valid FCS: accepted by the implementation. */
     read_byte[4] = fcs_calculate(&read_byte[0], 3u);
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE, NULL, 0);
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE, NULL, 0, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate proper callback callcount. */
     CHECK_EQUAL(1, m_user_rx_invalid_fcs_check_value);
@@ -10003,7 +10022,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_not_supported)
         fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
     };
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE, NULL, 0);
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE, NULL, 0, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate proper callback callcount. */
     CHECK_EQUAL(0, m_rx_frame_type_not_supported_check_value);
@@ -10011,7 +10030,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_not_supported)
     /* Rx frame with valid frame type ID: accepted by the implementation. */
     read_byte[1] = FRAME_TYPE_UIH;
     read_byte[4] = fcs_calculate(&read_byte[0], 3u);
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE, NULL, 0);
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE, NULL, 0, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate proper callback callcount. */
     CHECK_EQUAL(1, m_rx_frame_type_not_supported_check_value);
@@ -10089,11 +10108,11 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_when_no_sabm_send)
         fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
     };
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE, NULL, 0);
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE, NULL, 0, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Establish 2nd DLCI. */
 
-    channel_open((dlci_id + 1u), callback);
+    channel_open((dlci_id + 1u), callback, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -10151,11 +10170,11 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_when_no_sabm_send)
         fcs_calculate(&read_byte[0], 3u),
         FLAG_SEQUENCE_OCTET
     };
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE, NULL, 0);
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), RESUME_RX_CYCLE, NULL, 0, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Establish 2nd DLCI. */
 
-    channel_open((dlci_id + 1u), callback);
+    channel_open((dlci_id + 1u), callback, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -10264,7 +10283,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_invalid_cr_and_pf_bit)
         FLAG_SEQUENCE_OCTET
     };
     single_complete_read_cycle(&(read_byte_invalid_cr_bit[0]), sizeof(read_byte_invalid_cr_bit), RESUME_RX_CYCLE,
-                               NULL, 0);
+                               NULL, 0, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Rx frame type UA received with invalid P/F bit: silently discarded by the implementation. */
 
@@ -10277,7 +10296,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_invalid_cr_and_pf_bit)
         FLAG_SEQUENCE_OCTET
     };
     single_complete_read_cycle(&(read_byte_invalid_pf_bit[0]), sizeof(read_byte_invalid_pf_bit), RESUME_RX_CYCLE,
-                               NULL, 0);
+                               NULL, 0, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Rx frame type UA, whic is valid: DLCI established. */
 
@@ -10293,7 +10312,8 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_invalid_cr_and_pf_bit)
     self_iniated_response_rx(&(read_byte_valid[0]),
                              NULL,
                              SKIP_FLAG_SEQUENCE_OCTET,
-                             STRIP_FLAG_FIELD_NO);
+                             STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -10367,7 +10387,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_uih_invalid_cr_and_pf_bit)
         FLAG_SEQUENCE_OCTET
     };
     single_complete_read_cycle(&(read_byte_invalid_pf_bit[0]), sizeof(read_byte_invalid_pf_bit), RESUME_RX_CYCLE,
-                               NULL, 0);
+                               NULL, 0, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate proper callback callcount. */
     CHECK_EQUAL(0, m_rx_frame_type_uih_invalid_cr_and_pf_bit_check_value);
@@ -10384,7 +10404,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_uih_invalid_cr_and_pf_bit)
         FLAG_SEQUENCE_OCTET
     };
     single_complete_read_cycle(&(read_byte_invalid_cr_bit[0]), sizeof(read_byte_invalid_cr_bit), RESUME_RX_CYCLE,
-                               NULL, 0);
+                               NULL, 0, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate proper callback callcount. */
     CHECK_EQUAL(0, m_rx_frame_type_uih_invalid_cr_and_pf_bit_check_value);
@@ -10401,7 +10421,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_uih_invalid_cr_and_pf_bit)
         FLAG_SEQUENCE_OCTET
     };
     single_complete_read_cycle(&(read_byte_valid[0]), sizeof(read_byte_valid), SUSPEND_RX_CYCLE,
-                               NULL, 0);
+                               NULL, 0, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate proper callback callcount. */
     CHECK_EQUAL(1, m_rx_frame_type_uih_invalid_cr_and_pf_bit_check_value);
@@ -10529,7 +10549,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_invalid_cr_and_pf_bit)
         FLAG_SEQUENCE_OCTET
     };
     single_complete_read_cycle(&(read_byte_invalid_cr_bit[0]), sizeof(read_byte_invalid_cr_bit), RESUME_RX_CYCLE,
-                               NULL, 0);
+                               NULL, 0, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Rx frame type DM received with invalid P/F bit: silently discarded by the implementation. */
 
@@ -10542,7 +10562,7 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_invalid_cr_and_pf_bit)
         FLAG_SEQUENCE_OCTET
     };
     single_complete_read_cycle(&(read_byte_invalid_pf_bit[0]), sizeof(read_byte_invalid_pf_bit), RESUME_RX_CYCLE,
-                               NULL, 0);
+                               NULL, 0, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Valid Rx frame type DM received: starts expected processing within implementation */
 
@@ -10558,13 +10578,14 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_invalid_cr_and_pf_bit)
     self_iniated_response_rx(&(read_byte_valid[0]),
                              NULL,
                              SKIP_FLAG_SEQUENCE_OCTET,
-                             STRIP_FLAG_FIELD_NO);
+                             STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES);
 
     CHECK(callback.is_callback_called());
     m_file_handle[0] = callback.file_handle_get();
     CHECK_EQUAL(NULL, m_file_handle[0]);
 
-    channel_open(DLCI_ID_LOWER_BOUND, callback);
+    channel_open(DLCI_ID_LOWER_BOUND, callback, ENQUEUE_DEFERRED_CALL_YES);
 
     CHECK(callback.is_callback_called());
     m_file_handle[0] = callback.file_handle_get();
@@ -10872,7 +10893,8 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_ua_dlci_id_mismatch)
         fcs_calculate(&read_byte_channel_open[0], 3),
         FLAG_SEQUENCE_OCTET
     };
-    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -10967,7 +10989,8 @@ TEST(MultiplexerOpenTestGroup, rx_frame_type_dm_dlci_id_mismatch)
         FLAG_SEQUENCE_OCTET
     };
     callback.callback_arm();
-    self_iniated_response_rx(&(read_byte[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+    self_iniated_response_rx(&(read_byte[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate Filehandle generation. */
     CHECK(callback.is_callback_called());
@@ -11084,7 +11107,8 @@ TEST(MultiplexerOpenTestGroup, channel_open_inside_the_channel_open_callback)
         FLAG_SEQUENCE_OCTET
     };
     callback.callback_arm();
-    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES);
 
     /* Verify correct callback count. */
     CHECK_EQUAL(2, callback.completion_count_get());
@@ -11212,7 +11236,8 @@ TEST(MultiplexerOpenTestGroup, channel_open_inside_the_channel_open_callback_dm_
         FLAG_SEQUENCE_OCTET
     };
     callback.callback_arm();
-    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO);
+    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES);
 
     /* Verify correct callback count. */
     CHECK_EQUAL(2, callback.completion_count_get());
@@ -11439,7 +11464,8 @@ TEST(MultiplexerOpenTestGroup, channel_open_inside_the_channel_open_callback_mux
     self_iniated_response_rx(&(read_byte_channel_open[0]),
                              NULL,
                              SKIP_FLAG_SEQUENCE_OCTET,
-                             STRIP_FLAG_FIELD_NO);
+                             STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES);
 
     /* Verify correct callback count. */
     CHECK_EQUAL(2, callback.completion_count_get());
@@ -11516,7 +11542,7 @@ TEST(MultiplexerOpenTestGroup, poll)
     };
 
     /* Rx user data is not read within callback context, thus Rx is suspended. */
-    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE, NULL, 0);
+    single_complete_read_cycle(&(read_byte[0]), sizeof(read_byte), SUSPEND_RX_CYCLE, NULL, 0, ENQUEUE_DEFERRED_CALL_YES);
 
     /* Validate proper callback callcount. */
     CHECK_EQUAL(1, m_poll_check_value);

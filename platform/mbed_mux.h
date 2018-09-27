@@ -498,6 +498,7 @@ private:
         uint8_t is_op_complete_context   : 1; /* True when current context is operation complete callback context. */
     } state_t;
 
+    static uint8_t            _is_deferred_call_enqueued;             /* State variable to determine is deferred call enqueued or not.*/
     static FileHandle        *_serial;                                /* Serial used. */
     static EventQueueMock    *_event_q;                               /* Event queue used. */
     static PlatformMutexMock  _mutex;                                 /* Mutex used. */

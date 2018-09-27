@@ -53,9 +53,10 @@ typedef struct
     uint8_t information[1]; /* Begin of the information field if present. */
 } frame_hdr_t;
 
-uint8_t Mux3GPP::_dlci            = 1u;
-FileHandle *Mux3GPP::_serial      = NULL;
-EventQueueMock *Mux3GPP::_event_q = NULL;
+uint8_t Mux3GPP::_is_deferred_call_enqueued = 0;
+uint8_t Mux3GPP::_dlci                      = 1u;
+FileHandle *Mux3GPP::_serial                = NULL;
+EventQueueMock *Mux3GPP::_event_q           = NULL;
 MuxDataService3GPP Mux3GPP::_mux_objects[MBED_CONF_MUX_DLCI_COUNT];
 
 PlatformMutexMock Mux3GPP::_mutex;
@@ -65,7 +66,7 @@ Callback<void(MuxBase::event_context_t &)> Mux3GPP::_cb_func;
 Mux3GPP::tx_context_t Mux3GPP::_tx_context;
 Mux3GPP::rx_context_t Mux3GPP::_rx_context;
 Mux3GPP::state_t      Mux3GPP::_state;
-const uint8_t     Mux3GPP::_crctable[MUX_CRC_TABLE_LEN] = {
+const uint8_t Mux3GPP::_crctable[MUX_CRC_TABLE_LEN] = {
     0x00, 0x91, 0xE3, 0x72, 0x07, 0x96, 0xE4, 0x75,  0x0E, 0x9F, 0xED, 0x7C, 0x09, 0x98, 0xEA, 0x7B,
     0x1C, 0x8D, 0xFF, 0x6E, 0x1B, 0x8A, 0xF8, 0x69,  0x12, 0x83, 0xF1, 0x60, 0x15, 0x84, 0xF6, 0x67,
     0x38, 0xA9, 0xDB, 0x4A, 0x3F, 0xAE, 0xDC, 0x4D,  0x36, 0xA7, 0xD5, 0x44, 0x31, 0xA0, 0xD2, 0x43,
@@ -91,7 +92,8 @@ extern void trace(char *string, int data);
 
 void Mux3GPP::module_init()
 {
-    _dlci = 1u;
+    _is_deferred_call_enqueued = 0;
+    _dlci                      = 1u;
 
     _state.is_mux_open            = 0;
     _state.is_mux_open_pending    = 0;
@@ -390,8 +392,12 @@ trace("TX-state new state: ", new_state);
 
 void Mux3GPP::event_queue_enqueue()
 {
-    const int id = _event_q->call(Mux3GPP::on_deferred_call);
-    MBED_ASSERT(id != 0);
+    if (_is_deferred_call_enqueued == 0) {
+        ++_is_deferred_call_enqueued;
+
+        const int id = _event_q->call(Mux3GPP::on_deferred_call);
+        MBED_ASSERT(id != 0);
+    }
 }
 
 
@@ -855,6 +861,8 @@ void Mux3GPP::write_do()
 void Mux3GPP::on_deferred_call()
 {
     _mutex.lock();
+
+    _is_deferred_call_enqueued = 0;
 
     rx_event_do(RX_READ);
     write_do();
