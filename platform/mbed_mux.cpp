@@ -820,13 +820,14 @@ void Mux3GPP::write_do()
         case TX_NORETRANSMIT:
         case TX_RETRANSMIT_ENQUEUE:
         case TX_INTERNAL_RESP:
-            write_err = 1;
             do {
-                // @todo: handle -EAGAIN return code
                 write_err = _serial->write(&(_tx_context.buffer[_tx_context.offset]), _tx_context.bytes_remaining);
-                MBED_ASSERT(write_err >= 0);
-                _tx_context.bytes_remaining -= write_err;
-                _tx_context.offset          += write_err;
+                MBED_ASSERT((write_err >= 0) || (write_err == -EAGAIN));
+
+                if (write_err != -EAGAIN) {
+                    _tx_context.bytes_remaining -= write_err;
+                    _tx_context.offset          += write_err;
+                }
             } while ((_tx_context.bytes_remaining != 0) && (write_err > 0));
 
             if (_tx_context.bytes_remaining == 0) {
@@ -838,7 +839,7 @@ void Mux3GPP::write_do()
                     on_post_tx_frame_dm,
                     on_post_tx_frame_uih
                 };
-                const Mux3GPP::FrameTxType     frame_type = frame_tx_type_resolve();
+                const Mux3GPP::FrameTxType frame_type = frame_tx_type_resolve();
                 const post_tx_frame_func_t func       = post_tx_func[frame_type];
                 func();
             }

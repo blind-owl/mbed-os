@@ -7804,7 +7804,7 @@ static void user_tx_2_full_frame_writes_tx_callback()
 }
 
 /*
- * TC - Ensure proper behaviour when 2 sequential UIH frame TXs are doone in 1 write call
+ * TC - Ensure proper behaviour when 2 sequential UIH frame TXs are done in 1 write call
  *
  * Test sequence:
  * - Establish  a user channel
@@ -7827,8 +7827,8 @@ TEST(MultiplexerOpenTestGroup, user_tx_2_full_frame_writes)
     mbed::Mux3GPP::serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
-    mbed::Mux3GPP::callback_attach(mbed::Callback<void(MuxBase::event_context_t &)>(&callback, &MuxCallbackTest::channel_open_run),
-                               mbed::MuxBase::CHANNEL_TYPE_AT);
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(MuxBase::event_context_t &)>(&callback,
+                                   &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -11589,6 +11589,115 @@ TEST(MultiplexerOpenTestGroup, poll)
 
     events = fh->poll(0);
     CHECK_EQUAL(0, events);
+}
+
+static void tx_to_serial_fails_with_eagain_return_tx_callback()
+{
+    FAIL("TC FAILURE IF CALLED");
+}
+
+/*
+ * TC - Ensure proper behaviour when serial::write returns -EAGAIN for UIH frame TX
+ *
+ * Test sequence:
+ * - Establish a user channel
+ * - Issue 1 byte length UIH frame write request to the channel, which is accepted by the implementation
+ * - 1st write attempt by the implementation fails with -EAGAIN
+ * - 2nd write attempt completes the write sequence
+ *
+ * Expected outcome:
+ * - As specified above
+ */
+TEST(MultiplexerOpenTestGroup, tx_to_serial_fails_with_eagain_return)
+{
+    mbed::FileHandleMock fh_mock;
+    mbed::EventQueueMock eq_mock;
+
+    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
+
+    mock_t * mock_sigio = mock_free_get("sigio");
+    CHECK(mock_sigio != NULL);
+    mbed::Mux3GPP::serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    mbed::Mux3GPP::callback_attach(mbed::Callback<void(MuxBase::event_context_t &)>(&callback,
+                                   &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA);
+
+    /* Validate Filehandle generation. */
+    CHECK(callback.is_callback_called());
+    FileHandle *fh = callback.file_handle_get();
+    CHECK(fh != NULL);
+
+    fh->sigio(tx_to_serial_fails_with_eagain_return_tx_callback);
+
+    /* Program write cycle, fails with -EAGAIN. */
+
+    const uint8_t dlci_id       = 1u;
+    uint8_t user_data           = 0xA5u;
+    const uint8_t write_byte[7] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (dlci_id << 2),
+        FRAME_TYPE_UIH,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&write_byte[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    mock_t * mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL);
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);
+    mock_write->input_param[1].param        = sizeof(write_byte);
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = -EAGAIN;
+
+    mock_t * mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_t * mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+
+    ssize_t write_ret = fh->write(&user_data, sizeof(user_data));
+    CHECK_EQUAL(sizeof(user_data), write_ret);
+
+    /* 2nd write attempt completes the write sequence. */
+
+    mock_t * mock_call = mock_free_get("call");
+    CHECK(mock_call != NULL);
+    mock_call->return_value                             = 1;
+    const mbed::FileHandleMock::io_control_t io_control = {mbed::FileHandleMock::IO_TYPE_SIGNAL_GENERATE};
+    mbed::FileHandleMock::io_control(io_control);
+
+    /* Nothing to read within the RX cycle. */
+    mock_t * mock_read = mock_free_get("read");
+    CHECK(mock_read != NULL);
+    mock_read->output_param[0].param       = NULL;
+    mock_read->output_param[0].len         = 0;
+    mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_read->input_param[0].param        = FRAME_HEADER_READ_LEN;
+    mock_read->return_value                = -EAGAIN;
+
+    /* Complete the write request which is in progress. */
+    mock_write = mock_free_get("write");
+    CHECK(mock_write != NULL);
+    mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->input_param[0].param        = (uint32_t)&(write_byte[0]);
+    mock_write->input_param[1].param        = sizeof(write_byte);
+    mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+    mock_write->return_value                = mock_write->input_param[1].param;
+
+    mock_lock = mock_free_get("lock");
+    CHECK(mock_lock != NULL);
+    mock_unlock = mock_free_get("unlock");
+    CHECK(mock_unlock != NULL);
+
+    /* Trigger deferred call to execute the programmed mocks above. */
+    const mbed::EventQueueMock::io_control_t eq_io_control = {mbed::EventQueueMock::IO_TYPE_DEFERRED_CALL_GENERATE};
+    mbed::EventQueueMock::io_control(eq_io_control);
 }
 
 } // namespace mbed
