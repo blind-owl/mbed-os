@@ -24,6 +24,7 @@
 
 namespace mbed {
 
+class Mux3GPP;
 class MuxDataService3GPP : public MuxDataServiceBase {
 
 friend class Mux3GPP;
@@ -86,6 +87,8 @@ private:
     MuxDataService3GPP &operator=(const MuxDataService3GPP &obj);
 
     uint8_t _dlci;     /* DLCI number. Valid range 1 - 63. */
+
+    static Mux3GPP *_mux;
 };
 
 } // namespace mbed

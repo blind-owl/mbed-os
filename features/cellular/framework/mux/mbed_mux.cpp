@@ -52,19 +52,7 @@ typedef struct
     uint8_t information[1]; /* Begin of the information field if present. */
 } frame_hdr_t;
 
-uint8_t Mux3GPP::_is_deferred_call_enqueued = 0;
-uint8_t Mux3GPP::_dlci                      = 1u;
-FileHandle *Mux3GPP::_serial                = NULL;
-events::EventQueue *Mux3GPP::_event_q       = NULL;
-MuxDataService3GPP Mux3GPP::_mux_objects[MBED_CONF_MUX_DLCI_COUNT];
-
-PlatformMutex Mux3GPP::_mutex;
-
-Callback<void(MuxBase::event_context_t &)> Mux3GPP::_cb_func;
-
-Mux3GPP::tx_context_t Mux3GPP::_tx_context;
-Mux3GPP::rx_context_t Mux3GPP::_rx_context;
-Mux3GPP::state_t      Mux3GPP::_state;
+// @todo: remove static storage allocation for this
 const uint8_t Mux3GPP::_crctable[MUX_CRC_TABLE_LEN] = {
     0x00, 0x91, 0xE3, 0x72, 0x07, 0x96, 0xE4, 0x75,  0x0E, 0x9F, 0xED, 0x7C, 0x09, 0x98, 0xEA, 0x7B,
     0x1C, 0x8D, 0xFF, 0x6E, 0x1B, 0x8A, 0xF8, 0x69,  0x12, 0x83, 0xF1, 0x60, 0x15, 0x84, 0xF6, 0x67,
@@ -87,11 +75,15 @@ const uint8_t Mux3GPP::_crctable[MUX_CRC_TABLE_LEN] = {
     0xB4, 0x25, 0x57, 0xC6, 0xB3, 0x22, 0x50, 0xC1,  0xBA, 0x2B, 0x59, 0xC8, 0xBD, 0x2C, 0x5E, 0xCF
 };
 
-void Mux3GPP::module_init()
+Mux3GPP::Mux3GPP()
 {
+    _serial  = NULL;
+    _event_q = NULL;
+
     _is_deferred_call_enqueued = 0;
     _dlci                      = 1u;
 
+    // @todo: chnage to memset
     _state.is_mux_open            = 0;
     _state.is_mux_open_pending    = 0;
     _state.is_dlci_open_pending   = 0;
@@ -99,10 +91,12 @@ void Mux3GPP::module_init()
     _state.is_user_tx_pending     = 0;
     _state.is_op_complete_context = 0;
 
+    // @todo: chnage to memset + RX_FRAME_START set
     _rx_context.offset      = 0;
     _rx_context.read_length = 0;
     _rx_context.rx_state    = RX_FRAME_START;
 
+    // @todo: change to memset + TX_IDLE set    
     _tx_context.tx_state            = TX_IDLE;
     _tx_context.tx_callback_context = 0;
 
@@ -114,6 +108,8 @@ void Mux3GPP::module_init()
     for (uint8_t i = 0; i != end; ++i) {
         _mux_objects[i]._dlci = MUX_DLCI_INVALID_ID;
     }
+    
+    MuxDataService3GPP::_mux = this;
 }
 
 
@@ -133,14 +129,14 @@ void Mux3GPP::on_timeout()
             if (_tx_context.retransmit_counter != 0) {
                 --(_tx_context.retransmit_counter);
                 frame_retransmit_begin();
-                tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, null_action);
+                tx_state_change(TX_RETRANSMIT_ENQUEUE, &Mux3GPP::tx_retransmit_enqueu_entry_run, &Mux3GPP::null_action);
             } else {
                 /* Retransmission limit reached, change state and complete the operation with appropriate status code. */
 
 // @todo: clear op running bits? => always do in tx_idle entry? NOT as app can call back in callback context!
 
                 operation_complete_dispatch(NULL);
-                tx_state_change(TX_IDLE, tx_idle_entry_run, null_action);
+                tx_state_change(TX_IDLE, &Mux3GPP::tx_idle_entry_run, &Mux3GPP::null_action);
             }
             break;
         default:
@@ -170,7 +166,7 @@ void Mux3GPP::dm_response_construct()
 void Mux3GPP::on_rx_frame_sabm()
 {
     /* Peer iniated open/establishment is not supported. */
-    rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);
+    rx_state_change(RX_HEADER_READ, &Mux3GPP::rx_header_read_entry_run);
 }
 
 
@@ -217,7 +213,7 @@ void Mux3GPP::on_rx_frame_ua()
                         _state.is_dlci_open_pending = 1u;
                     }
 
-                    tx_state_change(TX_IDLE, tx_idle_entry_run, null_action);
+                    tx_state_change(TX_IDLE, &Mux3GPP::tx_idle_entry_run, &Mux3GPP::null_action);
                 }
             }
             break;
@@ -226,7 +222,7 @@ void Mux3GPP::on_rx_frame_ua()
             break;
     }
 
-    rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);
+    rx_state_change(RX_HEADER_READ, &Mux3GPP::rx_header_read_entry_run);
 }
 
 
@@ -248,7 +244,7 @@ void Mux3GPP::on_rx_frame_dm()
                     _event_q->cancel(_tx_context.timer_id);
 
                     operation_complete_dispatch(NULL);
-                    tx_state_change(TX_IDLE, tx_idle_entry_run, null_action);
+                    tx_state_change(TX_IDLE, &Mux3GPP::tx_idle_entry_run, &Mux3GPP::null_action);
                 }
             }
             break;
@@ -257,7 +253,7 @@ void Mux3GPP::on_rx_frame_dm()
             break;
     }
 
-    rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);
+    rx_state_change(RX_HEADER_READ, &Mux3GPP::rx_header_read_entry_run);
 }
 
 
@@ -270,7 +266,7 @@ void Mux3GPP::tx_internal_resp_entry_run()
 void Mux3GPP::dm_response_send()
 {
     dm_response_construct();
-    tx_state_change(TX_INTERNAL_RESP, tx_internal_resp_entry_run, tx_idle_exit_run);
+    tx_state_change(TX_INTERNAL_RESP, &Mux3GPP::tx_internal_resp_entry_run, &Mux3GPP::tx_idle_exit_run);
 }
 
 
@@ -308,7 +304,7 @@ void Mux3GPP::on_rx_frame_disc()
             break;
     }
 
-    rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);
+    rx_state_change(RX_HEADER_READ, &Mux3GPP::rx_header_read_entry_run);
 }
 
 
@@ -334,7 +330,7 @@ void Mux3GPP::on_rx_frame_uih()
                     _rx_context.offset      = 0;
                     _rx_context.read_length = length;
 
-                    rx_state_change(RX_SUSPEND, null_action);
+                    rx_state_change(RX_SUSPEND, &Mux3GPP::null_action);
                     obj->_sigio_cb();
 
                     return;
@@ -344,13 +340,13 @@ void Mux3GPP::on_rx_frame_uih()
     }
 
     /* Default behaviour upon Rx of non valid user data frame. */
-    rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);
+    rx_state_change(RX_HEADER_READ, &Mux3GPP::rx_header_read_entry_run);
 }
 
 
 void Mux3GPP::on_rx_frame_not_supported()
 {
-    rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);
+    rx_state_change(RX_HEADER_READ, &Mux3GPP::rx_header_read_entry_run);
 }
 
 
@@ -374,13 +370,11 @@ Mux3GPP::FrameRxType Mux3GPP::frame_rx_type_resolve()
 }
 
 
-
-
 void Mux3GPP::tx_state_change(TxState new_state, tx_state_entry_func_t entry_func, tx_state_exit_func_t exit_func)
 {
-    exit_func();
+    (this->*exit_func)();
     _tx_context.tx_state = new_state;
-    entry_func();
+    (this->*entry_func)();
 }
 
 
@@ -389,7 +383,7 @@ void Mux3GPP::event_queue_enqueue()
     if (_is_deferred_call_enqueued == 0) {
         ++_is_deferred_call_enqueued;
 
-        const int id = _event_q->call(Mux3GPP::on_deferred_call);
+        const int id = _event_q->call(this, &Mux3GPP::on_deferred_call);
         MBED_ASSERT(id != 0);
     }
 }
@@ -397,7 +391,7 @@ void Mux3GPP::event_queue_enqueue()
 
 void Mux3GPP::tx_retransmit_done_entry_run()
 {
-    _tx_context.timer_id = _event_q->call_in(T1_TIMER_VALUE, Mux3GPP::on_timeout);
+    _tx_context.timer_id = _event_q->call_in(T1_TIMER_VALUE, this, &Mux3GPP::on_timeout);
     MBED_ASSERT(_tx_context.timer_id != 0);
 }
 
@@ -419,7 +413,7 @@ void Mux3GPP::on_post_tx_frame_sabm()
 {
     switch (_tx_context.tx_state) {
         case TX_RETRANSMIT_ENQUEUE:
-            tx_state_change(TX_RETRANSMIT_DONE, tx_retransmit_done_entry_run, null_action);
+            tx_state_change(TX_RETRANSMIT_DONE, &Mux3GPP::tx_retransmit_done_entry_run, &Mux3GPP::null_action);
             break;
         default:
             /* Code that should never be reached. */
@@ -435,7 +429,7 @@ void Mux3GPP::pending_self_iniated_mux_open_start()
     _state.is_mux_open_pending = 0;
 
     sabm_request_construct(0);
-    tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
+    tx_state_change(TX_RETRANSMIT_ENQUEUE, &Mux3GPP::tx_retransmit_enqueu_entry_run, &Mux3GPP::tx_idle_exit_run);
     _tx_context.retransmit_counter = RETRANSMIT_COUNT;
 }
 
@@ -446,7 +440,7 @@ void Mux3GPP::pending_self_iniated_dlci_open_start()
     _state.is_dlci_open_pending = 0;
 
     sabm_request_construct(/*_shared_memory*/_dlci); // @todo: make dlci_incerement(), which wrap-around?
-    tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
+    tx_state_change(TX_RETRANSMIT_ENQUEUE, &Mux3GPP::tx_retransmit_enqueu_entry_run, &Mux3GPP::tx_idle_exit_run);
     _tx_context.retransmit_counter = RETRANSMIT_COUNT;
 }
 
@@ -563,7 +557,7 @@ void Mux3GPP::tx_callbacks_run()
 
             /* TX buffer was constructed within @ref user_data_tx, now start the TX cycle. */
             _state.is_user_tx_pending = 0;
-            tx_state_change(TX_NORETRANSMIT, tx_noretransmit_entry_run, tx_idle_exit_run);
+            tx_state_change(TX_NORETRANSMIT, &Mux3GPP::tx_noretransmit_entry_run, &Mux3GPP::tx_idle_exit_run);
             if (_tx_context.tx_state != TX_IDLE) {
                 /* TX cycle not finished within current context, stop callback processing as we will continue when TX
                    cycle finishes and this function is re-entered. */
@@ -601,7 +595,7 @@ void Mux3GPP::on_post_tx_frame_dm()
 {
     switch (_tx_context.tx_state) {
         case TX_INTERNAL_RESP:
-            tx_state_change(TX_IDLE, tx_idle_entry_run, null_action);
+            tx_state_change(TX_IDLE, &Mux3GPP::tx_idle_entry_run, &Mux3GPP::null_action);
             break;
         default:
             /* Code that should never be reached. */
@@ -615,7 +609,7 @@ void Mux3GPP::on_post_tx_frame_uih()
 {
     switch (_tx_context.tx_state) {
         case TX_NORETRANSMIT:
-            tx_state_change(TX_IDLE, tx_idle_entry_run, null_action);
+            tx_state_change(TX_IDLE, &Mux3GPP::tx_idle_entry_run, &Mux3GPP::null_action);
             break;
         default:
             /* Code that should never be reached. */
@@ -657,7 +651,7 @@ void Mux3GPP::rx_header_read_entry_run()
 
 void Mux3GPP::rx_state_change(RxState new_state, rx_state_entry_func_t entry_func)
 {
-    entry_func();
+    (this->*entry_func)();
     _rx_context.rx_state = new_state;
 }
 
@@ -674,7 +668,7 @@ ssize_t Mux3GPP::on_rx_read_state_frame_start()
         _rx_context.offset     += FRAME_START_READ_LEN;
         _rx_context.read_length = FRAME_HEADER_READ_LEN;
 
-        rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);
+        rx_state_change(RX_HEADER_READ, &Mux3GPP::rx_header_read_entry_run);
     }
 
     return read_err;
@@ -714,7 +708,7 @@ ssize_t Mux3GPP::on_rx_read_state_header_read()
         MBED_ASSERT(_rx_context.read_length <=
             (MBED_CONF_MUX_BUFFER_SIZE - (FRAME_START_READ_LEN + FRAME_HEADER_READ_LEN)));
 
-        rx_state_change(RX_TRAILER_READ, null_action);
+        rx_state_change(RX_TRAILER_READ, &Mux3GPP::null_action);
     }
 
     return read_err;
@@ -733,14 +727,14 @@ bool Mux3GPP::is_rx_fcs_valid()
 
 ssize_t Mux3GPP::on_rx_read_state_trailer_read()
 {
-    typedef void (*rx_frame_decoder_func_t)();
+    typedef void (Mux3GPP::*rx_frame_decoder_func_t)();
     static const rx_frame_decoder_func_t rx_frame_decoder_func[FRAME_RX_TYPE_MAX] = {
-        on_rx_frame_sabm,
-        on_rx_frame_ua,
-        on_rx_frame_dm,
-        on_rx_frame_disc,
-        on_rx_frame_uih,
-        on_rx_frame_not_supported
+        &Mux3GPP::on_rx_frame_sabm,
+        &Mux3GPP::on_rx_frame_ua,
+        &Mux3GPP::on_rx_frame_dm,
+        &Mux3GPP::on_rx_frame_disc,
+        &Mux3GPP::on_rx_frame_uih,
+        &Mux3GPP::on_rx_frame_not_supported
     };
 
     ssize_t read_err;
@@ -759,9 +753,9 @@ ssize_t Mux3GPP::on_rx_read_state_trailer_read()
             const Mux3GPP::FrameRxType frame_type  = frame_rx_type_resolve();
             const rx_frame_decoder_func_t func = rx_frame_decoder_func[frame_type];
 
-            func();
+            (this->*func)();
         } else {
-            rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);
+            rx_state_change(RX_HEADER_READ, &Mux3GPP::rx_header_read_entry_run);
         }
     }
 
@@ -777,12 +771,12 @@ ssize_t Mux3GPP::on_rx_read_state_suspend()
 
 void Mux3GPP::rx_event_do(RxEvent event)
 {
-    typedef ssize_t (*rx_read_func_t)();
+    typedef ssize_t (Mux3GPP::*rx_read_func_t)();
     static const rx_read_func_t rx_read_func[RX_STATE_MAX] = {
-        on_rx_read_state_frame_start,
-        on_rx_read_state_header_read,
-        on_rx_read_state_trailer_read,
-        on_rx_read_state_suspend,
+        &Mux3GPP::on_rx_read_state_frame_start,
+        &Mux3GPP::on_rx_read_state_header_read,
+        &Mux3GPP::on_rx_read_state_trailer_read,
+        &Mux3GPP::on_rx_read_state_suspend,
     };
 
     switch (event) {
@@ -791,14 +785,14 @@ void Mux3GPP::rx_event_do(RxEvent event)
         case RX_READ:
             do {
                 func     = rx_read_func[_rx_context.rx_state];
-                read_err = func();
+                read_err = (this->*func)();
             } while (read_err != -EAGAIN);
 
             break;
         case RX_RESUME:
             MBED_ASSERT(_rx_context.rx_state == RX_SUSPEND);
 
-            rx_state_change(RX_HEADER_READ, rx_header_read_entry_run);
+            rx_state_change(RX_HEADER_READ, &Mux3GPP::rx_header_read_entry_run);
             event_queue_enqueue();
             break;
         default:
@@ -829,15 +823,15 @@ void Mux3GPP::write_do()
             if (_tx_context.bytes_remaining == 0) {
                 /* Frame write complete, execute correct post processing function for clean-up. */
 
-                typedef void (*post_tx_frame_func_t)();
+                typedef void (Mux3GPP::*post_tx_frame_func_t)();
                 static const post_tx_frame_func_t post_tx_func[FRAME_TX_TYPE_MAX] = {
-                    on_post_tx_frame_sabm,
-                    on_post_tx_frame_dm,
-                    on_post_tx_frame_uih
+                    &Mux3GPP::on_post_tx_frame_sabm,
+                    &Mux3GPP::on_post_tx_frame_dm,
+                    &Mux3GPP::on_post_tx_frame_uih
                 };
                 const Mux3GPP::FrameTxType frame_type = frame_tx_type_resolve();
                 const post_tx_frame_func_t func       = post_tx_func[frame_type];
-                func();
+                (this->*func)();
             }
 
             break;
@@ -877,7 +871,7 @@ void Mux3GPP::serial_attach(FileHandle *serial)
 {
     _serial = serial;
 
-    _serial->sigio(Mux3GPP::on_sigio);
+    _serial->sigio(/*&Mux3GPP::on_sigio*/callback(this, &Mux3GPP::on_sigio));
     _serial->set_blocking(false);
 }
 
@@ -1000,7 +994,7 @@ nsapi_error Mux3GPP::channel_open()
             }
 
             _tx_context.retransmit_counter = RETRANSMIT_COUNT;
-            tx_state_change(TX_RETRANSMIT_ENQUEUE, tx_retransmit_enqueu_entry_run, tx_idle_exit_run);
+            tx_state_change(TX_RETRANSMIT_ENQUEUE, &Mux3GPP::tx_retransmit_enqueu_entry_run, &Mux3GPP::tx_idle_exit_run);
 
             break;
         case TX_RETRANSMIT_ENQUEUE:
@@ -1089,7 +1083,7 @@ ssize_t Mux3GPP::user_data_tx(uint8_t dlci_id, const void* buffer, size_t size)
                 /* Proper state to start TX cycle within current context. */
 
                 user_information_construct(dlci_id, buffer, size);
-                tx_state_change(TX_NORETRANSMIT, tx_noretransmit_entry_run, tx_idle_exit_run);
+                tx_state_change(TX_NORETRANSMIT, &Mux3GPP::tx_noretransmit_entry_run, &Mux3GPP::tx_idle_exit_run);
 
                 write_ret = size;
             } else {

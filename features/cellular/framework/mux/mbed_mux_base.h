@@ -19,6 +19,7 @@
 
 namespace mbed {
 
+class FileHandle;
 class MuxBase {
 public:
 
