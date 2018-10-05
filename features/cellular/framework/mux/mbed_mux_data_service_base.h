@@ -29,6 +29,8 @@ class MuxDataServiceBase : public FileHandle
 
 protected:
 
+    virtual ~MuxDataServiceBase() {};
+
     MuxDataServiceBase() {};
 
     Callback<void()> _sigio_cb; /* Registered signal callback. */

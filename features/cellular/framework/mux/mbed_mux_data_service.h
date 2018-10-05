@@ -78,6 +78,8 @@ public:
     /** Constructor. */
     MuxDataService3GPP() : _dlci(MUX_DLCI_INVALID_ID) {};
 
+    virtual ~MuxDataService3GPP();
+
 private:
 
     /* Deny copy constructor. */
