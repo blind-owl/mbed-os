@@ -16,9 +16,10 @@
  */
 #include "gtest/gtest.h"
 #include "gmock/gmock.h"
-#include <string.h>
+//#include <string.h>
 #include "mbed_mux.h"
 #include "FileHandle.h"
+#include "EventQueue.h"
 
 #if 0
 using namespace mbed;
@@ -39,13 +40,31 @@ protected:
     }
 };
 // *INDENT-ON*
-#if 0
+#if 1
 class MockFileHandle : public mbed::FileHandle {
 
 public:
-    MOCK_METHOD0(size, off_t());
+
+    virtual ~MockFileHandle() {};
+
+    virtual ssize_t write(const void* buffer, size_t size) {return 0;}
+
+    virtual ssize_t read(void *buffer, size_t size) {return 0;}
+
+    virtual short poll(short events) const {return 0;}
+
+    virtual off_t seek(off_t offset, int whence/* = SEEK_SET*/) {return 0;}
+
+    virtual int close() {return 0;}
+
+    MOCK_METHOD1(set_blocking, int(bool blocking));
+//    void sigio(Callback<void()> func)
+//    MOCK_METHOD0(size, off_t());
 }; // virtual off_t size();
-#endif 
+#endif
+
+using ::testing::Return;
+
 /*
  * TC - Ensure proper behaviour when channel is opened and multiplexer control channel is not open
  *
@@ -61,8 +80,26 @@ public:
  */
 TEST_F(TestMux, channel_open_mux_not_open)
 {
+
     mbed::Mux3GPP obj;
-//    mbed::Mux3GPP::eventqueue_attach(&eq_mock);
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+//   MockFileHandle fh;
+    MockFileHandle *fh = new MockFileHandle;
+    delete fh;
+
+    printf("1-TRACE ME");
+
+//    EXPECT_CALL(fh, set_blocking(true)).WillOnce(Return(0));
+
+    printf("2-TRACE ME");
+
+//    obj.serial_attach(&fh);
+
+    printf("3-TRACE ME");
+
 #if 0
     mbed::FileHandleMock fh_mock;
     mbed::EventQueueMock eq_mock;
