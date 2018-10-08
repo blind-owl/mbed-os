@@ -1,3 +1,18 @@
+/* mbed Microcontroller Library
+ * Copyright (c) 2018 ARM Limited
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 #include "mbed_mux.h"
 #include "mbed_assert.h"
@@ -96,7 +111,7 @@ Mux3GPP::Mux3GPP()
     _rx_context.read_length = 0;
     _rx_context.rx_state    = RX_FRAME_START;
 
-    // @todo: change to memset + TX_IDLE set    
+    // @todo: change to memset + TX_IDLE set
     _tx_context.tx_state            = TX_IDLE;
     _tx_context.tx_callback_context = 0;
 
@@ -108,7 +123,7 @@ Mux3GPP::Mux3GPP()
     for (uint8_t i = 0; i != end; ++i) {
         _mux_objects[i]._dlci = MUX_DLCI_INVALID_ID;
     }
-    
+
     MuxDataService3GPP::_mux = this;
 }
 
