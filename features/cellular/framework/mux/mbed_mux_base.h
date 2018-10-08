@@ -22,27 +22,31 @@ class FileHandle;
 class MuxBase {
 public:
 
-typedef enum {
-    CHANNEL_TYPE_AT = 0,
-    CHANNEL_TYPE_NVM,
-    CHANNEL_TYPE_BIP,
-    CHANNEL_TYPE_MAX
-} ChannelType;
+    /* Definition for channel type. */
+    typedef enum {
+        CHANNEL_TYPE_AT = 0,
+        CHANNEL_TYPE_NVM,
+        CHANNEL_TYPE_BIP,
+        CHANNEL_TYPE_MAX
+    } ChannelType;
 
-typedef enum {
-    EVENT_TYPE_OPEN = 0,
-    EVENT_TYPE_CLOSE,
-    EVENT_TYPE_MAX
-} EventType;
+    /* Definition for event type. */
+    typedef enum {
+        EVENT_TYPE_OPEN = 0,
+        EVENT_TYPE_CLOSE,
+        EVENT_TYPE_MAX
+    } EventType;
 
-typedef struct {
-    FileHandle *fh;
-} event_data_t;
+    /* Definition for event data. */
+    typedef struct {
+        FileHandle *fh; /* Filehandle object identifier. */
+    } event_data_t;
 
-typedef struct {
-    EventType    event;
-    event_data_t data;
-} event_context_t;
+    /* Definition for event context. */
+    typedef struct {
+        EventType    event; /* Event type. */
+        event_data_t data;  /* Event data. */
+    } event_context_t;
 
 };
 

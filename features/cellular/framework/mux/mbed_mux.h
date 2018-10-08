@@ -13,8 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef MUX_H
-#define MUX_H
+#ifndef MUX3GPP_H
+#define MUX3GPP_H
 
 #include <stdint.h>
 #include "platform/platform.h"
@@ -25,7 +25,8 @@
 #include "PlatformMutex.h"
 #include "EventQueue.h"
 
-#define MUX_CRC_TABLE_LEN         256u /* CRC table length in number of bytes. */
+#define MUX_CRC_TABLE_LEN          256u /* CRC table length in number of bytes. */
+#define MUX3GPP_EVENT_Q_ELEM_COUNT 2u   /* Worst case element count for the event Q. To be used for RAM allocation. */
 
 #ifndef MBED_CONF_MUX_DLCI_COUNT
 #define MBED_CONF_MUX_DLCI_COUNT  3u   /* Number of supported DLCI IDs. */
@@ -36,13 +37,6 @@
 
 /* More RAM needs to allocated if more than 4 DLCI ID to be supported see @ref tx_callback_context for details. */
 MBED_STATIC_ASSERT(MBED_CONF_MUX_DLCI_COUNT <= 4u, "");
-
-
-/* @todo:
-I assume that we need to export some kind of #defines for EVENT_SIZE and MAX_EVENT_COUNT (max number of events that can
-be queued at the same time by the module inside EventQueue, so that the application designer can calculate the RAM
-storage requirements correctly at compile time.
-*/
 
 namespace mbed {
 
@@ -335,7 +329,7 @@ private:
      *  @param size    The number of bytes to write.
      *  @return        The number of bytes written, negative error on failure.
      */
-    ssize_t user_data_tx(uint8_t dlci_id, const void* buffer, size_t size);
+    ssize_t user_data_tx(uint8_t dlci_id, const void *buffer, size_t size);
 
     /** Read user data into a buffer.
      *
@@ -345,7 +339,7 @@ private:
      *  @param size   The number of bytes to read.
      *  @return       The number of bytes read, -EAGAIN if no data availabe for read.
      */
-    ssize_t user_data_rx(void* buffer, size_t size);
+    ssize_t user_data_rx(void *buffer, size_t size);
 
     /** Check for poll event flags
      *
@@ -392,7 +386,7 @@ private:
      *  @param bit Bit indetifier of data service object to get.
      *  @return    Data service object reference.
      */
-    MuxDataService3GPP& tx_callback_lookup(uint8_t bit);
+    MuxDataService3GPP &tx_callback_lookup(uint8_t bit);
 
     /** Get minimum of 2 supplied paramaters.
      *
@@ -419,10 +413,10 @@ private:
     void operation_complete_dispatch(FileHandle *fh);
 
     /* Deny copy constructor. */
-    Mux3GPP(const Mux3GPP& obj);
+    Mux3GPP(const Mux3GPP &obj);
 
     /* Deny assignment operator. */
-    Mux3GPP& operator=(const Mux3GPP& obj);
+    Mux3GPP &operator=(const Mux3GPP &obj);
 
     /* Definition for Tx context type. */
     typedef struct
@@ -457,18 +451,16 @@ private:
     /* Definition for state type. */
     typedef struct
     {
-        uint8_t is_mux_open              : 1; /* True when multiplexer is open. */
-
-        // @todo: depricate below as we could use is_mux_open state?
-        uint8_t is_mux_open_pending      : 1; /* True when multiplexer open is pending. */
-
-        uint8_t is_dlci_open_pending     : 1; /* True when DLCI open is pending. */
-        uint8_t is_tx_callback_context   : 1; /* True when current context is TX callback context. */
-        uint8_t is_user_tx_pending       : 1; /* True when user TX is pending. */
-        uint8_t is_op_complete_context   : 1; /* True when current context is operation complete callback context. */
+        uint8_t is_mux_open            : 1; /* True when multiplexer is open. */
+        uint8_t is_mux_open_pending    : 1; /* True when multiplexer open is pending. */
+        uint8_t is_dlci_open_pending   : 1; /* True when DLCI open is pending. */
+        uint8_t is_tx_callback_context : 1; /* True when current context is TX callback context. */
+        uint8_t is_user_tx_pending     : 1; /* True when user TX is pending. */
+        uint8_t is_op_complete_context : 1; /* True when current context is operation complete callback context. */
     } state_t;
 
-    uint8_t             _is_deferred_call_enqueued;             /* State variable to determine is deferred call enqueued or not.*/
+    uint8_t             _is_deferred_call_enqueued;             /* State variable to determine is deferred call enqueued
+                                                                   or not.*/
     FileHandle         *_serial;                                /* Serial used. */
     events::EventQueue *_event_q;                               /* Event queue used. */
     PlatformMutex       _mutex;                                 /* Mutex used. */
@@ -476,12 +468,10 @@ private:
     tx_context_t        _tx_context;                            /* Tx context. */
     rx_context_t        _rx_context;                            /* Rx context. */
     state_t             _state;                                 /* General state context. */
+    uint8_t             _dlci;                                  /* User channel id. */
+    Callback<void(event_context_t &)> _cb_func;                 /* @ref channel_open completion function. */
 
-    // @todo: not static
-    static const uint8_t _crctable[MUX_CRC_TABLE_LEN];           /* CRC table used for frame FCS. */
-
-    uint8_t                     _dlci;                       /* User channel id. */
-    Callback<void(event_context_t &)> _cb_func;                    /* @ref channel_open completion function. */
+    static const uint8_t _crctable[MUX_CRC_TABLE_LEN];          /* CRC table used for frame FCS. */
 };
 
 } // namespace mbed

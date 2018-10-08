@@ -19,43 +19,43 @@
 
 namespace mbed {
 
-#define FLAG_SEQUENCE_OCTET                 0xF9u     /* Flag field used in the basic option mode. */
-#define ADDRESS_MUX_START_REQ_OCTET         0x03u     /* Address field of the start multiplexer request frame. */
-#define ADDRESS_MUX_START_RESP_OCTET        0x03u     /* Address field value of the start multiplexer response frame. */
+#define FLAG_SEQUENCE_OCTET             0xF9u     /* Flag field used in the basic option mode. */
+#define ADDRESS_MUX_START_REQ_OCTET     0x03u     /* Address field of the start multiplexer request frame. */
+#define ADDRESS_MUX_START_RESP_OCTET    0x03u     /* Address field value of the start multiplexer response frame. */
 
-#define FCS_INPUT_LEN                       3u        /* Length of the input for FCS calculation in number of bytes. */
-#define SABM_FRAME_LEN                      6u        /* Length of the SABM frame in number of bytes. */
-#define UA_FRAME_LEN                        6u        /* Length of the UA frame in number of bytes. */
-#define DM_FRAME_LEN                        6u        /* Length of the DM frame in number of bytes. */
-#define UIH_FRAME_MIN_LEN                   6u        /* Minimum length of user frame. */
+#define FCS_INPUT_LEN                   3u        /* Length of the input for FCS calculation in number of bytes. */
+#define SABM_FRAME_LEN                  6u        /* Length of the SABM frame in number of bytes. */
+#define UA_FRAME_LEN                    6u        /* Length of the UA frame in number of bytes. */
+#define DM_FRAME_LEN                    6u        /* Length of the DM frame in number of bytes. */
+#define UIH_FRAME_MIN_LEN               6u        /* Minimum length of user frame. */
 
-#define T1_TIMER_VALUE                      300u      /* T1 timer value. */
-#define RETRANSMIT_COUNT                    3u        /* Retransmission count for the tx frames requiring a response. */
+#define T1_TIMER_VALUE                  300u      /* T1 timer value. */
+#define RETRANSMIT_COUNT                3u        /* Retransmission count for the tx frames requiring a response. */
 
-#define FRAME_TYPE_SABM                     0x2Fu     /* SABM frame type coding in the frame control field. */
-#define FRAME_TYPE_UA                       0x63u     /* UA frame type coding in the frame control field. */
-#define FRAME_TYPE_DM                       0x0Fu     /* DM frame type coding in the frame control field. */
-#define FRAME_TYPE_DISC                     0x43u     /* DISC frame type coding in the frame control field. */
-#define FRAME_TYPE_UIH                      0xEFu     /* UIH frame type coding in the frame control field. */
+#define FRAME_TYPE_SABM                 0x2Fu     /* SABM frame type coding in the frame control field. */
+#define FRAME_TYPE_UA                   0x63u     /* UA frame type coding in the frame control field. */
+#define FRAME_TYPE_DM                   0x0Fu     /* DM frame type coding in the frame control field. */
+#define FRAME_TYPE_DISC                 0x43u     /* DISC frame type coding in the frame control field. */
+#define FRAME_TYPE_UIH                  0xEFu     /* UIH frame type coding in the frame control field. */
 
-#define PF_BIT                              (1u << 4) /* P/F bit position in the frame control field. */
-#define EA_BIT                              (1u << 0) /* E/A bit position in the frame address field. */
-#define CR_BIT                              (1u << 1) /* C/R bit position in the frame address field. */
+#define PF_BIT                          (1u << 4) /* P/F bit position in the frame control field. */
+#define EA_BIT                          (1u << 0) /* E/A bit position in the frame address field. */
+#define CR_BIT                          (1u << 1) /* C/R bit position in the frame address field. */
 
-#define DLCI_ID_LOWER_BOUND                 1u        /* Lower bound value of DLCI id.*/
-#define DLCI_ID_UPPER_BOUND                 63u       /* Upper bound value of DLCI id.*/
+#define DLCI_ID_LOWER_BOUND             1u        /* Lower bound value of DLCI id.*/
+#define DLCI_ID_UPPER_BOUND             63u       /* Upper bound value of DLCI id.*/
 
-#define FRAME_FLAG_SEQUENCE_FIELD_INDEX     0         /* Index of the frame flag sequence field. */
-#define FRAME_ADDRESS_FIELD_INDEX           1u        /* Index of the frame address field. */
-#define FRAME_CONTROL_FIELD_INDEX           2u        /* Index of the frame control field. */
-#define FRAME_LENGTH_FIELD_INDEX            3u        /* Index of the frame length indicator field. */
-#define FRAME_INFORMATION_FIELD_INDEX       4u        /* Index of the frame information field. */
+#define FRAME_FLAG_SEQUENCE_FIELD_INDEX 0         /* Index of the frame flag sequence field. */
+#define FRAME_ADDRESS_FIELD_INDEX       1u        /* Index of the frame address field. */
+#define FRAME_CONTROL_FIELD_INDEX       2u        /* Index of the frame control field. */
+#define FRAME_LENGTH_FIELD_INDEX        3u        /* Index of the frame length indicator field. */
+#define FRAME_INFORMATION_FIELD_INDEX   4u        /* Index of the frame information field. */
 
-#define FRAME_START_READ_LEN                1u        /* Frame start read length in number of bytes. */
-#define FRAME_HEADER_READ_LEN               3u        /* Frame header read length in number of bytes. */
-#define FRAME_TRAILER_LEN                   2u        /* Frame trailer read length in number of bytes. */
+#define FRAME_START_READ_LEN            1u        /* Frame start read length in number of bytes. */
+#define FRAME_HEADER_READ_LEN           3u        /* Frame header read length in number of bytes. */
+#define FRAME_TRAILER_LEN               2u        /* Frame trailer read length in number of bytes. */
 
-#define LENGTH_INDICATOR_OCTET              1u        /* Length indicator field value used in frame. */
+#define LENGTH_INDICATOR_OCTET          1u        /* Length indicator field value used in frame. */
 
 /* Definition for frame header type. */
 typedef struct
@@ -67,7 +67,6 @@ typedef struct
     uint8_t information[1]; /* Begin of the information field if present. */
 } frame_hdr_t;
 
-// @todo: remove static storage allocation for this
 const uint8_t Mux3GPP::_crctable[MUX_CRC_TABLE_LEN] = {
     0x00, 0x91, 0xE3, 0x72, 0x07, 0x96, 0xE4, 0x75,  0x0E, 0x9F, 0xED, 0x7C, 0x09, 0x98, 0xEA, 0x7B,
     0x1C, 0x8D, 0xFF, 0x6E, 0x1B, 0x8A, 0xF8, 0x69,  0x12, 0x83, 0xF1, 0x60, 0x15, 0x84, 0xF6, 0x67,
@@ -98,7 +97,6 @@ Mux3GPP::Mux3GPP()
     _is_deferred_call_enqueued = 0;
     _dlci                      = 1u;
 
-    // @todo: chnage to memset
     _state.is_mux_open            = 0;
     _state.is_mux_open_pending    = 0;
     _state.is_dlci_open_pending   = 0;
@@ -106,12 +104,10 @@ Mux3GPP::Mux3GPP()
     _state.is_user_tx_pending     = 0;
     _state.is_op_complete_context = 0;
 
-    // @todo: chnage to memset + RX_FRAME_START set
     _rx_context.offset      = 0;
     _rx_context.read_length = 0;
     _rx_context.rx_state    = RX_FRAME_START;
 
-    // @todo: change to memset + TX_IDLE set
     _tx_context.tx_state            = TX_IDLE;
     _tx_context.tx_callback_context = 0;
 
@@ -147,8 +143,6 @@ void Mux3GPP::on_timeout()
                 tx_state_change(TX_RETRANSMIT_ENQUEUE, &Mux3GPP::tx_retransmit_enqueu_entry_run, &Mux3GPP::null_action);
             } else {
                 /* Retransmission limit reached, change state and complete the operation with appropriate status code. */
-
-// @todo: clear op running bits? => always do in tx_idle entry? NOT as app can call back in callback context!
 
                 operation_complete_dispatch(NULL);
                 tx_state_change(TX_IDLE, &Mux3GPP::tx_idle_entry_run, &Mux3GPP::null_action);
@@ -454,7 +448,7 @@ void Mux3GPP::pending_self_iniated_dlci_open_start()
     /* Construct the frame, start the tx sequence, set and reset relevant state contexts. */
     _state.is_dlci_open_pending = 0;
 
-    sabm_request_construct(/*_shared_memory*/_dlci); // @todo: make dlci_incerement(), which wrap-around?
+    sabm_request_construct(_dlci);
     tx_state_change(TX_RETRANSMIT_ENQUEUE, &Mux3GPP::tx_retransmit_enqueu_entry_run, &Mux3GPP::tx_idle_exit_run);
     _tx_context.retransmit_counter = RETRANSMIT_COUNT;
 }

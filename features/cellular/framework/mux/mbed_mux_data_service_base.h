@@ -19,8 +19,6 @@
 #include <stdint.h>
 #include "FileHandle.h"
 
-#define MUX_DLCI_INVALID_ID 0   /* Invalid DLCI ID. Used to invalidate MuxDataService object. */
-
 namespace mbed {
 
 class MuxDataServiceBase : public FileHandle
@@ -40,7 +38,7 @@ private:
     MuxDataServiceBase(const MuxDataServiceBase &obj);
 
     /* Deny assignment operator. */
-    MuxDataServiceBase& operator=(const MuxDataServiceBase &obj);
+    MuxDataServiceBase &operator=(const MuxDataServiceBase &obj);
 };
 
 } // namespace mbed

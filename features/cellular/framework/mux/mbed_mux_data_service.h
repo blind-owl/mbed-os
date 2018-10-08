@@ -87,9 +87,8 @@ private:
     /* Deny assignment operator. */
     MuxDataService3GPP &operator=(const MuxDataService3GPP &obj);
 
-    uint8_t _dlci;     /* DLCI number. Valid range 1 - 63. */
-
-    static Mux3GPP *_mux;
+    uint8_t         _dlci; /* DLCI number. Valid range 1 - 63. */
+    static Mux3GPP *_mux;  /* Multiplexer object. */
 };
 
 } // namespace mbed
