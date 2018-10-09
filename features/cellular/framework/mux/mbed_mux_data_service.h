@@ -26,7 +26,7 @@ namespace mbed {
 class Mux3GPP;
 class MuxDataService3GPP : public MuxDataServiceBase {
 
-friend class Mux3GPP;
+    friend class Mux3GPP;
 public:
 
     /** Enqueue user data for transmission.
@@ -38,7 +38,7 @@ public:
      *  @param size   The number of bytes to write.
      *  @return       The number of bytes written.
      */
-    virtual ssize_t write(const void* buffer, size_t size);
+    virtual ssize_t write(const void *buffer, size_t size);
 
     /** Read user data into a buffer.
      *

@@ -21,8 +21,7 @@
 
 namespace mbed {
 
-class MuxDataServiceBase : public FileHandle
-{
+class MuxDataServiceBase : public FileHandle {
 
 protected:
 

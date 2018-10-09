@@ -42,7 +42,7 @@ namespace mbed {
 
 class FileHandle;
 class Mux3GPP : protected MuxBase {
-friend class MuxDataService3GPP;
+    friend class MuxDataService3GPP;
 public:
 
     Mux3GPP();
@@ -75,21 +75,22 @@ public:
      *  @param func @ref channel_open operation completion callback function.
      *  @param type Not used by the implementation.
      */
-    void callback_attach(Callback<void(event_context_t &)> func, ChannelType type) {_cb_func = func;}
+    void callback_attach(Callback<void(event_context_t &)> func, ChannelType type)
+    {
+        _cb_func = func;
+    }
 
 private:
 
     /* Definition for Rx event type. */
-    typedef enum
-    {
+    typedef enum {
         RX_READ = 0,
         RX_RESUME,
         RX_EVENT_MAX
     } RxEvent;
 
     /* Definition for Tx state machine. */
-    typedef enum
-    {
+    typedef enum {
         TX_IDLE = 0,
         TX_RETRANSMIT_ENQUEUE,
         TX_RETRANSMIT_DONE,
@@ -99,8 +100,7 @@ private:
     } TxState;
 
     /* Definition for Rx state machine. */
-    typedef enum
-    {
+    typedef enum {
         RX_FRAME_START = 0,
         RX_HEADER_READ,
         RX_TRAILER_READ,
@@ -109,8 +109,7 @@ private:
     } RxState;
 
     /* Definition for frame type within rx path. */
-    typedef enum
-    {
+    typedef enum {
         FRAME_RX_TYPE_SABM = 0,
         FRAME_RX_TYPE_UA,
         FRAME_RX_TYPE_DM,
@@ -121,8 +120,7 @@ private:
     } FrameRxType;
 
     /* Definition for frame type within tx path. */
-    typedef enum
-    {
+    typedef enum {
         FRAME_TX_TYPE_SABM = 0,
         FRAME_TX_TYPE_DM,
         FRAME_TX_TYPE_UIH,
@@ -419,8 +417,7 @@ private:
     Mux3GPP &operator=(const Mux3GPP &obj);
 
     /* Definition for Tx context type. */
-    typedef struct
-    {
+    typedef struct {
         int timer_id;                   /* Timer id. */
         union {
             uint32_t align_4_byte;                      /* Force 4-byte alignment. */
@@ -437,8 +434,7 @@ private:
     } tx_context_t;
 
     /* Definition for Rx context type. */
-    typedef struct
-    {
+    typedef struct {
         union {
             uint32_t align_4_byte;                      /* Force 4-byte alignment. */
             uint8_t  buffer[MBED_CONF_MUX_BUFFER_SIZE]; /* Rx buffer. */
@@ -449,8 +445,7 @@ private:
     } rx_context_t;
 
     /* Definition for state type. */
-    typedef struct
-    {
+    typedef struct {
         uint8_t is_mux_open            : 1; /* True when multiplexer is open. */
         uint8_t is_mux_open_pending    : 1; /* True when multiplexer open is pending. */
         uint8_t is_dlci_open_pending   : 1; /* True when DLCI open is pending. */

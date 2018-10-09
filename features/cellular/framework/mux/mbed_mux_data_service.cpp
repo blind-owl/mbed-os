@@ -27,7 +27,7 @@ MuxDataService3GPP::~MuxDataService3GPP()
 }
 
 
-ssize_t MuxDataService3GPP::write(const void* buffer, size_t size)
+ssize_t MuxDataService3GPP::write(const void *buffer, size_t size)
 {
     return _mux->user_data_tx(_dlci, buffer, size);
 }
