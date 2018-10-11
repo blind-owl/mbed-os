@@ -19,7 +19,7 @@ set(unittest-test-sources
   features/cellular/framework/mux/muxtest.cpp
   stubs/EventQueue_stub.cpp
   stubs/mbed_assert_stub.cpp
-  stubs/equeue_stub.c
+  stubs/equeue_stub.cpp
   stubs/FileHandle_stub.cpp
 )
 

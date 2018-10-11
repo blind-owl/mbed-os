@@ -28,7 +28,7 @@ set(unittest-test-sources
   stubs/mbed_assert_stub.cpp
   stubs/mbed_poll_stub.cpp
   stubs/Timer_stub.cpp
-  stubs/equeue_stub.c
+  stubs/equeue_stub.cpp
   stubs/Kernel_stub.cpp
   stubs/Thread_stub.cpp
   stubs/randLIB_stub.cpp

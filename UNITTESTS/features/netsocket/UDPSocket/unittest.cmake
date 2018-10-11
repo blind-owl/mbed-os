@@ -16,7 +16,7 @@ set(unittest-test-sources
   features/netsocket/UDPSocket/test_UDPSocket.cpp
   stubs/Mutex_stub.cpp
   stubs/mbed_assert_stub.c
-  stubs/equeue_stub.c
+  stubs/equeue_stub.cpp
   stubs/EventQueue_stub.cpp
   stubs/mbed_shared_queues_stub.cpp
   stubs/EventFlags_stub.cpp

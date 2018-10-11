@@ -132,6 +132,7 @@ void Mux3GPP::frame_retransmit_begin()
 
 void Mux3GPP::on_timeout()
 {
+//printf("on_timeout()\r\n");
     _mutex.lock();
 
     switch (_tx_context.tx_state) {
@@ -380,6 +381,8 @@ Mux3GPP::FrameRxType Mux3GPP::frame_rx_type_resolve()
 
 void Mux3GPP::tx_state_change(TxState new_state, tx_state_entry_func_t entry_func, tx_state_exit_func_t exit_func)
 {
+//printf("new TX-STATE: %u\r\n", new_state);
+
     (this->*exit_func)();
     _tx_context.tx_state = new_state;
     (this->*entry_func)();
@@ -390,7 +393,7 @@ void Mux3GPP::event_queue_enqueue()
 {
     if (_is_deferred_call_enqueued == 0) {
         ++_is_deferred_call_enqueued;
-
+printf("_event_q->call\r\n");
         const int id = _event_q->call(this, &Mux3GPP::on_deferred_call);
         MBED_ASSERT(id != 0);
     }
@@ -399,6 +402,7 @@ void Mux3GPP::event_queue_enqueue()
 
 void Mux3GPP::tx_retransmit_done_entry_run()
 {
+printf("mux:call_in\r\n");
     _tx_context.timer_id = _event_q->call_in(T1_TIMER_VALUE, this, &Mux3GPP::on_timeout);
     MBED_ASSERT(_tx_context.timer_id != 0);
 }
@@ -819,15 +823,17 @@ void Mux3GPP::write_do()
         case TX_RETRANSMIT_ENQUEUE:
         case TX_INTERNAL_RESP:
             do {
+//printf("1-WRITE: %u\r\n", _tx_context.bytes_remaining);
+
                 write_err = _serial->write(&(_tx_context.buffer[_tx_context.offset]), _tx_context.bytes_remaining);
                 MBED_ASSERT((write_err >= 0) || (write_err == -EAGAIN));
-
+//printf("write_err: %u\r\n", write_err);
                 if (write_err != -EAGAIN) {
                     _tx_context.bytes_remaining -= write_err;
                     _tx_context.offset          += write_err;
                 }
             } while ((_tx_context.bytes_remaining != 0) && (write_err > 0));
-
+//printf("2-WRITE: %u\r\n", _tx_context.bytes_remaining);
             if (_tx_context.bytes_remaining == 0) {
                 /* Frame write complete, execute correct post processing function for clean-up. */
 
@@ -841,7 +847,7 @@ void Mux3GPP::write_do()
                 const post_tx_frame_func_t func       = post_tx_func[frame_type];
                 (this->*func)();
             }
-
+//printf("3-WRITE: %u\r\n", _tx_context.bytes_remaining);
             break;
         default:
             /* No implementation required. */
@@ -879,7 +885,7 @@ void Mux3GPP::serial_attach(FileHandle *serial)
 {
     _serial = serial;
 
-    _serial->sigio(/*&Mux3GPP::on_sigio*/callback(this, &Mux3GPP::on_sigio));
+    _serial->sigio(callback(this, &Mux3GPP::on_sigio));
     _serial->set_blocking(false);
 }
 
@@ -989,6 +995,7 @@ nsapi_error Mux3GPP::channel_open()
     }
 
     nsapi_error err = NSAPI_ERROR_OK;
+#if 1
     switch (_tx_context.tx_state) {
         case TX_IDLE:
             if (_state.is_mux_open) {
@@ -1036,7 +1043,7 @@ nsapi_error Mux3GPP::channel_open()
             MBED_ASSERT(false);
             break;
     };
-
+#endif
     _mutex.unlock();
 
     return err;
