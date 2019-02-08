@@ -16,12 +16,22 @@
  */
 #include "SIMCom_SIM7020_CellularContext.h"
 #include "SIMCom_SIM7020_CellularStack.h"
+#include "CellularLog.h"
 
 namespace mbed {
 
-SIMCom_SIM7020_CellularContext::SIMCom_SIM7020_CellularContext(ATHandler &at, CellularDevice *device, const char *apn) :
-    AT_CellularContext(at, device, apn)
+SIMCom_SIM7020_CellularContext::SIMCom_SIM7020_CellularContext(ATHandler      &at,
+                                                               CellularDevice *device,
+                                                               const char     *apn,
+                                                               bool            cp_req,
+                                                               bool            nonip_req) :
+    AT_CellularContext(at, device, apn, cp_req, nonip_req)
 {
+#if 0
+    if (_nonip_req) {
+        _at.set_urc_handler("+QIND:", mbed::Callback<void()>(this, &QUECTEL_BG96_CellularContext::urc_nidd));
+    }
+#endif
 }
 
 SIMCom_SIM7020_CellularContext::~SIMCom_SIM7020_CellularContext()
@@ -39,9 +49,15 @@ bool SIMCom_SIM7020_CellularContext::stack_type_supported(nsapi_ip_stack_t stack
 #if !NSAPI_PPP_AVAILABLE
 NetworkStack *SIMCom_SIM7020_CellularContext::get_stack()
 {
-    if (!_stack) {
-        _stack = new SIMCom_SIM7020_CellularStack(_at, _cid, _ip_stack_type);
+    if (_pdp_type == NON_IP_PDP_TYPE || (_nonip_req && _pdp_type != DEFAULT_PDP_TYPE)) {
+        tr_error("Requesting stack for NON-IP context! Should request control plane netif: get_cp_netif()");
+        return NULL;
     }
+
+    if (!_stack) {
+        _stack = new SIMCom_SIM7020_CellularStack(_at, _cid, (nsapi_ip_stack_t)_pdp_type);
+    }
+
     return _stack;
 }
 #endif // #if !NSAPI_PPP_AVAILABLE

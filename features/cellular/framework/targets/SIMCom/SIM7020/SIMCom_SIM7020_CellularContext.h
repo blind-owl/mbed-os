@@ -23,7 +23,7 @@ namespace mbed {
 
 class SIMCom_SIM7020_CellularContext: public AT_CellularContext {
 public:
-    SIMCom_SIM7020_CellularContext(ATHandler &at, CellularDevice *device, const char *apn);
+    SIMCom_SIM7020_CellularContext(ATHandler &at, CellularDevice *device, const char *apn, bool cp_req, bool nonip_req);
     virtual ~SIMCom_SIM7020_CellularContext();
 
 protected:

@@ -17,33 +17,30 @@
 
 #include "SIMCom_SIM7020.h"
 #include "SIMCom_SIM7020_CellularNetwork.h"
-#include "SIMCom_SIM7020_CellularSIM.h"
-#include "SIMCom_SIM7020_CellularPower.h"
 #include "SIMCom_SIM7020_CellularContext.h"
+#include "SIMCom_SIM7020_CellularInformation.h"
 
 using namespace mbed;
 //using namespace events;
 
-#define CONNECT_DELIM         "\r\n"
-#define CONNECT_BUFFER_SIZE   (1280 + 80 + 80) // AT response + sscanf format
-#define CONNECT_TIMEOUT       8000
+#define DEVICE_READY_URC "CPIN:"
 
-#define MAX_STARTUP_TRIALS 5
-#define MAX_RESET_TRIALS 5
-
-#if 0
-static const AT_CellularBase::SupportedFeature unsupported_features[] =  {
-    AT_CellularBase::AT_CGSN_WITH_TYPE,
-    AT_CellularBase::AT_CGDATA,
-    AT_CellularBase::SUPPORTED_FEATURE_END_MARK
+static const intptr_t cellular_properties[AT_CellularBase::PROPERTY_MAX] = {
+    AT_CellularNetwork::RegistrationModeLAC,    // C_EREG
+    AT_CellularNetwork::RegistrationModeLAC,    // C_GREG
+    AT_CellularNetwork::RegistrationModeLAC,    // C_REG
+    0,  // AT_CGSN_WITH_TYPE
+    0,  // AT_CGDATA
+    1,  // AT_CGAUTH
+    1,  // PROPERTY_IPV4_STACK
+    0,  // PROPERTY_IPV6_STACK
+    0,  // PROPERTY_IPV4V6_STACK
+    1,  // PROPERTY_NON_IP_PDP_TYPE
 };
-#endif
 
 SIMCom_SIM7020::SIMCom_SIM7020(FileHandle *fh) : AT_CellularDevice(fh)
 {
-#if 0
-    AT_CellularBase::set_unsupported_features(unsupported_features);
-#endif
+    AT_CellularBase::set_cellular_properties(cellular_properties);
 }
 
 SIMCom_SIM7020::~SIMCom_SIM7020()
@@ -55,18 +52,33 @@ AT_CellularNetwork *SIMCom_SIM7020::open_network_impl(ATHandler &at)
     return new SIMCom_SIM7020_CellularNetwork(at);
 }
 
-AT_CellularSIM *SIMCom_SIM7020::open_sim_impl(ATHandler &at)
+AT_CellularContext *SIMCom_SIM7020::create_context_impl(ATHandler &at, const char *apn, bool cp_req, bool nonip_req)
 {
-    return new SIMCom_SIM7020_CellularSIM(at);
+    return new SIMCom_SIM7020_CellularContext(at, this, apn, cp_req, nonip_req);
 }
 
-AT_CellularPower *SIMCom_SIM7020::open_power_impl(ATHandler &at)
+AT_CellularInformation *SIMCom_SIM7020::open_information_impl(ATHandler &at)
 {
-    return new SIMCom_SIM7020_CellularPower(at);
+    return new SIMCom_SIM7020_CellularInformation(at);
 }
 
-AT_CellularContext *SIMCom_SIM7020::create_context_impl(ATHandler &at, const char *apn)
+void SIMCom_SIM7020::set_ready_cb(Callback<void()> callback)
 {
-    return new SIMCom_SIM7020_CellularContext(at, this, apn);
+    _at->set_urc_handler(DEVICE_READY_URC, callback);
 }
 
+#if 0 // do we need this?
+#if MBED_CONF_QUECTEL_BG96_PROVIDE_DEFAULT
+#include "UARTSerial.h"
+CellularDevice *CellularDevice::get_default_instance()
+{
+    static UARTSerial serial(MBED_CONF_QUECTEL_BG96_TX, MBED_CONF_QUECTEL_BG96_RX, MBED_CONF_QUECTEL_BG96_BAUDRATE);
+#if defined (MBED_CONF_UBLOX_AT_RTS) && defined(MBED_CONF_UBLOX_AT_CTS)
+    tr_debug("QUECTEL_BG96 flow control: RTS %d CTS %d", MBED_CONF_QUECTEL_BG96_RTS, MBED_CONF_QUECTEL_BG96_CTS);
+    serial.set_flow_control(SerialBase::RTSCTS, MBED_CONF_QUECTEL_BG96_RTS, MBED_CONF_QUECTEL_BG96_CTS);
+#endif
+    static QUECTEL_BG96 device(&serial);
+    return &device;
+}
+#endif
+#endif

@@ -14,23 +14,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#ifndef SIMCOM_SIM7020_CELLULARINFORMATION_H_
+#define SIMCOM_SIM7020_CELLULARINFORMATION_H_
 
-#include "SIMCom_SIM7020_CellularPower.h"
+#include "AT_CellularInformation.h"
 
-#define DEVICE_READY_URC "CPIN:"
+namespace mbed {
 
-using namespace mbed;
+class SIMCom_SIM7020_CellularInformation : public AT_CellularInformation {
+public:
+    SIMCom_SIM7020_CellularInformation(ATHandler &at);
+    virtual ~SIMCom_SIM7020_CellularInformation();
 
-SIMCom_SIM7020_CellularPower::SIMCom_SIM7020_CellularPower(ATHandler &atHandler) : AT_CellularPower(atHandler)
-{
-}
+public: // AT_CellularInformation
+    virtual nsapi_error_t get_iccid(char *buf, size_t buf_size);
+};
 
-nsapi_error_t SIMCom_SIM7020_CellularPower::set_device_ready_urc_cb(mbed::Callback<void()> callback)
-{
-    return _at.set_urc_handler(DEVICE_READY_URC, callback);
-}
+} /* namespace mbed */
 
-void SIMCom_SIM7020_CellularPower::remove_device_ready_urc_cb(mbed::Callback<void()> callback)
-{
-    _at.remove_urc_handler(DEVICE_READY_URC);
-}
+#endif /* SIMCOM_SIM7020_CELLULARINFORMATION_H_ */

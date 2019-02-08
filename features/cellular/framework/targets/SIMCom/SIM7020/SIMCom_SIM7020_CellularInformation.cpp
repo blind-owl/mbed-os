@@ -14,27 +14,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#include "SIMCom_SIM7020_CellularInformation.h"
 
-#include "SIMCom_SIM7020_CellularSIM.h"
+namespace mbed {
+
+SIMCom_SIM7020_CellularInformation::SIMCom_SIM7020_CellularInformation(ATHandler &at) : AT_CellularInformation(at)
+{
+}
+
+SIMCom_SIM7020_CellularInformation::~SIMCom_SIM7020_CellularInformation()
+{
+}
+
+nsapi_error_t SIMCom_SIM7020_CellularInformation::get_iccid(char *buf, size_t buf_size)
+{
 #if 0
-#include "CellularLog.h"
-#endif 
-using namespace mbed;
-
-SIMCom_SIM7020_CellularSIM::SIMCom_SIM7020_CellularSIM(ATHandler &atHandler) : AT_CellularSIM(atHandler)
-{
-
-}
-
-SIMCom_SIM7020_CellularSIM::~SIMCom_SIM7020_CellularSIM()
-{
-
-}
-
-// According to BG96_AT_Commands_Manual_V2.0
-nsapi_error_t SIMCom_SIM7020_CellularSIM::get_iccid(char *buf, size_t buf_size)
-{
-#if 0    
     _at.lock();
     _at.cmd_start("AT+QCCID");
     _at.cmd_stop();
@@ -42,5 +36,7 @@ nsapi_error_t SIMCom_SIM7020_CellularSIM::get_iccid(char *buf, size_t buf_size)
     _at.read_string(buf, buf_size);
     _at.resp_stop();
     return _at.unlock_return_error();
-#endif     
+#endif
 }
+
+} /* namespace mbed */
