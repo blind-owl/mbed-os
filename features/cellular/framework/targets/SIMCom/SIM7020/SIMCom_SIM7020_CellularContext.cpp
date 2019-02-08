@@ -64,6 +64,7 @@ NetworkStack *SIMCom_SIM7020_CellularContext::get_stack()
 
 nsapi_error_t SIMCom_SIM7020_CellularContext::do_user_authentication()
 {
+    MBED_ASSERT(false);
 #if 0
     if (_pwd && _uname) {
         _at.cmd_start("AT+QICSGP=");

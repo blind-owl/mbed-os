@@ -58,7 +58,7 @@ protected: // AT_CellularStack
 
 private:
     // URC handlers
-    void urc_qiurc();
+    void urc_csonmi();
 
     void handle_open_socket_response(int &modem_connect_id, int &err);
 };

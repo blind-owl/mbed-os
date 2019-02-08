@@ -31,6 +31,7 @@ SIMCom_SIM7020_CellularNetwork::~SIMCom_SIM7020_CellularNetwork()
 
 nsapi_error_t SIMCom_SIM7020_CellularNetwork::set_access_technology_impl(RadioAccessTechnology opsAct)
 {
+    MBED_ASSERT(false);
 #if 0
     _at.lock();
 

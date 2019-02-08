@@ -67,18 +67,18 @@ void SIMCom_SIM7020::set_ready_cb(Callback<void()> callback)
     _at->set_urc_handler(DEVICE_READY_URC, callback);
 }
 
-#if 0 // do we need this?
-#if MBED_CONF_QUECTEL_BG96_PROVIDE_DEFAULT
+#if MBED_CONF_SIMCOM_SIM7020_PROVIDE_DEFAULT
 #include "UARTSerial.h"
 CellularDevice *CellularDevice::get_default_instance()
 {
-    static UARTSerial serial(MBED_CONF_QUECTEL_BG96_TX, MBED_CONF_QUECTEL_BG96_RX, MBED_CONF_QUECTEL_BG96_BAUDRATE);
+    static UARTSerial serial(MBED_CONF_SIMCOM_SIM7020_TX,
+                             MBED_CONF_SIMCOM_SIM7020_RX,
+                             MBED_CONF_SIMCOM_SIM7020_BAUDRATE);
 #if defined (MBED_CONF_UBLOX_AT_RTS) && defined(MBED_CONF_UBLOX_AT_CTS)
-    tr_debug("QUECTEL_BG96 flow control: RTS %d CTS %d", MBED_CONF_QUECTEL_BG96_RTS, MBED_CONF_QUECTEL_BG96_CTS);
-    serial.set_flow_control(SerialBase::RTSCTS, MBED_CONF_QUECTEL_BG96_RTS, MBED_CONF_QUECTEL_BG96_CTS);
+    tr_debug("SIMCOM_SIM7020 flow control: RTS %d CTS %d", MBED_CONF_SIMCOM_SIM7020_RTS, MBED_CONF_SIMCOM_SIM7020_CTS);
+    serial.set_flow_control(SerialBase::RTSCTS, MBED_CONF_SIMCOM_SIM7020_RTS, MBED_CONF_SIMCOM_SIM7020_CTS);
 #endif
-    static QUECTEL_BG96 device(&serial);
+    static SIMCom_SIM7020 device(&serial);
     return &device;
 }
-#endif
 #endif

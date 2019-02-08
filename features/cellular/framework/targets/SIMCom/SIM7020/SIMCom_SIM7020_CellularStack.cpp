@@ -25,9 +25,7 @@ SIMCom_SIM7020_CellularStack::SIMCom_SIM7020_CellularStack(ATHandler       &atHa
                                                            nsapi_ip_stack_t stack_type) :
                                                            AT_CellularStack(atHandler, cid, stack_type)
 {
-#if 0
-    _at.set_urc_handler("+QIURC:", mbed::Callback<void()>(this, &SIMCom_SIM7020_CellularStack::urc_qiurc));
-#endif
+    _at.set_urc_handler("+CSONMI:", mbed::Callback<void()>(this, &SIMCom_SIM7020_CellularStack::urc_csonmi));
 }
 
 SIMCom_SIM7020_CellularStack::~SIMCom_SIM7020_CellularStack()
@@ -50,14 +48,14 @@ nsapi_error_t SIMCom_SIM7020_CellularStack::socket_connect(nsapi_socket_t handle
     return NSAPI_ERROR_NO_CONNECTION;
 }
 
-void SIMCom_SIM7020_CellularStack::urc_qiurc()
+void SIMCom_SIM7020_CellularStack::urc_csonmi()
 {
-
+    MBED_ASSERT(false);
 }
 
 int SIMCom_SIM7020_CellularStack::get_max_socket_count()
 {
-    return 0;
+    return 5;
 }
 
 bool SIMCom_SIM7020_CellularStack::is_protocol_supported(nsapi_protocol_t protocol)
@@ -67,17 +65,17 @@ bool SIMCom_SIM7020_CellularStack::is_protocol_supported(nsapi_protocol_t protoc
 
 nsapi_error_t SIMCom_SIM7020_CellularStack::socket_close_impl(int sock_id)
 {
-
+    MBED_ASSERT(false);
 }
 
 void SIMCom_SIM7020_CellularStack::handle_open_socket_response(int &modem_connect_id, int &err)
 {
-
+    MBED_ASSERT(false);
 }
 
 nsapi_error_t SIMCom_SIM7020_CellularStack::create_socket_impl(CellularSocket *socket)
 {
-
+    MBED_ASSERT(false);
 }
 
 nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_sendto_impl(CellularSocket      *socket,
@@ -85,7 +83,7 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_sendto_impl(CellularS
                                                                        const void          *data,
                                                                        nsapi_size_t         size)
 {
-
+    MBED_ASSERT(false);
 }
 
 nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_recvfrom_impl(CellularSocket *socket,
@@ -93,5 +91,5 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_recvfrom_impl(Cellula
                                                                          void           *buffer,
                                                                          nsapi_size_t    size)
 {
-
+    MBED_ASSERT(false);
 }
